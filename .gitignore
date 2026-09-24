@@ -15,3 +15,7 @@ shots/z-*.png
 tools/__pycache__/
 tools/thoughts.bend.txt
 shots/_*.png
+# scratch builds and local screenshots (README images live in docs/images)
+/park_*
+/main_*.bend
+shots/
