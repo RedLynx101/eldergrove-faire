@@ -1593,7 +1593,7 @@ def hud(+p: C.Park, +ui: UI, +hov: U32) -> +List<Dr>:
     text(msg_text(msg), (B() + 324 : U32), (B() + 301 : U32), 16766282,
     text("INCOME " ++ money(inc), (B() + 410 : U32), (B() + 3 : U32), 11468718,
     text(Bool.pick(String, U32.is_eq(fol, 0), "", "FOLLOWING  (A CAMERA KEY LETS GO)"), (B() + 190 : U32), (B() + 28 : U32), 16766282,
-    text(U32.show(fps) ++ " FPS", (B() + 4 : U32), (B() + 14 : U32), 8421504,
+    text(Bool.pick(String, U32.is_eq(fps, 0), "", U32.show(fps) ++ " FPS"), (B() + 4 : U32), (B() + 14 : U32), 8421504,
     button("OPTIONS", 414, 305, 46, 5913248, button("STAFF", 414, 294, 46, 5913248, button("PARK", 462, 294, 46, 5913248, button("FINANCES", 462, 305, 46, 5913248, []))))))))))))))
   +bars = {DRect{B(), B(), 512, 11, 1973802} <> DRect{B(), (B() + 11 : U32), 512, 1, 13148232}
     <> DRect{B(), (B() + 291 : U32), 512, 1, 13148232}

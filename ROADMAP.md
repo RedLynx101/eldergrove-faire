@@ -22,7 +22,7 @@ Last updated: 2026-09-24 · M1-M9 done.
 | Complete rides | A ride runs only with both an entrance (queue) and an exit (path); a warning shows until then. Shops need neither. |
 | Ride cycles | Each ride has its own cycle (load, run, unload) with minimum and maximum waits. |
 | Sound | Yes: our own procedurally generated sounds and old-style music, made in code like the art. |
-| Version control | Git repo at `Desktop/CMU/Random/eldergrove-faire`, private GitHub repo `RedLynx101/eldergrove-faire`. Commit after every spike and milestone. |
+| Version control | GitHub repo `RedLynx101/eldergrove-faire`, MIT licensed. Commit after every spike and milestone. |
 
 ## Calls made along the way
 Small design decisions made while working, listed here so they can be revisited.
@@ -288,6 +288,13 @@ Small design decisions made while working, listed here so they can be revisited.
   deck check), a layer lookup for every walking guest every tick, and every drawn tile looking at its
   neighbours for a deck it didn't have. With those made lazy the simulation is within about 3% of M8, and
   frames within noise.
+- **Going public (MIT).** The README was rewritten around fresh screenshots in `docs/images/` (rendered by the
+  game's own shot and sheet modes); the three effect files adapted from Bend stay Apache-2.0
+  (THIRD_PARTY_NOTICES.md). Headless shots no longer show "0 FPS" (the counter hides until it has a reading).
+- **A browser build, measured:** Bend's JavaScript target runs the simulation at about 3 ms a tick, but
+  drawing one frame took about 2.3 s under Node, roughly 150 times the native frame. A playable web version
+  would compile the C output to WebAssembly (threads need cross-origin isolation headers) with a canvas and
+  WebAudio in place of the X11 and PulseAudio effects.
 
 ## Done: M1, the vertical slice
 Isometric fantasy map, paths, terrain editing, 4 enchanted tree kinds, Dragon Carousel, Arcane Spire, Potion
