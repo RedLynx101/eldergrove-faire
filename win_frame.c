@@ -222,12 +222,14 @@ static void pkwindow_pace(void) {
   if (off) {
     return;
   }
+  // keep the cadence: a late wake-up is absorbed by the next frame, and
+  // only a frame that misses a whole slot resets the schedule
   u64 now = io_tick();
   if (due > now) {
     struct timespec ts = { 0, (long)(due - now) };
     nanosleep(&ts, NULL);
   }
-  due = (due > now ? due : now) + 16666667;
+  due = (now > due + 16666667 ? now : due) + 16666667;
 }
 
 // The frame runs on a helper thread (io_work), so the event loop, and the

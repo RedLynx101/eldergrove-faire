@@ -29,11 +29,11 @@ type Dr is Data:
   DBlock{x: U32, y: U32, dl: U32, dr: U32, ter: U32, obj: U32, hov: U32,
     wx: U32, wy: U32}
   DTree{x: U32, y: U32, v: U32, n: U32}
-  DRide{x: U32, y: U32, k: U32}
+  DRide{x: U32, y: U32, k: U32, ra: U32, rb: U32}
   DGate{x: U32, y: U32}
   DTrack{x: U32, y: U32, code: U32, zr: U32}
   DGuest{x: U32, y: U32, look: U32, ph: U32}
-  DCar{x: U32, y: U32, d: U32, lead: U32}
+  DCar{x: U32, y: U32, d: U32, lead: U32, rd: U32}
   DGlyph{x: U32, y: U32, bits: U32, col: U32}
   DRect{x: U32, y: U32, w: U32, h: U32, col: U32}
   DIcon{x: U32, y: U32, tool: U32, on: U32}
@@ -48,7 +48,7 @@ def Dr.hits(d: Dr, +bx: U32, +by: U32, +s: U32) -> Bool:
       ov((x - 16 : U32), y, (x + 16 : U32), (y + 17 + U32.max(dl, dr) : U32), bx, by, s)
     case DTree{+x, +y, v, n}:
       ov((x - 11 : U32), (y - 36 : U32), (x + 12 : U32), (y + 2 : U32), bx, by, s)
-    case DRide{+x, +y, k}:
+    case DRide{+x, +y, k, ra, rb}:
       ov((x - 30 : U32), (y - 78 : U32), (x + 31 : U32), (y + 16 : U32), bx, by, s)
     case DGate{+x, +y}:
       ov((x - 20 : U32), (y - 48 : U32), (x + 20 : U32), (y + 6 : U32), bx, by, s)
@@ -56,8 +56,8 @@ def Dr.hits(d: Dr, +bx: U32, +by: U32, +s: U32) -> Bool:
       ov((x - 16 : U32), (y - zr * 8 - 12 : U32), (x + 17 : U32), (y + 17 : U32), bx, by, s)
     case DGuest{+x, +y, look, ph}:
       ov((x - 3 : U32), (y - 14 : U32), (x + 4 : U32), (y + 1 : U32), bx, by, s)
-    case DCar{+x, +y, d, lead}:
-      ov((x - 10 : U32), (y - 12 : U32), (x + 11 : U32), (y + 6 : U32), bx, by, s)
+    case DCar{+x, +y, d, lead, rd}:
+      ov((x - 10 : U32), (y - 19 : U32), (x + 11 : U32), (y + 6 : U32), bx, by, s)
     case DGlyph{+x, +y, bits, col}:
       ov(x, y, (x + 4 : U32), (y + 6 : U32), bx, by, s)
     case DRect{+x, +y, +w, +h, col}:
@@ -71,16 +71,16 @@ def Dr.shade(d: Dr, +px: U32, +py: U32, +t: U32) -> U32:
       A.Art.block(x, y, dl, dr, ter, obj, hov, wx, wy, t, px, py)
     case DTree{x, y, v, n}:
       A.Art.tree(v, (px - x : U32), (py - y : U32), n, t)
-    case DRide{x, y, k}:
-      A.Art.ride(k, (px - x : U32), (py - y : U32), t)
+    case DRide{x, y, k, ra, rb}:
+      A.Art.ride(k, (px - x : U32), (py - y : U32), t, ra, rb)
     case DGate{x, y}:
       A.Art.gate((px - x : U32), (py - y : U32), t)
     case DTrack{x, y, code, zr}:
       A.Art.track(x, y, code, zr, t, px, py)
     case DGuest{x, y, look, ph}:
       A.Art.guest((px - x : U32), (py - y : U32), look, ph)
-    case DCar{x, y, d, lead}:
-      A.Art.car((px - x : U32), (py - y : U32), d, lead)
+    case DCar{x, y, d, lead, rd}:
+      A.Art.car((px - x : U32), (py - y : U32), d, lead, rd)
     case DGlyph{x, y, bits, col}:
       A.Art.glyph(bits, (px - x : U32), (py - y : U32), col)
     case DRect{x, y, w, h, col}:
@@ -130,16 +130,16 @@ def Dr.cp(d: Dr) -> Dr:
       DBlock{x, y, dl, dr, ter, obj, hov, wx, wy}
     case DTree{x, y, v, n}:
       DTree{x, y, v, n}
-    case DRide{x, y, k}:
-      DRide{x, y, k}
+    case DRide{x, y, k, ra, rb}:
+      DRide{x, y, k, ra, rb}
     case DGate{x, y}:
       DGate{x, y}
     case DTrack{x, y, code, zr}:
       DTrack{x, y, code, zr}
     case DGuest{x, y, look, ph}:
       DGuest{x, y, look, ph}
-    case DCar{x, y, d, lead}:
-      DCar{x, y, d, lead}
+    case DCar{x, y, d, lead, rd}:
+      DCar{x, y, d, lead, rd}
     case DGlyph{x, y, bits, col}:
       DGlyph{x, y, bits, col}
     case DRect{x, y, w, h, col}:
@@ -321,9 +321,88 @@ def scr_x(+i: U32, +j: U32, +camx: U32) -> U32:
 def scr_y(+i: U32, +j: U32, +h: U32, +camy: U32) -> U32:
   ((B() + 512 + 8 * i + 8 * j) - (8 * h + camy) : U32)
 
-# the tile under the pointer: the highest level whose tile is that tall
+# Riders
+# ------
+# A rider is drawn from an 8-bit code: bit 7 occupied, bits 0-1 class, 2-4
+# tunic, 5-6 skin -- the same person, in the same outfit, as on the paths.
+
+def rider_code(+lk: U32) -> U32:
+  (128 .|. (lk .&. 3) .|. (((lk >> 4n) .&. 7) << 2n) .|. (((lk >> 8n) .&. 3) << 5n) : U32)
+
+def byte_at(+n: U32) -> U32:
+  match n:
+    case 0:
+      1
+    case 1:
+      256
+    case 2:
+      65536
+    case _:
+      16777216
+
+# one pass per frame files every rider's code under their ride (seats 0-3
+# in ra, 4-7 in rb) or, on the coaster, under their train (lo, hi)
+type RT is Data:
+  RT{ra: List<&2, U32>, rb: List<&2, U32>, lo: List<&2, U32>, hi: List<&2, U32>}
+
+def RT.or(on: Bool, +t: +List<U32>, +i: U32, +v: U32) -> +List<U32>:
+  match on:
+    case True{}:
+      C.Tab.or(t, i, v)
+    case False{}:
+      t
+
+def RT.add4(+t: +List<U32>, +i: U32, +seat: U32, +code: U32, +hi: Bool) -> +List<U32>:
+  +base = sel(hi, 4, 0)
+  +inr = (seat >= base : U32) && (seat < base + 4 : U32)
+  RT.or(inr, t, i, (code * byte_at((seat - base : U32)) : U32))
+
+def RT.add.go(on: Bool, coaster: Bool, +dir: U32, +tgt: U32, +lk: U32, t: RT) -> RT:
+  match on coaster:
+    case True{} False{}:
+      RT{+ra, +rb, +lo, +hi} = t
+      RT{RT.add4(ra, tgt, (dir .&. 7 : U32), rider_code(lk), False{}),
+        RT.add4(rb, tgt, (dir .&. 7 : U32), rider_code(lk), True{}), lo, hi}
+    case True{} True{}:
+      RT{+ra, +rb, +lo, +hi} = t
+      RT{ra, rb, RT.add4(lo, (dir >> 3n : U32), (dir .&. 7 : U32), rider_code(lk), False{}),
+        RT.add4(hi, (dir >> 3n : U32), (dir .&. 7 : U32), rider_code(lk), True{})}
+    case False{} _:
+      t
+
+def RT.add(g: C.Guest, +rs: +List<C.Ride>, t: RT) -> RT:
+  C.Guest{id, x, y, +dir, +st, +tgt, tmr, cash, hu, th, en, na, ha, +lk} = g
+  RT.add.go(U32.is_eq(st, 1), U32.is_eq(C.Ride.kind(C.Rides.get(rs, tgt)), 5), dir, tgt, lk, t)
+
+def RT.fill(+gs: +List<C.Guest>, +rs: +List<C.Ride>, t: RT) -> RT:
+  match gs:
+    case []:
+      t
+    case g <> rest:
+      RT.fill(rest, rs, RT.add(g, rs, t))
+
+def RT.of(+gs: +List<C.Guest>, +rs: +List<C.Ride>) -> RT:
+  +n = C.len32(C.Ride, rs)
+  RT.fill(gs, rs, RT{C.Tab.zero(n, []), C.Tab.zero(n, []), C.Tab.zero(32, []), C.Tab.zero(32, [])})
+
+def RT.ra(t: RT) -> +List<U32>:
+  RT{ra, rb, lo, hi} = t
+  ra
+
+def RT.rb(t: RT) -> +List<U32>:
+  RT{ra, rb, lo, hi} = t
+  rb
+
+def RT.lo(t: RT) -> +List<U32>:
+  RT{ra, rb, lo, hi} = t
+  lo
+
+def RT.hi(t: RT) -> +List<U32>:
+  RT{ra, rb, lo, hi} = t
+  hi
+
 def obj_dr.go(+obj: U32, +a: U32, +b: U32, +h: U32, +i: U32, +j: U32,
-  +sx: U32, +sy: U32, +k: U32) -> +List<Dr>:
+  +sx: U32, +sy: U32, +k: U32, +rt: RT) -> +List<Dr>:
   match obj:
     case 2:
       [DTree{sx, (sy + 8 : U32), a, A.hash(i, j)}]
@@ -331,22 +410,23 @@ def obj_dr.go(+obj: U32, +a: U32, +b: U32, +h: U32, +i: U32, +j: U32,
       [DGate{sx, (sy + 8 : U32)}]
     case 3:
       Bool.pick(+List<Dr>, U32.is_eq(b, 1),
-        [DRide{sx, sel(U32.is_eq(C.Ride.size(k), 2), sy, (sy + 8 : U32)), k}], [])
+        [DRide{sx, sel(U32.is_eq(C.Ride.size(k), 2), sy, (sy + 8 : U32)), k,
+          C.Tab.at(RT.ra(rt), a), C.Tab.at(RT.rb(rt), a)}], [])
     case 6:
       [DTrack{sx, sy, a, (b - h : U32)}]
     case _:
       []
 
 def obj_dr(+t: C.Tile, +i: U32, +j: U32, +sx: U32, +sy: U32,
-  +rs: +List<C.Ride>) -> +List<Dr>:
+  +rs: +List<C.Ride>, +rt: RT) -> +List<Dr>:
   C.Tile{+h, ter, +obj, +a, +b} = t
-  obj_dr.go(obj, a, b, h, i, j, sx, sy, C.Ride.kind(C.Rides.get(rs, a)))
+  obj_dr.go(obj, a, b, h, i, j, sx, sy, C.Ride.kind(C.Rides.get(rs, a)), rt)
 
 def face(+h: U32, +nh: U32, +edge: Bool) -> U32:
   sel(edge, (h * 8 + 6 : U32), sel((h > nh : U32), ((h - nh) * 8 : U32), 0))
 
-def push_tile(+q: C.Q, +rs: +List<C.Ride>, +i: U32, +j: U32, +camx: U32,
-  +camy: U32, +hov: U32, +acc: +List<Dr>) -> +List<Dr>:
+def push_tile(+q: C.Q, +rs: +List<C.Ride>, +gs: RT, +i: U32, +j: U32,
+  +camx: U32, +camy: U32, +hov: U32, +acc: +List<Dr>) -> +List<Dr>:
   +t = C.Land.get(q, i, j)
   +h = C.Tile.h(t)
   +sx = scr_x(i, j, camx)
@@ -356,16 +436,16 @@ def push_tile(+q: C.Q, +rs: +List<C.Ride>, +i: U32, +j: U32, +camx: U32,
   +blk = {DBlock{sx, sy, dl, dr, C.Tile.ter(t), C.Tile.obj(t),
     sel(U32.is_eq(hov, (i * 64 + j : U32)), 1, 0), (16 * i - 16 * j : U32),
     (8 * i + 8 * j : U32)} : Dr}
-  List.append(&2, Dr, obj_dr(t, i, j, sx, sy, rs), blk <> acc)
+  List.append(&2, Dr, obj_dr(t, i, j, sx, sy, rs, gs), blk <> acc)
 
-def row(+n: Nat, +i: U32, +k: U32, +q: C.Q, +rs: +List<C.Ride>, +camx: U32,
-  +camy: U32, +hov: U32, +acc: +List<Dr>) -> +List<Dr>:
+def row(+n: Nat, +i: U32, +k: U32, +q: C.Q, +rs: +List<C.Ride>, +gs: RT,
+  +camx: U32, +camy: U32, +hov: U32, +acc: +List<Dr>) -> +List<Dr>:
   match n:
     case 0n:
       acc
     case 1n+p:
-      row(p, (i + 1 : U32), k, q, rs, camx, camy, hov,
-        push_tile(q, rs, i, (k - i : U32), camx, camy, hov, acc))
+      row(p, (i + 1 : U32), k, q, rs, gs, camx, camy, hov,
+        push_tile(q, rs, gs, i, (k - i : U32), camx, camy, hov, acc))
 
 def Dyn.key(a: Dyn) -> U32:
   Dyn{k, d} = a
@@ -410,40 +490,43 @@ def diag_rows(+k: U32, +camx: U32, +camy: U32) -> U32:
   +hi = U32.min(U32.min(hi0, k), 63)
   sel(vis && (hi >= lo : U32), ((hi - lo + 1) * 256 + lo : U32), 0)
 
-def diags(+n: Nat, +k: U32, +q: C.Q, +rs: +List<C.Ride>, +camx: U32,
-  +camy: U32, +hov: U32, +ds: +List<Dyn>, +acc: +List<Dr>) -> +List<Dr>:
+def diags(+n: Nat, +k: U32, +q: C.Q, +rs: +List<C.Ride>, +gs: RT,
+  +camx: U32, +camy: U32, +hov: U32, +ds: +List<Dyn>, +acc: +List<Dr>) -> +List<Dr>:
   match n:
     case 0n:
       acc
     case 1n+p:
       +r = diag_rows(k, camx, camy)
-      +acc2 = row(U32.to_nat((r >> 8n : U32)), (r .&. 255 : U32), k, q, rs,
+      +acc2 = row(U32.to_nat((r >> 8n : U32)), (r .&. 255 : U32), k, q, rs, gs,
         camx, camy, hov, acc)
       +dp = take(ds, heads(ds, k), k, acc2)
-      diags(p, (k + 1 : U32), q, rs, camx, camy, hov, DP.ds(dp), DP.acc(dp))
+      diags(p, (k + 1 : U32), q, rs, gs, camx, camy, hov, DP.ds(dp), DP.acc(dp))
 
 # guests on screen, keyed by their diagonal
-def guest_dyn(+g: C.Guest, +q: C.Q, +camx: U32, +camy: U32, +t: U32,
-  +acc: +List<Dyn>) -> +List<Dyn>:
-  C.Guest{+id, +x, +y, dir, +st, tgt, tmr, cash, hu, th, en, na, ha, +lk} = g
+def shopping(+st: U32, +tgt: U32, +rs: +List<C.Ride>) -> Bool:
+  +k = C.Ride.kind(C.Rides.get(rs, tgt))
+  U32.is_eq(st, 1) && (U32.is_eq(k, 3) || U32.is_eq(k, 4))
+
+def guest_dyn(+g: C.Guest, +q: C.Q, +rs: +List<C.Ride>, +camx: U32, +camy: U32,
+  +t: U32, +acc: +List<Dyn>) -> +List<Dyn>:
+  C.Guest{+id, +x, +y, dir, +st, +tgt, tmr, cash, hu, th, en, na, ha, +lk} = g
   +i = (x >> 4n : U32)
   +j = (y >> 4n : U32)
   +h = C.Land.h(q, i, j)
   +sx = ((B() + 1280 + x) - (y + camx) : U32)
   +sy = ((B() + 512 + ((x + y) >> 1n)) - (8 * h + camy) : U32)
+  +walker = U32.is_eq(st, 0) || U32.is_eq(st, 2) || shopping(st, tgt, rs)
   +vis = (sx + 8 > B() : U32) && (sx < B() + 520 : U32) && (sy + 4 > B() : U32)
-    && (sy < B() + 340 : U32) && (st < 1 : U32) || U32.is_eq(st, 2)
-    && (sx + 8 > B() : U32) && (sx < B() + 520 : U32) && (sy + 4 > B() : U32)
-    && (sy < B() + 340 : U32)
+    && (sy < B() + 340 : U32) && walker
   Bool.pick(+List<Dyn>, vis, Dyn{(i + j : U32), DGuest{sx, sy, lk, (t + id : U32)}} <> acc, acc)
 
-def guests_dyn(+gs: +List<C.Guest>, +q: C.Q, +camx: U32, +camy: U32, +t: U32,
-  +acc: +List<Dyn>) -> +List<Dyn>:
+def guests_dyn(+gs: +List<C.Guest>, +q: C.Q, +rs: +List<C.Ride>, +camx: U32,
+  +camy: U32, +t: U32, +acc: +List<Dyn>) -> +List<Dyn>:
   match gs:
     case []:
       acc
     case g <> rest:
-      guests_dyn(rest, q, camx, camy, t, guest_dyn(g, q, camx, camy, t, acc))
+      guests_dyn(rest, q, rs, camx, camy, t, guest_dyn(g, q, rs, camx, camy, t, acc))
 
 # a point along the coaster: world position (1/16 tile) and height (px)
 def ash8(+v: U32) -> U32:
@@ -461,7 +544,7 @@ def exit_u(+x: U32, +d: U32) -> U32:
 def exit_v(+y: U32, +d: U32) -> U32:
   (16 * y + sel(U32.is_eq(d, 1), 16, sel(U32.is_eq(d, 3), 0, 8)) : U32)
 
-def car_dyn(+pc: C.Piece, +f: U32, +lead: U32, +camx: U32, +camy: U32,
+def car_dyn(+pc: C.Piece, +f: U32, +lead: U32, +camx: U32, +camy: U32, +rd: U32,
   +acc: +List<Dyn>) -> +List<Dyn>:
   C.Piece{+x, +y, +z, +kind, +d} = pc
   +d2 = C.Pose.d(C.Piece.exit(pc))
@@ -473,37 +556,45 @@ def car_dyn(+pc: C.Piece, +f: U32, +lead: U32, +camx: U32, +camy: U32,
   +zp = (z * 8 + ash8((dz * f : U32)) : U32)
   +sx = ((B() + 1280 + u) - (v + camx) : U32)
   +sy = ((B() + 512 + ((u + v) >> 1n)) - (zp + camy) : U32)
-  Dyn{((u >> 4n) + (v >> 4n) : U32), DCar{sx, sy, sel((f > 128 : U32), d2, d), lead}} <> acc
+  Dyn{((u >> 4n) + (v >> 4n) : U32), DCar{sx, sy, sel((f > 128 : U32), d2, d), lead, rd}} <> acc
+
+def car_riders(+four: U32, +car: U32) -> U32:
+  sel(U32.is_eq(car, 0), (four .&. 65535 : U32), (four >> 16n : U32))
 
 def cars_of(+n: Nat, +ps: +List<C.Piece>, +total: U32, +pos: U32, +lead: U32,
-  +camx: U32, +camy: U32, +acc: +List<Dyn>) -> +List<Dyn>:
+  +camx: U32, +camy: U32, +car: U32, +lo: U32, +hi: U32, +acc: +List<Dyn>)
+  -> +List<Dyn>:
   match n:
     case 0n:
       acc
     case 1n+p:
       +q = (pos % total : U32)
-      cars_of(p, ps, total, ((pos + total - 300) : U32), 0, camx, camy,
-        car_dyn(C.Pieces.get(ps, (q >> 8n : U32)), (q .&. 255 : U32), lead, camx, camy, acc))
+      +rd = sel((car < 2 : U32), car_riders(lo, car), (hi .&. 65535 : U32))
+      cars_of(p, ps, total, ((pos + total - 300) : U32), 0, camx, camy, (car + 1 : U32),
+        lo, hi, car_dyn(C.Pieces.get(ps, (q >> 8n : U32)), (q .&. 255 : U32), lead, camx,
+          camy, rd, acc))
 
 def trains_one(+s: C.Slot, +ps: +List<C.Piece>, +total: U32, +camx: U32,
-  +camy: U32, +acc: +List<Dyn>) -> +List<Dyn>:
+  +camy: U32, +rt: RT, +acc: +List<Dyn>) -> +List<Dyn>:
   match s:
     case C.Free{a, n, st}:
       acc
     case C.Held{+a, n, st, t}:
-      C.Train{prog, sp, w} = t
-      cars_of(3n, ps, total, (a * 256 + prog : U32), 1, camx, camy, acc)
+      C.Train{+id, prog, sp, w} = t
+      cars_of(3n, ps, total, (a * 256 + prog : U32), 1, camx, camy, 0,
+        C.Tab.at(RT.lo(rt), id), C.Tab.at(RT.hi(rt), id), acc)
 
 # Text and the HUD
 # ----------------
 
 def trains_dyn(+ss: +List<C.Slot>, +ps: +List<C.Piece>, +total: U32, +camx: U32,
-  +camy: U32, +acc: +List<Dyn>) -> +List<Dyn>:
+  +camy: U32, +rt: RT, +acc: +List<Dyn>) -> +List<Dyn>:
   match ss:
     case []:
       acc
     case s <> rest:
-      trains_dyn(rest, ps, total, camx, camy, trains_one(s, ps, total, camx, camy, acc))
+      trains_dyn(rest, ps, total, camx, camy, rt,
+        trains_one(s, ps, total, camx, camy, rt, acc))
 
 def text(s: String, +x: U32, +y: U32, +col: U32, +acc: +List<Dr>) -> +List<Dr>:
   match s:
@@ -640,6 +731,31 @@ def hud(+p: C.Park, +ui: UI, +hov: U32) -> +List<Dr>:
 type Game is Data:
   Game{park: C.Park, ui: UI}
 
+def Dyn.is_below(+d: Dyn, +k: U32) -> Bool:
+  (Dyn.key(d) < k : U32)
+
+def dyn_put(keep: Bool, +d: Dyn, +xs: +List<Dyn>) -> +List<Dyn>:
+  match keep:
+    case True{}:
+      d <> xs
+    case False{}:
+      xs
+
+# the dynamic things on diagonals below k, and from k on (order kept)
+def dyn_below(+ds: +List<Dyn>, +k: U32) -> +List<Dyn>:
+  match ds:
+    case []:
+      []
+    case d <> rest:
+      dyn_put(Dyn.is_below(d, k), d, dyn_below(rest, k))
+
+def dyn_from(+ds: +List<Dyn>, +k: U32) -> +List<Dyn>:
+  match ds:
+    case []:
+      []
+    case d <> rest:
+      dyn_put(Bool.not(Dyn.is_below(d, k)), d, dyn_from(rest, k))
+
 def scene(+g: Game) -> +List<Dr>:
   Game{+p, +ui} = g
   C.Park{+map, +guests, +rides, +track, cash, +time, nid} = p
@@ -647,11 +763,14 @@ def scene(+g: Game) -> +List<Dr>:
   UI{+camx, +camy, keys, mx, my, md, tool, var, sp, msg, fr, inc, last, io, fps, tl} = ui
   +hov = pick(map, ui)
   +total = (C.len32(C.Piece, ps) * 256 : U32)
-  +dyn = trains_dyn(bs, ps, U32.max(total, 1), camx, camy,
-    guests_dyn(guests, map, camx, camy, time, []))
+  +rt = RT.of(guests, rides)
+  +dyn = trains_dyn(bs, ps, U32.max(total, 1), camx, camy, rt,
+    guests_dyn(guests, map, rides, camx, camy, time, []))
   +sorted = List.sort(~Dyn, ~Dyn.le, dyn)
-  +world = diags(127n, 0, map, rides, camx, camy, hov, sorted, [])
-  List.append(&2, Dr, hud(p, ui, hov), world)
+  # the back and front halves of the map are built in parallel
+  hi lo = diags(63n, 64, map, rides, rt, camx, camy, hov, dyn_from(sorted, 64), [])
+    diags(64n, 0, map, rides, rt, camx, camy, hov, dyn_below(sorted, 64), [])
+  List.append(&2, Dr, hud(p, ui, hov), List.append(&2, Dr, hi, lo))
 
 def Game.park(g: Game) -> C.Park:
   Game{p, ui} = g

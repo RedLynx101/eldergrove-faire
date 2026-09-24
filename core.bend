@@ -549,32 +549,265 @@ def Guest.steer(now: Bool, +q: Q, +i: U32, +j: U32, +h: U32, +dir: U32,
 def Guest.at_center(+x: U32, +y: U32) -> Bool:
   U32.is_eq((x .&. 15 : U32), 8) && U32.is_eq((y .&. 15 : U32), 8)
 
-# whether a walking guest boards (or buys at) their target ride this tick
-def Guest.boards(g: Guest, +q: Q, +rs: +List<Ride>) -> Bool:
+# Seats and boarding
+# ------------------
+# Every tick, one pass over the guests (Boards.plan) seats whoever is ready
+# to board, in order, into free seats -- so no two guests ever share a seat
+# and no ride is filled past its seats. The guest updates, the ticket sales
+# and the riders drawn on the rides all read that one plan. A rider keeps
+# their seat in `dir` (coaster: train id * 8 + seat).
+
+def Ride.seats(+k: U32) -> U32:
+  match k:
+    case 1:
+      8
+    case 2:
+      8
+    case 5:
+      6
+    case _:
+      4
+
+def bit8(+n: U32) -> U32:
+  match n:
+    case 0:
+      1
+    case 1:
+      2
+    case 2:
+      4
+    case 3:
+      8
+    case 4:
+      16
+    case 5:
+      32
+    case 6:
+      64
+    case 7:
+      128
+    case _:
+      256
+
+def Seat.has(+f: U32, +b: U32) -> Bool:
+  Bool.not(U32.is_eq((f .&. b : U32), 0))
+
+# the lowest free seat below cap, or NONE
+def Seat.free(+m: U32, +cap: U32) -> U32:
+  +f = ((m .^. 255) .&. (bit8(cap) - 1) : U32)
+  sel(Seat.has(f, 1), 0, sel(Seat.has(f, 2), 1, sel(Seat.has(f, 4), 2,
+    sel(Seat.has(f, 8), 3, sel(Seat.has(f, 16), 4, sel(Seat.has(f, 32), 5,
+    sel(Seat.has(f, 64), 6, sel(Seat.has(f, 128), 7, NONE()))))))))
+
+# the coaster's station: whether it runs, and the train loading there
+type Stn is Data:
+  Stn{open: U32, id: U32, wait: U32}
+
+def Stn.id(s: Stn) -> U32:
+  Stn{o, id, w} = s
+  id
+
+type Train is Data:
+  Train{id: U32, prog: U32, speed: U32, wait: U32}
+
+# a block: `len` pieces from piece `start`; st is 1 on the station block.
+# Holding a train *is* the block's occupancy, so a block can never hold two.
+type Slot is Data:
+  Free{start: U32, len: U32, st: U32}
+  Held{start: U32, len: U32, st: U32, t: Train}
+
+def Stn.of(s: Slot, +acc: Stn) -> Stn:
+  match s:
+    case Free{a, n, st}:
+      acc
+    case Held{a, n, +st, t}:
+      Train{id, prog, speed, wait} = t
+      Bool.pick(Stn, U32.is_eq(st, 1), Stn{1, id, wait}, acc)
+
+def Stn.find(+ss: +List<Slot>, +acc: Stn) -> Stn:
+  match ss:
+    case []:
+      acc
+    case s <> rest:
+      Stn.find(rest, Stn.of(s, acc))
+
+type Piece is Data:
+  Piece{x: U32, y: U32, z: U32, kind: U32, dir: U32}
+
+type Pose is Data:
+  Pose{x: U32, y: U32, z: U32, dir: U32}
+
+type Track is Data:
+  Track{pieces: List<&2, Piece>, open: Bool, blocks: List<&2, Slot>,
+    start: Pose, end: Pose}
+
+def Track.stn(t: Track) -> Stn:
+  Track{pieces, open, blocks, start, end} = t
+  Stn.find(blocks, Stn{sel(open, 1, 0), NONE(), 0})
+
+def Guest.id(g: Guest) -> U32:
+  Guest{id, x, y, dir, st, tgt, tmr, cash, hu, th, en, na, ha, lk} = g
+  id
+
+def Guest.tgt(g: Guest) -> U32:
+  Guest{id, x, y, dir, st, tgt, tmr, cash, hu, th, en, na, ha, lk} = g
+  tgt
+
+def Tab.zero.go(+n: Nat, +acc: +List<U32>) -> +List<U32>:
+  match n:
+    case 0n:
+      acc
+    case 1n+p:
+      Tab.zero.go(p, 0 <> acc)
+
+def Tab.zero(+n: U32, +acc: +List<U32>) -> +List<U32>:
+  Tab.zero.go(U32.to_nat(n), acc)
+
+def Tab.or(+xs: +List<U32>, +i: U32, +v: U32) -> +List<U32>:
+  match xs:
+    case []:
+      []
+    case x <> rest:
+      sel(U32.is_eq(i, 0), (x .|. v : U32), x) <> Tab.or(rest, (i - 1 : U32), v)
+
+def Tab.at(+xs: +List<U32>, +i: U32) -> U32:
+  match xs:
+    case []:
+      0
+    case x <> rest:
+      sel(U32.is_eq(i, 0), x, Tab.at(rest, (i - 1 : U32)))
+
+# the seats taken on each ride (the coaster: on the train loading now)
+def Occ.put(on: Bool, +tab: +List<U32>, +i: U32, +v: U32) -> +List<U32>:
+  match on:
+    case True{}:
+      Tab.or(tab, i, v)
+    case False{}:
+      tab
+
+def Occ.add.go(riding: Bool, +dir: U32, +tgt: U32, +rs: +List<Ride>, +sid: U32,
+  +tab: +List<U32>) -> +List<U32>:
+  match riding:
+    case True{}:
+      +k = Ride.kind(Rides.get(rs, tgt))
+      +on = Bool.not(U32.is_eq(k, 5)) || U32.is_eq((dir >> 3n : U32), sid)
+      Occ.put(on, tab, tgt, bit8((dir .&. 7 : U32)))
+    case False{}:
+      tab
+
+def Occ.add(g: Guest, +rs: +List<Ride>, +sid: U32, +tab: +List<U32>) -> +List<U32>:
+  Guest{id, x, y, +dir, +st, +tgt, tmr, cash, hu, th, en, na, ha, lk} = g
+  Occ.add.go(U32.is_eq(st, 1), dir, tgt, rs, sid, tab)
+
+def Occ.fill(+gs: +List<Guest>, +rs: +List<Ride>, +sid: U32, +tab: +List<U32>)
+  -> +List<U32>:
+  match gs:
+    case []:
+      tab
+    case g <> rest:
+      Occ.fill(rest, rs, sid, Occ.add(g, rs, sid, tab))
+
+def Occ.table(+gs: +List<Guest>, +rs: +List<Ride>, +stn: Stn) -> +List<U32>:
+  Occ.fill(gs, rs, Stn.id(stn), Tab.zero(len32(Ride, rs), []))
+
+type Board is Data:
+  Board{gid: U32, ride: U32, seat: U32}
+
+def Board.bit(b: Board, +r: U32) -> U32:
+  Board{g, ride, +seat} = b
+  sel(U32.is_eq(ride, r), bit8(seat), 0)
+
+def Boards.mask(+bs: +List<Board>, +r: U32, +acc: U32) -> U32:
+  match bs:
+    case []:
+      acc
+    case b <> rest:
+      Boards.mask(rest, r, (acc .|. Board.bit(b, r) : U32))
+
+def Board.is(b: Board, +id: U32) -> Bool:
+  Board{g, ride, seat} = b
+  U32.is_eq(g, id)
+
+def Board.seat(b: Board) -> U32:
+  Board{g, ride, seat} = b
+  seat
+
+def Boards.has(+bs: +List<Board>, +id: U32) -> Bool:
+  match bs:
+    case []:
+      False{}
+    case b <> rest:
+      Board.is(b, id) || Boards.has(rest, id)
+
+def Boards.seat(+bs: +List<Board>, +id: U32) -> U32:
+  match bs:
+    case []:
+      0
+    case b <> rest:
+      sel(Board.is(b, id), Board.seat(b), Boards.seat(rest, id))
+
+# whether a walking guest is ready to board (or buy at) their target ride:
+# at its entrance, with the fare, and -- for the coaster -- a train loading
+def Guest.wants(g: Guest, +q: Q, +rs: +List<Ride>, +stn: Stn) -> Bool:
   Guest{id, +x, +y, dir, +st, +tgt, tmr, +cash, hu, th, en, na, ha, lk} = g
+  Stn{so, +sid, +sw} = stn
   +rd = Rides.get(rs, tgt)
+  +coaster = U32.is_eq(Ride.kind(rd), 5)
   U32.is_eq(st, 0) && Bool.not(U32.is_eq(tgt, NONE())) && Guest.at_center(x, y)
     && Ride.is_open(rd) && U32.is_le(Ride.price(rd), cash)
     && U32.is_eq(Ride.dist(rd, (x >> 4n : U32), (y >> 4n : U32)), 1)
+    && (Bool.not(coaster) || Bool.not(U32.is_eq(sid, NONE())) && (sw > 40 : U32))
+
+def Boards.put(+s: U32, +id: U32, +r: U32, +acc: +List<Board>) -> +List<Board>:
+  Bool.pick(+List<Board>, U32.is_eq(s, NONE()), acc, Board{id, r, s} <> acc)
+
+def Boards.try(want: Bool, +g: Guest, +occ: +List<U32>, +rs: +List<Ride>,
+  +stn: Stn, +acc: +List<Board>) -> +List<Board>:
+  match want:
+    case True{}:
+      +r = Guest.tgt(g)
+      +k = Ride.kind(Rides.get(rs, r))
+      +m = (Tab.at(occ, r) .|. Boards.mask(acc, r, 0) : U32)
+      Boards.put(Seat.free(m, Ride.seats(k)), Guest.id(g), r, acc)
+    case False{}:
+      acc
+
+def Boards.plan(+gs: +List<Guest>, +occ: +List<U32>, +q: Q, +rs: +List<Ride>,
+  +stn: Stn, +acc: +List<Board>) -> +List<Board>:
+  match gs:
+    case []:
+      acc
+    case g <> rest:
+      Boards.plan(rest, occ, q, rs, stn, Boards.try(Guest.wants(g, q, rs, stn), g, occ,
+        rs, stn, acc))
+
 
 def Guest.fee(g: Guest, +rs: +List<Ride>) -> U32:
   Guest{id, x, y, dir, st, tgt, tmr, cash, hu, th, en, na, ha, lk} = g
   Ride.price(Rides.get(rs, tgt))
 
-# boarding: pay, then the ride's effects
-def Guest.board(g: Guest, +rs: +List<Ride>) -> Guest:
+# boarding: take the seat, pay, then the ride's effects
+def Guest.board(g: Guest, +rs: +List<Ride>, +seat: U32, +stn: Stn) -> Guest:
   Guest{id, x, y, dir, st, +tgt, tmr, +cash, +hu, +th, en, +na, +ha, lk} = g
   +rd = Rides.get(rs, tgt)
   +k = Ride.kind(rd)
-  Guest{id, x, y, dir, 1, tgt, Ride.duration(k), sub0(cash, Ride.price(rd)),
+  +coaster = U32.is_eq(k, 5)
+  Guest{id, x, y, sel(coaster, (Stn.id(stn) * 8 + seat : U32), seat), 1, tgt,
+    sel(coaster, 3000, Ride.duration(k)), sub0(cash, Ride.price(rd)),
     sel(U32.is_eq(k, 4), sub0(hu, 160), hu),
     sel(U32.is_eq(k, 3), sub0(th, 160), th), en,
     (na + Ride.thrill(k) : U32), (ha + Ride.fun(k) : U32), lk}
 
-def Guest.riding(g: Guest) -> Guest:
-  Guest{id, x, y, dir, st, tgt, +tmr, cash, hu, th, en, na, ha, lk} = g
-  +done = (tmr <= 1 : U32)
-  Guest{id, x, y, dir, sel(done, 0, 1), sel(done, NONE(), tgt),
+# a rider gets off when the ride ends; a coaster rider when their train is
+# back in the station (or the coaster closes)
+def Guest.riding(g: Guest, +rs: +List<Ride>, +stn: Stn) -> Guest:
+  Guest{id, x, y, +dir, st, +tgt, +tmr, cash, hu, th, en, na, ha, lk} = g
+  Stn{+so, +sid, +sw} = stn
+  +k = Ride.kind(Rides.get(rs, tgt))
+  +coaster = U32.is_eq(k, 5)
+  +back = coaster && U32.is_eq((dir >> 3n : U32), sid) && (sw > 100 : U32) && (tmr < 2800 : U32)
+  +done = (tmr <= 1 : U32) || back || coaster && U32.is_eq(so, 0) || U32.is_eq(k, 0)
+  Guest{id, x, y, sel(done, 0, dir), sel(done, 0, 1), sel(done, NONE(), tgt),
     sel(done, 0, (tmr - 1 : U32)), cash, hu, th, en, na, ha, lk}
 
 # needs drift a little every 16 ticks
@@ -631,29 +864,32 @@ def Guest.st(g: Guest) -> U32:
   st
 
 def Guest.move.go(riding: Bool, boards: Bool, +g: Guest, +q: Q,
-  +rs: +List<Ride>, +t: U32) -> Guest:
+  +rs: +List<Ride>, +t: U32, +plan: +List<Board>, +stn: Stn) -> Guest:
   match riding boards:
     case True{} _:
-      Guest.riding(g)
+      Guest.riding(g, rs, stn)
     case False{} True{}:
-      Guest.board(g, rs)
+      Guest.board(g, rs, Boards.seat(plan, Guest.id(g)), stn)
     case False{} False{}:
       Guest.walk(g, q, rs, t)
 
-def Guest.move(+g: Guest, +q: Q, +rs: +List<Ride>, +t: U32) -> Guest:
-  Guest.move.go(U32.is_eq(Guest.st(g), 1), Guest.boards(g, q, rs), g, q, rs, t)
+def Guest.move(+g: Guest, +q: Q, +rs: +List<Ride>, +t: U32, +plan: +List<Board>,
+  +stn: Stn) -> Guest:
+  Guest.move.go(U32.is_eq(Guest.st(g), 1), Boards.has(plan, Guest.id(g)), g, q, rs, t,
+    plan, stn)
 
 # a guest's whole tick; the final clamp keeps every stat in 0..255
-def Guest.step(+g: Guest, +q: Q, +rs: +List<Ride>, +t: U32) -> Guest:
-  Guest.clamp(Guest.needs(Guest.move(g, q, rs, t), t))
+def Guest.step(+g: Guest, +q: Q, +rs: +List<Ride>, +t: U32, +plan: +List<Board>,
+  +stn: Stn) -> Guest:
+  Guest.clamp(Guest.needs(Guest.move(g, q, rs, t, plan, stn), t))
 
-def Guests.step(+gs: +List<Guest>, +q: Q, +rs: +List<Ride>, +t: U32)
-  -> +List<Guest>:
+def Guests.step(+gs: +List<Guest>, +q: Q, +rs: +List<Ride>, +t: U32,
+  +plan: +List<Board>, +stn: Stn) -> +List<Guest>:
   match gs:
     case []:
       []
     case g <> rest:
-      Guest.step(g, q, rs, t) <> Guests.step(rest, q, rs, t)
+      Guest.step(g, q, rs, t, plan, stn) <> Guests.step(rest, q, rs, t, plan, stn)
 
 def Guests.put(keep: Bool, g: Guest, +gs: +List<Guest>) -> +List<Guest>:
   match keep:
@@ -730,13 +966,14 @@ def Ledger.put(keep: Bool, t: Txn, +xs: +List<Txn>) -> +List<Txn>:
     case False{}:
       xs
 
-def Ledger.sales(+gs: +List<Guest>, +q: Q, +rs: +List<Ride>) -> +List<Txn>:
+def Ledger.sales(+gs: +List<Guest>, +rs: +List<Ride>, +plan: +List<Board>)
+  -> +List<Txn>:
   match gs:
     case []:
       []
     case g <> rest:
-      Ledger.put(Guest.boards(g, q, rs), Gain{1, Guest.fee(g, rs)},
-        Ledger.sales(rest, q, rs))
+      Ledger.put(Boards.has(plan, Guest.id(g)), Gain{1, Guest.fee(g, rs)},
+        Ledger.sales(rest, rs, plan))
 
 def Ledger.upkeep(+rs: +List<Ride>) -> +List<Txn>:
   match rs:
@@ -750,22 +987,16 @@ def Ledger.upkeep(+rs: +List<Ride>) -> +List<Txn>:
 def MONTH() -> U32:
   3600
 
-def Ledger.tick(+gs: +List<Guest>, +q: Q, +rs: +List<Ride>, +t: U32)
+def Ledger.tick(+gs: +List<Guest>, +rs: +List<Ride>, +t: U32, +plan: +List<Board>)
   -> +List<Txn>:
   +monthly = U32.is_eq((t % MONTH() : U32), 0) && (t > 0 : U32)
-  List.append(&2, Txn, Ledger.sales(gs, q, rs),
+  List.append(&2, Txn, Ledger.sales(gs, rs, plan),
     Bool.pick(+List<Txn>, monthly, Ledger.upkeep(rs), []))
 
 # The Wyrm Coaster: track pieces and block sections
 # -------------------------------------------------
 # A piece stands on tile (x, y), entered at height z heading dir. kind: 0
 # straight, 1 up, 2 down, 3 turn left, 4 turn right, 5 station, 6 lift hill.
-
-type Piece is Data:
-  Piece{x: U32, y: U32, z: U32, kind: U32, dir: U32}
-
-type Pose is Data:
-  Pose{x: U32, y: U32, z: U32, dir: U32}
 
 def Piece.exit(p: Piece) -> Pose:
   Piece{+x, +y, +z, +kind, +dir} = p
@@ -782,15 +1013,6 @@ def Pose.eq(a: Pose, b: Pose) -> Bool:
     && U32.is_eq(ad, bd)
 
 # 1/256 of a piece per unit of progress
-type Train is Data:
-  Train{prog: U32, speed: U32, wait: U32}
-
-# a block: `len` pieces from piece `start`; st is 1 on the station block.
-# Holding a train *is* the block's occupancy, so a block can never hold two.
-type Slot is Data:
-  Free{start: U32, len: U32, st: U32}
-  Held{start: U32, len: U32, st: U32, t: Train}
-
 def Pieces.get(+ps: +List<Piece>, +i: U32) -> Piece:
   match ps:
     case []:
@@ -806,14 +1028,14 @@ def Piece.kind(p: Piece) -> U32:
 # holds the train while it loads
 def Train.adv(t: Train, +start: U32, +len: U32, +st: U32, +ps: +List<Piece>)
   -> Train:
-  Train{+prog, +speed, +wait} = t
+  Train{id, +prog, +speed, +wait} = t
   +k = Piece.kind(Pieces.get(ps, (start + (prog >> 8n) : U32)))
   +hold = U32.is_eq(st, 1) && (wait > 0 : U32)
   +s1 = sel(U32.is_eq(k, 6), 20, sel(U32.is_eq(k, 2), (speed + 3 : U32),
     sel(U32.is_eq(k, 1), sub0(speed, 3), sub0(speed, 1))))
   +s2 = sel(hold, 0, U32.min(U32.max(s1, 10), 90))
   +end = (len * 256 : U32)
-  Train{U32.min((prog + s2 : U32), end), s2, sub0(wait, 1)}
+  Train{id, U32.min((prog + s2 : U32), end), s2, sub0(wait, 1)}
 
 def Slot.adv(s: Slot, +ps: +List<Piece>) -> Slot:
   match s:
@@ -830,7 +1052,7 @@ def Slots.adv(+ss: +List<Slot>, +ps: +List<Piece>) -> +List<Slot>:
       Slot.adv(s, ps) <> Slots.adv(rest, ps)
 
 def Train.ready(t: Train, +len: U32) -> Bool:
-  Train{prog, speed, wait} = t
+  Train{id, prog, speed, wait} = t
   (prog >= len * 256 : U32)
 
 def Slot.ready(s: Slot) -> Bool:
@@ -843,8 +1065,8 @@ def Slot.ready(s: Slot) -> Bool:
 # a train that reached the end of its block enters the next one if free:
 # cfst is what becomes of the block it leaves, csnd of the block it enters
 def Train.enter(t: Train, +len: U32, +st: U32) -> Train:
-  Train{prog, speed, wait} = t
-  Train{(prog - len * 256 : U32), speed, sel(U32.is_eq(st, 1), 150, 0)}
+  Train{id, prog, speed, wait} = t
+  Train{id, (prog - len * 256 : U32), speed, sel(U32.is_eq(st, 1), 150, 0)}
 
 def Slot.cfst(+a: Slot, +b: Slot) -> Slot:
   match a b:
@@ -912,12 +1134,8 @@ def Blocks.make(+n: Nat, +start: U32, +total: U32, +k: U32) -> +List<Slot>:
       +train = U32.is_eq((k % 3 : U32), 0)
       +rest = Bool.pick(+List<Slot>, more,
         Blocks.make(p, (start + len : U32), total, (k + 1 : U32)), [])
-      Bool.pick(Slot, train, Held{start, len, st, Train{0, 0, 60}},
+      Bool.pick(Slot, train, Held{start, len, st, Train{k, 0, 0, 60}},
         Free{start, len, st}) <> rest
-
-type Track is Data:
-  Track{pieces: List<&2, Piece>, open: Bool, blocks: List<&2, Slot>,
-    start: Pose, end: Pose}
 
 def Track.empty() -> Track:
   Track{[], False{}, [], Pose{0, 0, 0, 0}, Pose{0, 0, 0, 0}}
@@ -963,10 +1181,12 @@ type Out is Data:
     departed: List<&2, Guest>}
 
 def Park.tick(p: Park) -> Out:
-  Park{+map, +guests, +rides, track, cash, +time, +nid} = p
-  +moved = Guests.step(guests, map, rides, time)
+  Park{+map, +guests, +rides, +track, cash, +time, +nid} = p
+  +stn = Track.stn(track)
+  +plan = Boards.plan(guests, Occ.table(guests, rides, stn), map, rides, stn, [])
+  +moved = Guests.step(guests, map, rides, time, plan, stn)
   +arr = Guests.arrivals(guests, rides, time, nid)
-  +led = Ledger.tick(guests, map, rides, time)
+  +led = Ledger.tick(guests, rides, time, plan)
   Out{Park{map, List.append(&2, Guest, arr, Guests.stay(moved)), rides,
     Track.tick(track), Ledger.apply(led, cash), (time + 1 : U32),
     (nid + len32(Guest, arr) : U32)}, led, arr, Guests.left(moved)}

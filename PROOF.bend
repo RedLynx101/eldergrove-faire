@@ -175,13 +175,14 @@ def len_app(+xs: +List<C.Guest>, +ys: +List<C.Guest>)
       %len_app(r, ys) : {1n+glen(List.append(&2, C.Guest, r, ys)) == 1n+_ : Nat}
       {==}
 
-def len_step(+g: +List<C.Guest>, +q: C.Q, +rs: +List<C.Ride>, +t: U32)
-  -> {glen(C.Guests.step(g, q, rs, t)) == glen(g) : Nat}:
+def len_step(+g: +List<C.Guest>, +q: C.Q, +rs: +List<C.Ride>, +t: U32,
+  +pl: +List<C.Board>, +sn: C.Stn)
+  -> {glen(C.Guests.step(g, q, rs, t, pl, sn)) == glen(g) : Nat}:
   match g:
     case []:
       {==}
     case x <> r:
-      %len_step(r, q, rs, t) : {1n+glen(C.Guests.step(r, q, rs, t)) == 1n+_ : Nat}
+      %len_step(r, q, rs, t, pl, sn) : {1n+glen(C.Guests.step(r, q, rs, t, pl, sn)) == 1n+_ : Nat}
       {==}
 
 def part_t(+r: +List<C.Guest>,
@@ -209,15 +210,15 @@ def part(+m: +List<C.Guest>)
         part_t(r, part(r)), part_f(r, part(r)))
 
 def hc_tick(+arr: +List<C.Guest>, +g: +List<C.Guest>, +q: C.Q, +rs: +List<C.Ride>,
-  +t: U32)
-  -> {Nat.add(glen(List.append(&2, C.Guest, arr, C.Guests.stay(C.Guests.step(g, q, rs, t)))),
-    glen(C.Guests.left(C.Guests.step(g, q, rs, t)))) == Nat.add(glen(g), glen(arr)) : Nat}:
-  +m = C.Guests.step(g, q, rs, t)
+  +t: U32, +pl: +List<C.Board>, +sn: C.Stn)
+  -> {Nat.add(glen(List.append(&2, C.Guest, arr, C.Guests.stay(C.Guests.step(g, q, rs, t, pl, sn)))),
+    glen(C.Guests.left(C.Guests.step(g, q, rs, t, pl, sn)))) == Nat.add(glen(g), glen(arr)) : Nat}:
+  +m = C.Guests.step(g, q, rs, t, pl, sn)
   +st = C.Guests.stay(m)
   +lf = C.Guests.left(m)
   +lhs = Nat.add(glen(List.append(&2, C.Guest, arr, st)), glen(lf))
   %add_comm(glen(arr), glen(g)) : {lhs == _ : Nat}
-  %len_step(g, q, rs, t) : {lhs == Nat.add(glen(arr), _) : Nat}
+  %len_step(g, q, rs, t, pl, sn) : {lhs == Nat.add(glen(arr), _) : Nat}
   %part(m) : {lhs == Nat.add(glen(arr), _) : Nat}
   %add_assoc(glen(arr), glen(st), glen(lf)) : {lhs == _ : Nat}
   %len_app(arr, st) : {lhs == Nat.add(_, glen(lf)) : Nat}
@@ -228,7 +229,9 @@ def Laws.headcount_conserved(p, a):
     case C.Park{map, guests, rides, track, cash, time, nid}:
       match a:
         case C.Tick{}:
-          hc_tick(C.Guests.arrivals(guests, rides, time, nid), guests, map, rides, time)
+          +sn = C.Track.stn(track)
+          hc_tick(C.Guests.arrivals(guests, rides, time, nid), guests, map, rides, time,
+            C.Boards.plan(guests, C.Occ.table(guests, rides, sn), map, rides, sn, []), sn)
         case C.Build{tool, x, y, v}:
           {==}
         case C.TrackOp{op}:
@@ -331,14 +334,16 @@ def all_stay(+m: +List<C.Guest>, +h: {Laws.all_needs_ok(m) == True{} : Bool})
         all_stay_t(x, r, ih),
         all_stay_f(x, r, and_l(Laws.needs_ok(x), Laws.all_needs_ok(r), h), ih))
 
-def all_step(+g: +List<C.Guest>, +q: C.Q, +rs: +List<C.Ride>, +t: U32)
-  -> {Laws.all_needs_ok(C.Guests.step(g, q, rs, t)) == True{} : Bool}:
+def all_step(+g: +List<C.Guest>, +q: C.Q, +rs: +List<C.Ride>, +t: U32,
+  +pl: +List<C.Board>, +sn: C.Stn)
+  -> {Laws.all_needs_ok(C.Guests.step(g, q, rs, t, pl, sn)) == True{} : Bool}:
   match g:
     case []:
       {==}
     case x <> r:
-      and_i(Laws.needs_ok(C.Guest.step(x, q, rs, t)), Laws.all_needs_ok(C.Guests.step(r, q, rs, t)),
-        ok_clamp(C.Guest.needs(C.Guest.move(x, q, rs, t), t)), all_step(r, q, rs, t))
+      and_i(Laws.needs_ok(C.Guest.step(x, q, rs, t, pl, sn)),
+        Laws.all_needs_ok(C.Guests.step(r, q, rs, t, pl, sn)),
+        ok_clamp(C.Guest.needs(C.Guest.move(x, q, rs, t, pl, sn), t)), all_step(r, q, rs, t, pl, sn))
 
 def all_arrive(+go: Bool, +id: U32, +t: U32)
   -> {Laws.all_needs_ok(C.Guests.arrive(go, id, t)) == True{} : Bool}:
@@ -353,10 +358,12 @@ def Laws.needs_bounded(p, a, h):
     case C.Park{map, guests, rides, track, cash, time, nid}:
       match a:
         case C.Tick{}:
-          +m = C.Guests.step(guests, map, rides, time)
+          +sn = C.Track.stn(track)
+          +pl = C.Boards.plan(guests, C.Occ.table(guests, rides, sn), map, rides, sn, [])
+          +m = C.Guests.step(guests, map, rides, time, pl, sn)
           all_app(C.Guests.arrivals(guests, rides, time, nid), C.Guests.stay(m),
             all_arrive(C.Guests.come(guests, rides, time), nid, time),
-            all_stay(m, all_step(guests, map, rides, time)))
+            all_stay(m, all_step(guests, map, rides, time, pl, sn)))
         case C.Build{tool, x, y, v}:
           h
         case C.TrackOp{op}:
@@ -500,7 +507,7 @@ def rt_slot(+s: C.Slot, +rest: List<&2, U32>, +more: List<&2, C.Slot>, +st: List
       {==}
     case C.Held{a, n, k, t}:
       match t:
-        case C.Train{prog, speed, wait}:
+        case C.Train{id, prog, speed, wait}:
           {==}
 
 def rt_gs(+xs: List<&2, C.Guest>, +rest: List<&2, U32>, +st: List<&2, S.Item>)

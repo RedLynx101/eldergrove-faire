@@ -80,8 +80,8 @@ def Enc.slot(s: C.Slot, rest: List<&2, U32>) -> List<&2, U32>:
     case C.Free{a, n, st}:
       10 <> a <> n <> st <> rest
     case C.Held{a, n, st, t}:
-      C.Train{prog, speed, wait} = t
-      11 <> a <> n <> st <> prog <> speed <> wait <> rest
+      C.Train{id, prog, speed, wait} = t
+      11 <> a <> n <> st <> id <> prog <> speed <> wait <> rest
 
 def Enc.ss(ss: List<&2, C.Slot>, rest: List<&2, U32>) -> List<&2, U32>:
   match ss:
@@ -185,8 +185,8 @@ def dec(ws: List<&2, U32>, st: List<&2, Item>) -> List<&2, Item>:
       dec(rest, IS{[]} <> st)
     case 10 <> a <> n <> s <> rest:
       dec(rest, Pop.s(C.Free{a, n, s}, st))
-    case 11 <> a <> n <> s <> prog <> speed <> wait <> rest:
-      dec(rest, Pop.s(C.Held{a, n, s, C.Train{prog, speed, wait}}, st))
+    case 11 <> a <> n <> s <> id <> prog <> speed <> wait <> rest:
+      dec(rest, Pop.s(C.Held{a, n, s, C.Train{id, prog, speed, wait}}, st))
     case 12 <> o <> sx <> sy <> sz <> sd <> ex <> ey <> ez <> ed <> rest:
       dec(rest, Pop.track(u2b(o), C.Pose{sx, sy, sz, sd}, C.Pose{ex, ey, ez, ed},
         st))
