@@ -292,7 +292,7 @@ def Gen.inner(+x: U32, +y: U32) -> Tile:
   +tree = Bool.not(Gen.near_path(x, y)) && Bool.not(Gen.clear(x, y))
     && Bool.not(Gen.lake(x, y)) && U32.is_eq((r .&. 7 : U32), 0)
   +queue = in_rect(x, y, 34, 27, 34, 29) || in_rect(x, y, 33, 27, 33, 27)
-    || in_rect(x, y, 31, 38, 31, 39) || in_rect(x, y, 33, 23, 33, 23)
+    || in_rect(x, y, 31, 38, 31, 39) || in_rect(x, y, 33, 21, 33, 23)
     || in_rect(x, y, 49, 37, 49, 37) || in_rect(x, y, 13, 37, 16, 37)
   Bool.pick(Tile, gate, Tile{1, 1, 5, 0, 0},
     Bool.pick(Tile, queue, Tile{h, 1, 7, 0, 0},
@@ -1081,16 +1081,17 @@ def Ride.door(+k: U32, +q: Q, +ps: +List<Piece>, +x: U32, +y: U32, +w: U32, +o: 
       Ride.find(q, x, y, w, o)
 
 # where queued guests stand, for the spacing rule: packed (x << 16) | y
-def Queue.put(on: Bool, +x: U32, +y: U32, +acc: +List<U32>) -> +List<U32>:
+# a queued guest: facing << 30 | x << 15 | y
+def Queue.put(on: Bool, +x: U32, +y: U32, +d: U32, +acc: +List<U32>) -> +List<U32>:
   match on:
     case True{}:
-      ((x << 16n : U32) .|. y : U32) <> acc
+      (((d .&. 3) << 30n) .|. (x << 15n) .|. y : U32) <> acc
     case False{}:
       acc
 
 def Queue.add(g: Guest, +q: Q, +acc: +List<U32>) -> +List<U32>:
-  Guest{id, +x, +y, dir, +st, tgt, tmr, cash, hu, th, en, na, ha, lk, mind} = g
-  Queue.put(U32.is_eq(st, 0) && U32.is_eq(Land.obj(q, (x >> 4n : U32), (y >> 4n : U32)), 7), x, y, acc)
+  Guest{id, +x, +y, +dir, +st, tgt, tmr, cash, hu, th, en, na, ha, lk, mind} = g
+  Queue.put(U32.is_eq(st, 0) && U32.is_eq(Land.obj(q, (x >> 4n : U32), (y >> 4n : U32)), 7), x, y, dir, acc)
 
 def Queue.list(+gs: +List<Guest>, +q: Q, +acc: +List<U32>) -> +List<U32>:
   match gs:
@@ -1099,14 +1100,16 @@ def Queue.list(+gs: +List<Guest>, +q: Q, +acc: +List<U32>) -> +List<U32>:
     case g <> rest:
       Queue.list(rest, q, Queue.add(g, q, acc))
 
-# someone in the queue within six units ahead (in direction d) of (x, y)
+# someone in the queue within six units ahead (in direction d) of (x, y),
+# not coming the other way (guests squeeze past those)
 def QP.ahead(+p: U32, +x: U32, +y: U32, +d: U32) -> Bool:
-  +px = (p >> 16n : U32)
-  +py = (p .&. 65535 : U32)
+  +px = ((p >> 15n) .&. 32767 : U32)
+  +py = (p .&. 32767 : U32)
+  +facing = Bool.not(U32.is_eq((p >> 30n : U32), ((d + 2) .&. 3 : U32)))
   +fx = sel(U32.is_eq(d, 0), (px - x : U32), sel(U32.is_eq(d, 2), (x - px : U32),
     sel(U32.is_eq(d, 1), (py - y : U32), (y - py : U32))))
   +sx = sel(U32.is_eq((d .&. 1 : U32), 0), (py - y : U32), (px - x : U32))
-  ((fx - 1) < 6 : U32) && ((sx + 4) <= 8 : U32)
+  ((fx - 1) < 6 : U32) && ((sx + 4) <= 8 : U32) && facing
 
 # (hit carries the previous test, so the scan stops at the first match)
 def Queue.blocked(+qs: +List<U32>, hit: Bool, +x: U32, +y: U32, +d: U32) -> Bool:
@@ -1345,7 +1348,8 @@ def Guest.walk(g: Guest, +q: Q, +rs: +List<Ride>, +t: U32, +qs: +List<U32>) -> G
   +ty = sel(home, GATE_Y(), sel(U32.is_eq(tgt2, NONE()), j, sel(queued, (ent .&. 63 : U32), Ride.cy(trd))))
   +lim = sel(queued, 0, 1)
   +there = queued && ctr && U32.is_eq(pk(i, j), ent)
-  +qok = onq || Bool.not(U32.is_eq(tgt2, NONE())) && U32.is_eq(st3, 0)
+  # only a guest bound for a ride with a queue may step into one
+  +qok = onq || queued && U32.is_eq(st3, 0)
   +tick = U32.is_eq(((t + id) .&. 1 : U32), 0)
   # in a queue, a guest may step off only at its free end
   +fe = Land.qend(onq, q, i, j)
