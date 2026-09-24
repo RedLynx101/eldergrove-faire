@@ -1,6 +1,7 @@
 # Eldergrove Faire: Roadmap
 
-Last updated: 2026-09-23 · M1, M2 and M3 done; M4 (economy and UI) next.
+Last updated: 2026-09-23 · M1, M2 and M3 done. Next: ride cycles and exits, then M4 (economy and UI).
+Choices marked *(pending)* wait on answers.
 
 ## Decisions
 
@@ -72,6 +73,32 @@ all); the live window holds 60 fps with 700 guests (8-9 ms frames uncapped, fast
 Known limits: guests who give up while queuing step off the line sideways; queues longer than the path
 search's 12 steps are walked by feel (still in order, since a line offers only forward or back).
 
+## Next: ride cycles and exits (first spike of M4)
+Today the carousel and spire give each rider a personal timer, while the animation runs on the global clock,
+so guests hop on mid-spin and step off mid-spin. Riders also pop straight onto whichever path tile touches the
+ride first. The coaster already cycles properly per train.
+
+- **Ride cycles.** Each flat ride runs a loop: *loading* (entrance open, riders board from the queue), then
+  *running* (no one boards or leaves; the carousel turns and the spire rises and drops only now), then
+  *unloading* (everyone gets off), then *loading* again. Loading ends when the ride is full or a maximum wait
+  has passed, and starts no earlier than a minimum wait after the first rider sits down *(pending: state
+  machine with these waits, or a fixed timetable)*. The coaster's station gets the same order: unload, load,
+  then dispatch after a minimum or maximum wait. Shops keep serving one customer at a time.
+- **Exits.** A ride's exit is where riders leave, placed like the queue entrance *(pending: which option)*:
+  1. an **exit path** tool: one-way tiles that riders walk out along to the main road, and that guests on the
+     road can't walk in on (a queue in reverse);
+  2. any path tile touching the ride, marked with a small exit arch (today's behaviour, made visible);
+  3. RCT-style entrance and exit huts placed on the ride's edge.
+  Riders walk off their seat to the exit instead of appearing there.
+- **Complete rides only** *(pending)*: a ride opens only once it has both an entrance and an exit, and shows
+  a warning over it until then. The starter park comes with both.
+- **Queue quality:** a guest who gives up walks back out the free end instead of stepping off sideways;
+  guests look at a line's length before joining, and think "this queue is too long".
+- **Law: ride_cycle.** Boarding happens only while a ride is loading, and riders leave only while it is
+  unloading (for the coaster, only at the station). This is provable the same way as capacity_respected.
+- **Law: seats_unique.** No two guests are ever planned into the same seat.
+- The ride window (below) gets the cycle settings: minimum and maximum wait, and the run length.
+
 ## M4: Economy and UI
 - **Ride window** (click a ride): open/close, price +/−, riders, income, upkeep, age, reliability, and
   excitement/intensity/nausea ratings.
@@ -106,6 +133,11 @@ search's 12 steps are walked by feel (still in order, since a line offers only f
 - **Coasters:** more than one per park, a station anywhere, banked turns and steeper drops.
 
 ## M7: Structure
+- Zoom levels and a larger or resizable window (open since M2).
+- Crowds past 700: guests share per-ride route maps instead of each searching paths themselves.
+- Sound *(pending: wanted or not)*: ambience, ride sounds and a faire tune. The window effect has no audio
+  yet, so this needs a playback path in `win_frame.c` (WSLg provides PulseAudio). The clips could come from
+  Suno.
 - Scenarios with goals and awards, alongside sandbox mode.
 - Research that unlocks rides over time.
 - Weather and a day/night cycle, with lanterns and fireflies at night.
@@ -114,7 +146,7 @@ search's 12 steps are walked by feel (still in order, since a line offers only f
 ## Laws
 Proven: money_conserved, headcount_conserved, needs_bounded, coaster_on_circuit, no_collisions,
 save_load_roundtrip, capacity_respected, riders_conserved.
-Planned: purchase_is_transfer, prices_bounded (M4); seats_unique (no seat planned twice), later.
+Planned: ride_cycle and seats_unique (next spike); purchase_is_transfer, prices_bounded (M4).
 Proof maintenance rule: keep the code field-wise (each park field updated by its own function) so
 existing proofs survive new features.
 
