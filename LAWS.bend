@@ -36,7 +36,7 @@ law headcount_conserved:
 # within 0..255 -- if they did before the step, they do after it.
 def needs_ok(g: C.Guest) -> Bool:
   C.Guest{id, x, y, dir, st, tgt, tmr, cash, hunger, thirst, energy, nausea,
-    happy, look} = g
+    happy, look, mind} = g
   U32.is_le(hunger, 255) && U32.is_le(thirst, 255) && U32.is_le(energy, 255)
     && U32.is_le(nausea, 255) && U32.is_le(happy, 255)
 

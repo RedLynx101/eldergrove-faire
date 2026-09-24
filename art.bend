@@ -579,6 +579,17 @@ def Art.thought(+m: U32, +x: U32, +y: U32) -> U32:
       +cloud = ell((x + 1 : U32), (y - 3 : U32), 2, 1) || ell((x - 1 : U32), (y - 3 : U32), 2, 1)
       +bolt = U32.is_eq(x, 0) && U32.is_eq(y, 1) || U32.is_eq(x, 1) && U32.is_eq(y, 0)
       sel(bolt, 16766282, sel(cloud, 7368816, TR()))
+    case 7:
+      # too dear: a gold coin, struck through
+      +coin = ell(x, (y - 2 : U32), 3, 2)
+      +slash = U32.is_eq(x, (y - 2 : U32)) && (sabs(x) <= 3 : U32)
+      sel(slash, 14163020, sel(coin, sel(U32.is_eq(y, 3) && U32.is_eq(x, (0 - 1 : U32)), 16775360, 14725184), TR()))
+    case 8:
+      # waited too long: an hourglass
+      +glass = (U32.is_eq(y, 0) || U32.is_eq(y, 4)) && (sabs(x) <= 2 : U32)
+        || between(y, 1, 3) && U32.is_le(sabs(x), sabs((y - 2 : U32)))
+      +sand = U32.is_eq(y, 1) && (sabs(x) <= 1 : U32) || U32.is_eq(y, 2) && U32.is_eq(x, 0)
+      sel(sand, 14725184, sel(glass, 7031339, TR()))
     case _:
       # delighted: a heart
       +heart = U32.is_eq(y, 4) && (sabs(x) >= 1 : U32) && (sabs(x) <= 2 : U32)
@@ -669,8 +680,8 @@ def Art.guest(+dx: U32, +dy: U32, +look: U32, +t: U32) -> U32:
   +ear = U32.is_eq(cls, 2) && U32.is_eq(x, 2) && U32.is_eq(h, 8)
   +beard = dw && between(h, 5, 6) && between(x, (0 - 1 : U32), 1) && Bool.not(backv)
   +cap = dw && between(h, 8, 9) && between(x, (0 - 1 : U32), 1)
-  +bub = Art.bubble.go(Bool.not(U32.is_eq(((look >> 20n) .&. 7 : U32), 0)) && (h0 >= 15 : U32),
-    ((look >> 20n) .&. 7 : U32), dx, h0)
+  +bub = Art.bubble.go(Bool.not(U32.is_eq(((look >> 20n) .&. 15 : U32), 0)) && (h0 >= 15 : U32),
+    ((look >> 20n) .&. 15 : U32), dx, h0)
   over(bub, over(held, sel(hand, skin, sel(star, 16766282, sel(wiz, 5913248, sel(visor, 3158064, sel(helm, 11581632,
     sel(plume, 13643824, sel(hood, 3836474, sel(ear, skin, sel(cap, 12595248,
     sel(beard, 11559978, sel(eye, 2105376, sel(head, headc, sel(belt, 4861466,

@@ -298,7 +298,7 @@ def le_cl(+x: U32) -> {True{} == U32.is_le(C.cl255(x), 255) : Bool}:
 
 def ok_clamp(+g: C.Guest) -> {Laws.needs_ok(C.Guest.clamp(g)) == True{} : Bool}:
   match g:
-    case C.Guest{id, x, y, dir, st, tgt, tmr, cash, hu, th, en, na, ha, lk}:
+    case C.Guest{id, x, y, dir, st, tgt, tmr, cash, hu, th, en, na, ha, lk, mind}:
       %le_cl(hu) : {_ && U32.is_le(C.cl255(th), 255) && U32.is_le(C.cl255(en), 255)
         && U32.is_le(C.cl255(na), 255) && U32.is_le(C.cl255(ha), 255) == True{} : Bool}
       %le_cl(th) : {True{} && _ && U32.is_le(C.cl255(en), 255)
@@ -502,7 +502,7 @@ def rt_q(+q: C.Q, +rest: List<&2, U32>, +st: List<&2, S.Item>)
 def rt_guest(+g: C.Guest, +rest: List<&2, U32>, +more: List<&2, C.Guest>, +st: List<&2, S.Item>)
   -> {S.dec(S.Enc.guest(g, rest), S.IG{more} <> st) == S.dec(rest, S.IG{g <> more} <> st) : List<&2, S.Item>}:
   match g:
-    case C.Guest{id, x, y, dir, gs, tgt, tmr, cash, hu, th, en, na, ha, lk}:
+    case C.Guest{id, x, y, dir, gs, tgt, tmr, cash, hu, th, en, na, ha, lk, mind}:
       {==}
 
 def rt_ride(+r: C.Ride, +rest: List<&2, U32>, +more: List<&2, C.Ride>, +st: List<&2, S.Item>)
@@ -729,21 +729,21 @@ def Laws.capacity_respected(gs, occ, q, rs, stn):
 # Riders: a rider's tick is Guest.off, which sets st to 0 (got off) or 1
 # (still riding) -- never 3 (gone) -- and the needs and clamp keep st.
 def riders_one(+id: U32, +x: U32, +y: U32, +dir: U32, +tgt: U32, +tmr: U32, +cash: U32,
-  +hu: U32, +th: U32, +en: U32, +na: U32, +ha: U32, +lk: U32, +q: C.Q, +rs: +List<C.Ride>,
+  +hu: U32, +th: U32, +en: U32, +na: U32, +ha: U32, +lk: U32, +mind: U32, +q: C.Q, +rs: +List<C.Ride>,
   +t: U32, +pl: +List<C.Board>, +sn: C.Stn, +qs: +List<U32>)
-  -> {C.Guest.gone(C.Guest.step(C.Guest{id, x, y, dir, 1, tgt, tmr, cash, hu, th, en, na, ha, lk},
+  -> {C.Guest.gone(C.Guest.step(C.Guest{id, x, y, dir, 1, tgt, tmr, cash, hu, th, en, na, ha, lk, mind},
     q, rs, t, pl, sn, qs)) == False{} : Bool}:
   bcase(C.Guest.done(tmr, dir, tgt, rs, sn),
     b => {C.Guest.gone(C.Guest.clamp(C.Guest.needs(C.Guest.off(b, id, x, y, dir, tgt, tmr, cash,
-      hu, th, en, na, ha, lk, q, rs), t))) == False{} : Bool},
+      hu, th, en, na, ha, lk, mind, q, rs, t), t))) == False{} : Bool},
     {==}, {==})
 
 def Laws.riders_conserved(g, q, rs, t, plan, stn, qs, h):
   match g:
-    case C.Guest{id, x, y, dir, st, tgt, tmr, cash, hu, th, en, na, ha, lk}:
+    case C.Guest{id, x, y, dir, st, tgt, tmr, cash, hu, th, en, na, ha, lk, mind}:
       %Equal.sym(U32, st, 1, h) : {C.Guest.gone(C.Guest.step(C.Guest{id, x, y, dir, _, tgt, tmr, cash,
-        hu, th, en, na, ha, lk}, q, rs, t, plan, stn, qs)) == False{} : Bool}
-      riders_one(id, x, y, dir, tgt, tmr, cash, hu, th, en, na, ha, lk, q, rs, t, plan, stn, qs)
+        hu, th, en, na, ha, lk, mind}, q, rs, t, plan, stn, qs)) == False{} : Bool}
+      riders_one(id, x, y, dir, tgt, tmr, cash, hu, th, en, na, ha, lk, mind, q, rs, t, plan, stn, qs)
 
 # Boarding only while loading: Guest.wants puts Ride.loading first, so a
 # guest the plan seats has a loading ride; the plan keeps that for every
@@ -777,8 +777,8 @@ def load_plan(+gs: +List<C.Guest>, +occ: +List<U32>, +q: C.Q, +rs: +List<C.Ride>
       h
     case g <> rest:
       match g:
-        case C.Guest{id, x, y, dir, st, tgt, tmr, cash, hu, th, en, na, ha, lk}:
-          +gg = {C.Guest{id, x, y, dir, st, tgt, tmr, cash, hu, th, en, na, ha, lk} : C.Guest}
+        case C.Guest{id, x, y, dir, st, tgt, tmr, cash, hu, th, en, na, ha, lk, mind}:
+          +gg = {C.Guest{id, x, y, dir, st, tgt, tmr, cash, hu, th, en, na, ha, lk, mind} : C.Guest}
           load_plan(rest, occ, q, rs, sn, C.Boards.try(C.Guest.wants(gg, q, rs, sn), gg, occ, rs, sn, acc),
             load_try(C.Guest.wants(gg, q, rs, sn), gg, occ, rs, sn, acc, h,
               e => and_l(C.Ride.loading(C.Rides.get(rs, tgt), sn),
@@ -791,12 +791,12 @@ def Laws.board_only_when_loading(gs, occ, q, rs, stn):
 # Guest.done is Ride.unloading; while that is False, Guest.off keeps st at 1.
 def Laws.ride_until_unloading(g, q, rs, t, plan, stn, qs, h, u):
   match g:
-    case C.Guest{id, x, y, dir, st, tgt, tmr, cash, hu, th, en, na, ha, lk}:
+    case C.Guest{id, x, y, dir, st, tgt, tmr, cash, hu, th, en, na, ha, lk, mind}:
       %Equal.sym(U32, st, 1, h) : {C.Guest.st(C.Guest.step(C.Guest{id, x, y, dir, _, tgt, tmr, cash,
-        hu, th, en, na, ha, lk}, q, rs, t, plan, stn, qs)) == 1 : U32}
+        hu, th, en, na, ha, lk, mind}, q, rs, t, plan, stn, qs)) == 1 : U32}
       %Equal.sym(Bool, C.Ride.unloading(C.Rides.get(rs, tgt), stn, dir, tmr), False{}, u)
         : {C.Guest.st(C.Guest.clamp(C.Guest.needs(C.Guest.off(_, id, x, y, dir, tgt, tmr, cash,
-          hu, th, en, na, ha, lk, q, rs), t))) == 1 : U32}
+          hu, th, en, na, ha, lk, mind, q, rs, t), t))) == 1 : U32}
       {==}
 
 # Seats: every seat the plan hands out passed "not taken by acc" (P above),

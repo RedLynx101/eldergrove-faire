@@ -37,7 +37,7 @@ Dev modes:
 |---|---|
 | Arrow keys | Scroll |
 | Click / drag | Use the tool on a tile (or pick a tool in the bar) |
-| I | Inspect tool (the default): click a ride to open its window |
+| I | Inspect tool (the default): click a guest or a ride to open its window |
 | Right-click | Open a ride's window, whatever the tool |
 | P / F | The park window / the finances window (or the PARK and FINANCES buttons) |
 | 1 - 9, 0 | Path, raise land, lower land (to water), enchanted tree, Dragon Carousel, Arcane Spire, Potion Stall, Troll Tavern, demolish, Wyrm Coaster |
@@ -82,6 +82,14 @@ finances window shows this month and last month by category (ride tickets,
 food, drinks, entry fees, upkeep, construction, refunds, loan interest) and
 the profit, and borrows or repays 1000 gold at a time (interest: 1/80 of the
 loan a month, owing at most 20000).
+
+Guests judge prices: a ride is worth its excitement to them, a potion is
+worth more the thirstier they are, a meal the hungrier. A guest who wanted
+something too dear skips it, thinks "not paying that for the Troll Tavern",
+and remembers. They also think a ride was great, or too intense, and get fed
+up with long queues; fresh thoughts show in their bubble. A guest's window
+(click them) shows their name ("Sir Halvard of Wyvern Hill"), what they are
+doing, their thoughts, needs, gold and what they carry.
 
 Coaster tool (0): `Enter` opens or closes the coaster; while closed, `W`
 ahead, `A`/`D` turn, `Q` up, `Z` down, `L` lift hill, `Backspace` removes the

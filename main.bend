@@ -56,7 +56,7 @@ def Dr.hits(d: Dr, +bx: U32, +by: U32, +s: U32) -> Bool:
     case DTrack{+x, +y, code, +zr}:
       ov((x - 16 : U32), (y - zr * 8 - 12 : U32), (x + 17 : U32), (y + 17 : U32), bx, by, s)
     case DGuest{+x, +y, +look, ph}:
-      +top = sel(U32.is_eq(((look >> 20n) .&. 7 : U32), 0), 15, 27)
+      +top = sel(U32.is_eq(((look >> 20n) .&. 15 : U32), 0), 15, 27)
       ov((x - 5 : U32), (y - top : U32), (x + 7 : U32), (y + 1 : U32), bx, by, s)
     case DCar{+x, +y, d, lead, rd}:
       ov((x - 10 : U32), (y - 19 : U32), (x + 11 : U32), (y + 6 : U32), bx, by, s)
@@ -373,7 +373,7 @@ def RT.add.go(on: Bool, coaster: Bool, +dir: U32, +tgt: U32, +lk: U32, t: RT) ->
       t
 
 def RT.add(g: C.Guest, +rs: +List<C.Ride>, t: RT) -> RT:
-  C.Guest{id, x, y, +dir, +st, +tgt, tmr, cash, hu, th, en, na, ha, +lk} = g
+  C.Guest{id, x, y, +dir, +st, +tgt, tmr, cash, hu, th, en, na, ha, +lk, mind} = g
   RT.add.go(U32.is_eq(st, 1), U32.is_eq(C.Ride.kind(C.Rides.get(rs, tgt)), 5), dir, tgt, lk, t)
 
 def RT.fill(+gs: +List<C.Guest>, +rs: +List<C.Ride>, t: RT) -> RT:
@@ -582,7 +582,7 @@ def shopping(+st: U32, +tgt: U32, +rs: +List<C.Ride>) -> Bool:
 
 def guest_dyn(+g: C.Guest, +q: C.Q, +rs: +List<C.Ride>, +camx: U32, +camy: U32,
   +t: U32, +acc: +List<Dyn>) -> +List<Dyn>:
-  C.Guest{+id, +x, +y, +dir, +st, +tgt, tmr, cash, +hu, +th, +en, +na, +ha, +lk} = g
+  C.Guest{+id, +x, +y, +dir, +st, +tgt, tmr, cash, +hu, +th, +en, +na, +ha, +lk, +mind} = g
   +i = (x >> 4n : U32)
   +j = (y >> 4n : U32)
   +h = C.Land.h(q, i, j)
@@ -596,8 +596,12 @@ def guest_dyn(+g: C.Guest, +q: C.Q, +rs: +List<C.Ride>, +camx: U32, +camy: U32,
   +mood = sel((na > 120 : U32), 3, sel((hu > 170 : U32), 1, sel((th > 170 : U32), 2,
     sel((en < 50 : U32), 4, sel((ha < 70 : U32), 5, sel((ha > 215 : U32), 6, 0))))))
   +think = U32.is_eq((((t + id * 37) >> 6n) .&. 15 : U32), 0)
+  # a fresh thought (the last three seconds) shows in the bubble first
+  +code = C.Mind.code(mind)
+  +fresh = Bool.not(U32.is_eq(code, 0)) && ((((t >> 4n) - C.Mind.when(mind)) .&. 65535) < 12 : U32)
+  +evicon = sel(U32.is_eq(code, 1), 7, sel(U32.is_eq(code, 2), 8, sel(U32.is_eq(code, 3), 6, 3)))
   +keep = sel(U32.is_eq(st, 1), 197631, 16974847)
-  +look = ((lk .&. keep) .|. ((dir .&. 3) << 12n) .|. (sel(think, mood, 0) << 20n) : U32)
+  +look = ((lk .&. keep) .|. ((dir .&. 3) << 12n) .|. (sel(fresh, evicon, sel(think, mood, 0)) << 20n) : U32)
   Bool.pick(+List<Dyn>, vis, Dyn{(i + j : U32), DGuest{sx, sy, look, (t + id : U32)}} <> acc, acc)
 
 def guests_dyn(+gs: +List<C.Guest>, +q: C.Q, +rs: +List<C.Ride>, +camx: U32,
@@ -751,7 +755,7 @@ def happy_avg(+gs: +List<C.Guest>, +sum: U32, +n: U32) -> U32:
     case []:
       sel(U32.is_eq(n, 0), 0, (sum * 100 / (n * 255) : U32))
     case g <> rest:
-      C.Guest{id, x, y, dir, st, tgt, tmr, cash, hu, th, en, na, ha, lk} = g
+      C.Guest{id, x, y, dir, st, tgt, tmr, cash, hu, th, en, na, ha, lk, mind} = g
       happy_avg(rest, (sum + ha : U32), (n + 1 : U32))
 
 def ride_name(+k: U32) -> String:
@@ -774,7 +778,7 @@ def riders(+gs: +List<C.Guest>, +idx: U32) -> U32:
     case []:
       0
     case g <> rest:
-      C.Guest{id, x, y, dir, +st, +tgt, tmr, cash, hu, th, en, na, ha, lk} = g
+      C.Guest{id, x, y, dir, +st, +tgt, tmr, cash, hu, th, en, na, ha, lk, mind} = g
       (sel(U32.is_eq(st, 1) && U32.is_eq(tgt, idx), 1, 0) + riders(rest, idx) : U32)
 
 def ride_state(r: C.Ride) -> String:
@@ -860,8 +864,10 @@ def Win.w(+k: U32) -> U32:
       196
     case 2:
       200
-    case _:
+    case 3:
       224
+    case _:
+      210
 
 def Win.h(+k: U32) -> U32:
   match k:
@@ -869,8 +875,10 @@ def Win.h(+k: U32) -> U32:
       154
     case 2:
       132
-    case _:
+    case 3:
       148
+    case _:
+      134
 
 def Win.hit(w: Win, +mx: U32, +my: U32) -> Bool:
   Win{+k, +x, +y, a} = w
@@ -1009,6 +1017,227 @@ def ride_win(+p: C.Park, +x: U32, +y: U32, +idx: U32, +acc: +List<Dr>) -> +List<
   T("AGE " ++ U32.show(age) ++ Bool.pick(String, U32.is_eq(age, 1), " MONTH", " MONTHS"),
     (x + 6 : U32), (y + 102 : U32), 15261888, waits))))))))
 
+# Guests' names: from their id and class, always the same
+def name_first(+n: U32) -> String:
+  match n:
+    case 0:
+      "ALDRIC"
+    case 1:
+      "BRYNN"
+    case 2:
+      "CEDRIC"
+    case 3:
+      "DAGNY"
+    case 4:
+      "EIRA"
+    case 5:
+      "FENWICK"
+    case 6:
+      "GWEN"
+    case 7:
+      "HALVARD"
+    case 8:
+      "ISOLDE"
+    case 9:
+      "KESTREL"
+    case 10:
+      "LIORA"
+    case 11:
+      "MERRICK"
+    case 12:
+      "NESSA"
+    case 13:
+      "ORIN"
+    case 14:
+      "PELL"
+    case 15:
+      "QUILLON"
+    case 16:
+      "ROWAN"
+    case 17:
+      "SAOIRSE"
+    case 18:
+      "TAMSIN"
+    case 19:
+      "ULRIC"
+    case 20:
+      "VESNA"
+    case 21:
+      "WREN"
+    case 22:
+      "YSOLDE"
+    case _:
+      "BRAM"
+
+def name_place(+n: U32) -> String:
+  match n:
+    case 0:
+      "THORNWALL"
+    case 1:
+      "ASHFORD"
+    case 2:
+      "MIREFEN"
+    case 3:
+      "HOLLOWMERE"
+    case 4:
+      "STONEBRIDGE"
+    case 5:
+      "WYVERN HILL"
+    case 6:
+      "OAKHOLLOW"
+    case 7:
+      "DUNMORROW"
+    case 8:
+      "BRIARWOOD"
+    case 9:
+      "COLDHARBOR"
+    case 10:
+      "FERNDALE"
+    case 11:
+      "GREYMOOR"
+    case 12:
+      "HIGHCRAG"
+    case 13:
+      "MOSSGATE"
+    case 14:
+      "RAVENSKEEP"
+    case _:
+      "SILVERBROOK"
+
+def name_epithet(+n: U32) -> String:
+  match n:
+    case 0:
+      "WISE"
+    case 1:
+      "WANDERER"
+    case 2:
+      "STARGAZER"
+    case 3:
+      "UNHURRIED"
+    case 4:
+      "RED"
+    case 5:
+      "MUMBLER"
+    case 6:
+      "LEARNED"
+    case _:
+      "PATIENT"
+
+def name_clan(+n: U32) -> String:
+  match n:
+    case 0:
+      "IRONBEARD"
+    case 1:
+      "STONEFIST"
+    case 2:
+      "COPPERHELM"
+    case 3:
+      "DEEPDELVER"
+    case 4:
+      "ANVILSON"
+    case 5:
+      "GRIMBRAID"
+    case 6:
+      "OREHAND"
+    case _:
+      "FLINTBROW"
+
+def guest_name.go(+cls: U32, +h: U32, first: String) -> String:
+  match cls:
+    case 0:
+      first ++ " THE " ++ name_epithet(((h >> 8n) .&. 7 : U32))
+    case 1:
+      Bool.pick(String, U32.is_eq((h .&. 32 : U32), 0), "SIR ", "DAME ") ++ first ++ " OF " ++ name_place(((h >> 12n) .&. 15 : U32))
+    case 2:
+      first ++ " OF " ++ name_place(((h >> 16n) .&. 15 : U32))
+    case _:
+      first ++ " " ++ name_clan(((h >> 20n) .&. 7 : U32))
+
+def guest_name(+id: U32, +lk: U32) -> String:
+  +h = C.hash(id, 91)
+  guest_name.go((lk .&. 3 : U32), h, name_first((h % 24 : U32)))
+
+# the guest with this id (a nobody with id NONE when they have left)
+def Guests.find(+gs: +List<C.Guest>, +id: U32) -> C.Guest:
+  match gs:
+    case []:
+      C.Guest{C.NONE(), 0, 0, 0, 3, C.NONE(), 0, 0, 0, 0, 0, 0, 0, 0, 0}
+    case g <> rest:
+      Bool.pick(C.Guest, U32.is_eq(C.Guest.id(g), id), g, Guests.find(rest, id))
+
+def the_ride(+rs: +List<C.Ride>, +i: U32) -> String:
+  "THE " ++ ride_name(C.Ride.kind(C.Rides.get(rs, i)))
+
+# what a guest is doing
+def activity(+st: U32, +tgt: U32, +onq: Bool, +rs: +List<C.Ride>) -> String:
+  +shop = C.Ride.shop(C.Ride.kind(C.Rides.get(rs, tgt)))
+  Bool.pick(String, U32.is_eq(st, 1), Bool.pick(String, shop, "BUYING AT ", "RIDING ") ++ the_ride(rs, tgt),
+    Bool.pick(String, U32.is_eq(st, 2), "HEADING HOME",
+      Bool.pick(String, U32.is_eq(tgt, C.NONE()), "WANDERING",
+        Bool.pick(String, onq, "QUEUING FOR ", "HEADING FOR ") ++ the_ride(rs, tgt))))
+
+def event_text(+code: U32, nm: String) -> String:
+  match code:
+    case 1:
+      "NOT PAYING THAT FOR " ++ nm
+    case 2:
+      "WAITED TOO LONG FOR " ++ nm
+    case 3:
+      nm ++ " WAS GREAT!"
+    case _:
+      nm ++ " WAS TOO INTENSE"
+
+def opt(on: Bool, s: String, +rest: +List<String>) -> +List<String>:
+  Bool.pick(+List<String>, on, s <> rest, rest)
+
+# thoughts: the latest (for a month), then how they feel
+def thoughts(+mind: U32, +t: U32, +hu: U32, +th: U32, +na: U32, +en: U32, +ha: U32,
+  +rs: +List<C.Ride>) -> +List<String>:
+  +code = C.Mind.code(mind)
+  +recent = Bool.not(U32.is_eq(code, 0)) && ((((t >> 4n) - C.Mind.when(mind)) .&. 65535) < 225 : U32)
+  opt(recent, event_text(code, the_ride(rs, C.Mind.ride(mind))),
+  opt((hu > 170 : U32), "I'M HUNGRY", opt((th > 170 : U32), "I'M THIRSTY",
+  opt((na > 120 : U32), "I FEEL SICK", opt((en < 50 : U32), "I'M TIRED",
+  opt((ha < 70 : U32), "I'M NOT HAVING FUN", opt((ha > 215 : U32), "WHAT A WONDERFUL PARK!", [])))))))
+
+def lines(+n: Nat, +xs: +List<String>, +x: U32, +y: U32, +acc: +List<Dr>) -> +List<Dr>:
+  match n xs:
+    case 0n _:
+      acc
+    case 1n+m Nil{}:
+      acc
+    case 1n+m Con{s, rest}:
+      T(s, x, y, 16777215, lines(m, rest, x, (y + 10 : U32), acc))
+
+def need_bar(label: String, +v: U32, +col: U32, +x: U32, +y: U32, +acc: +List<Dr>) -> +List<Dr>:
+  T(label, (x + 6 : U32), y, 15261888,
+  R((x + 70 : U32), y, U32.max((U32.min(v, 255) * 100 / 255 : U32), 1), 5, col,
+  R((x + 70 : U32), y, 100, 5, 4210752, acc)))
+
+def carrying(+lk: U32) -> String:
+  +it = ((lk >> 16n) .&. 3 : U32)
+  Bool.pick(String, U32.is_eq(it, 1), "A POTION", Bool.pick(String, U32.is_eq(it, 2), "A TANKARD OF ALE", "NOTHING"))
+
+def guest_win.go(g: C.Guest, +p: C.Park, +x: U32, +y: U32, +acc: +List<Dr>) -> +List<Dr>:
+  C.Guest{+id, +gx, +gy, dir, +st, +tgt, tmr, +cash, +hu, +th, +en, +na, +ha, +lk, +mind} = g
+  C.Park{map, guests, +rides, track, cash0, +time, nid, fin} = p
+  +gone = U32.is_eq(id, C.NONE())
+  +onq = U32.is_eq(C.Land.obj(map, (gx >> 4n : U32), (gy >> 4n : U32)), 7)
+  +frame = window_box(Bool.pick(String, gone, "AN ADVENTURER", guest_name(id, lk)), x, y, 210, 134, acc)
+  Bool.pick(+List<Dr>, gone, T("HAS LEFT THE PARK", (x + 6 : U32), (y + 16 : U32), 12648447, frame),
+    T(activity(st, tgt, onq, rides), (x + 6 : U32), (y + 15 : U32), 12648447,
+    lines(3n, thoughts(mind, time, hu, th, na, en, ha, rides), (x + 6 : U32), (y + 28 : U32),
+    need_bar("HAPPINESS", ha, 7324480, x, (y + 62 : U32),
+    need_bar("ENERGY", en, 16766282, x, (y + 72 : U32),
+    need_bar("HUNGER", hu, 14168128, x, (y + 82 : U32),
+    need_bar("THIRST", th, 4227327, x, (y + 92 : U32),
+    need_bar("NAUSEA", na, 9498256, x, (y + 102 : U32),
+    T("GOLD *" ++ U32.show(cash) ++ "   CARRYING " ++ carrying(lk), (x + 6 : U32), (y + 118 : U32), 16766282,
+      frame)))))))))
+
+def guest_win(+p: C.Park, +x: U32, +y: U32, +gid: U32, +acc: +List<Dr>) -> +List<Dr>:
+  guest_win.go(Guests.find(C.Park.guests(p), gid), p, x, y, acc)
+
 # the guest count over the last four months: 32 bars, newest on the right
 def graph(+hs: +List<U32>, +i: U32, +x: U32, +y: U32, +acc: +List<Dr>) -> +List<Dr>:
   match hs:
@@ -1086,6 +1315,8 @@ def win_dr.go(+k: U32, +x: U32, +y: U32, +a: U32, +p: C.Park, +acc: +List<Dr>) -
       park_win(p, x, y, acc)
     case 3:
       fin_win(p, x, y, acc)
+    case 4:
+      guest_win(p, x, y, a, acc)
     case _:
       acc
 
@@ -1310,8 +1541,29 @@ def open_at(+ws: +List<Win>, +p: C.Park, +hov: U32, +lx: U32, +ly: U32) -> +List
 
 # a click on the map or the toolbar. The inspect tool (or the right button,
 # with any tool) opens a ride's window; other tools build.
+# the walking guest nearest the mouse (within 7 px), or NONE
+def Guests.near(+gs: +List<C.Guest>, +q: C.Q, +camx: U32, +camy: U32, +lx: U32, +ly: U32,
+  +best: U32, +bd: U32) -> U32:
+  match gs:
+    case []:
+      best
+    case g <> rest:
+      C.Guest{+id, +x, +y, dir, +st, tgt, tmr, cash, hu, th, en, na, ha, lk, mind} = g
+      +h = C.Land.h(q, (x >> 4n : U32), (y >> 4n : U32))
+      +sx = ((1280 + x) - (y + camx) : U32)
+      +sy = ((512 + ((x + y) >> 1n)) - (8 * h + camy + 6) : U32)
+      +d = (C.absd(sx, lx) + C.absd(sy, ly) : U32)
+      +take = (U32.is_eq(st, 0) || U32.is_eq(st, 2)) && (d < bd : U32)
+      Guests.near(rest, q, camx, camy, lx, ly, sel(take, id, best), sel(take, d, bd))
+
+# inspecting: a guest under the mouse opens their window, else a ride's
+def inspect_at(+ws: +List<Win>, +p: C.Park, +hov: U32, +lx: U32, +ly: U32, +cx: U32, +cy: U32) -> +List<Win>:
+  +gid = Guests.near(C.Park.guests(p), C.Park.map(p), cx, cy, lx, ly, C.NONE(), 7)
+  Bool.pick(+List<Win>, U32.is_eq(gid, C.NONE()), open_at(ws, p, hov, lx, ly),
+    Wins.open(ws, 4, gid, U32.min((lx + 12 : U32), 300), U32.min(U32.max(C.sub0(ly, 30), 14), 156)))
+
 def on_map(+lx: U32, +ly: U32, +button: U32, +down: Bool, +ui: UI, +wm: WM, +p: C.Park) -> EV:
-  UI{cx, cy, keys, mx, my, md, +tool, var, sp, msg, fr, inc, last, io, fps, tl} = ui
+  UI{+cx, +cy, keys, mx, my, md, +tool, var, sp, msg, fr, inc, last, io, fps, tl} = ui
   +q = C.Park.map(p)
   +ui2 = {UI{cx, cy, keys, lx, ly, sel(down && U32.is_eq(button, 0), 1, 0), tool, var, sp, msg, fr, inc, 99999, io, fps, tl} : UI}
   +bar = (ly >= 292 : U32)
@@ -1327,7 +1579,7 @@ def on_map(+lx: U32, +ly: U32, +button: U32, +down: Bool, +ui: UI, +wm: WM, +p: 
   +finb = down && in_box(lx, ly, 462, 305, 46, 9)
   +ws2 = Bool.pick(+List<Win>, parkb, Wins.open(ws, 2, 0, 150, 40),
     Bool.pick(+List<Win>, finb, Wins.open(ws, 3, 0, 140, 30), ws))
-  EV{ui3, WM{Bool.pick(+List<Win>, inspect, open_at(ws2, p, hov, lx, ly), ws2), 0, 0, 0},
+  EV{ui3, WM{Bool.pick(+List<Win>, inspect, inspect_at(ws2, p, hov, lx, ly, cx, cy), ws2), 0, 0, 0},
     Bool.pick(+List<C.Act>, build, build_act(q, ui2), []), False{}}
 
 def Win.x(w: Win) -> U32:
@@ -1932,7 +2184,7 @@ def heading(+gs: +List<C.Guest>, +idx: U32) -> U32:
     case []:
       0
     case g <> rest:
-      C.Guest{id, x, y, dir, +st, +tgt, tmr, cash, hu, th, en, na, ha, lk} = g
+      C.Guest{id, x, y, dir, +st, +tgt, tmr, cash, hu, th, en, na, ha, lk, mind} = g
       (sel(U32.is_eq(st, 0) && U32.is_eq(tgt, idx), 1, 0) + heading(rest, idx) : U32)
 
 def ride_report(+rs: +List<C.Ride>, +gs: +List<C.Guest>, +i: U32) -> String:
@@ -2001,7 +2253,7 @@ def ui.click(+x: U32, +y: U32, +b: U32) -> List<Event>:
 def ui.report(g: Game) -> String:
   Game{+p, ui, +wm} = g
   +r0 = C.Rides.get(C.Park.rides(p), 0)
-  "windows " ++ U32.show(C.len32(Win, WM.wins(wm))) ++ ", carousel price " ++ U32.show(C.Ride.price(r0))
+  "windows " ++ U32.show(C.len32(Win, WM.wins(wm))) ++ " (front kind " ++ U32.show(Win.kind(Wins.get(WM.wins(wm), 0))) ++ "), carousel price " ++ U32.show(C.Ride.price(r0))
     ++ ", open " ++ U32.show(C.Ride.open_flag(r0)) ++ ", max wait " ++ U32.show(C.Ride.wmax(r0))
     ++ ", fee " ++ U32.show(C.Fin.fee(C.Park.fin(p))) ++ ", loan " ++ U32.show(C.Fin.loan(C.Park.fin(p)))
     ++ ", gold " ++ U32.show(C.Park.cash(p))
@@ -2027,6 +2279,25 @@ def ui.s5(g: Game) -> Game:
 def ui.s6(g: Game) -> Game:
   ui.step(ui.step(ui.step(g, ui.click(470, 297, 0)), ui.click(278, 84, 0)), ui.click(278, 84, 0))
 
+# where the first walking guest on screen stands (x << 16 | y, screen px)
+def ui.guest_at(+gs: +List<C.Guest>, +q: C.Q, +cx: U32, +cy: U32) -> U32:
+  match gs:
+    case []:
+      0
+    case g <> rest:
+      C.Guest{id, +x, +y, dir, +st, tgt, tmr, cash, hu, th, en, na, ha, lk, mind} = g
+      +h = C.Land.h(q, (x >> 4n : U32), (y >> 4n : U32))
+      +sx = ((1280 + x) - (y + cx) : U32)
+      +sy = ((512 + ((x + y) >> 1n)) - (8 * h + cy + 6) : U32)
+      +ok = U32.is_eq(st, 0) && (sx > 20 : U32) && (sx < 490 : U32) && (sy > 20 : U32) && (sy < 280 : U32)
+      sel(ok, ((sx << 16n) .|. sy : U32), ui.guest_at(rest, q, cx, cy))
+
+# clicking the first walking guest on screen opens their window
+def ui.s7(g: Game) -> Game:
+  +g2 = g
+  +pos = ui.guest_at(C.Park.guests(Game.park(g2)), C.Park.map(Game.park(g2)), 930, 880)
+  ui.step(g2, ui.click((pos >> 16n : U32), (pos .&. 65535 : U32), 0))
+
 def ui.next(+k: U32, g: Game) -> Game:
   match k:
     case 1:
@@ -2039,6 +2310,8 @@ def ui.next(+k: U32, g: Game) -> Game:
       ui.s5(g)
     case 5:
       ui.s6(g)
+    case 6:
+      ui.s7(warm(ui.step(g, [Key{27, True{}}, Key{27, True{}}]), 1500n))
     case _:
       g
 
@@ -2054,7 +2327,7 @@ def ui.run(+n: Nat, +k: U32, +g: Game) -> IO(Unit):
         ui.run(m, (k + 1 : U32), ui.next(k, g))
 
 def ui.test() -> IO(Unit):
-  ui.run(6n, 1, ui.s1(Game.new()))
+  ui.run(7n, 1, ui.s1(Game.new()))
 
 def start.go(bench: Bool, +args: +List<String>) -> IO(Unit):
   match bench:
