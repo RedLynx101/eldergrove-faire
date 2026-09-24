@@ -1,12 +1,12 @@
 # Eldergrove Faire: Roadmap
 
-Last updated: 2026-09-23 · Milestone 1 (vertical slice) done.
+Last updated: 2026-09-23 · M1 (vertical slice) and M2 (60 fps) done; M3 in progress.
 
 ## Decisions
 
 | Question | Decision |
 |---|---|
-| GPU rendering | **Yes.** Install CUDA 12 toolkit + clang 19 in WSL (see below). CPU restructure first either way. |
+| GPU rendering | **Yes**, tools installed, but Bend's CUDA path cannot run under WSL2 (no concurrent managed memory). The CPU restructure reached the target on its own. |
 | Pricing model | **Both at once:** park entry fee *and* per-ride/shop prices, each settable (either can be 0). |
 | Queues | **Full RCT-style queue paths:** a queue tool, visible lines of guests, one queue per ride entrance. |
 | Terrain slopes | **Not for now.** Flat terraces with cliffs. |
@@ -19,23 +19,25 @@ Isometric fantasy map, paths, terrain editing, 4 enchanted tree kinds, Dragon Ca
 Stall, Troll Tavern, pre-built Wyrm Coaster with block signals and a track editor, guests with needs and
 lookahead pathfinding, ledger economy, HUD/toolbar, save/load, custom C frame effect. Six laws proven.
 
-## M2: Rendering at a steady 60 fps
-Every rider and art detail costs frame time, so this comes first.
+## Done: M2, a steady 60 fps
+**Result:** the live window holds 60 fps at 1024×640 with 700 guests (16.7 ms frames, paced), and runs at
+77-80 fps uncapped (12.5-13.3 ms, `PARK_NOPACE=1`). All six laws still check; the save round-trip passes.
 
-**Findings so far:** a frame takes ~21 ms on 20 threads vs ~42 ms on 1, and stops speeding up at ~4 threads.
-Tested and ruled out: fork granularity (fork depths 3/4/5 make no difference), frame freeing, compute scaling
-(pure compute scales 11x, allocation 8.5x). The cause is shared data: a boxed record read by many cores
-costs an atomic reference count per read (~3 µs, scales 4.6x). Bend's own 3D demo avoids exactly this: plain
-scalar records in registers, drawables binned into 64-px cells on the host, one GPU bang.
+What it took:
+1. **Profiling (`perf`, `tools/prof.sh`):** 38% of frame time was reference counting and freeing, and 26% was
+   re-partitioning drawable lists at every quadtree level.
+2. **Cell/tile rasterizer:** the frame is cut once per 64-px cell and once per 16-px tile. Lists handed down
+   the tree are only matched (borrows, no counts), kept entries are copied from their fields, and tiles render
+   with straight-line code instead of forking down to pixels. Frame time 21-27 ms → 8.4 ms.
+3. **Pipelined frames:** the window effect fills and shows on a helper thread (`io_work`), while a forked
+   computation simulates and draws the next frame on the worker pool. Costs one frame (~17 ms) of input
+   latency.
+4. **GPU: not possible under WSL.** Bend's CUDA runtime needs concurrent managed memory, which WSL2 does
+   not provide (`CU_DEVICE_ATTRIBUTE_CONCURRENT_MANAGED_ACCESS = 0` on the RTX 3070 Ti here), so `!` falls
+   back to the CPU. It would need native Linux. clang 19 vs 14 made no measurable difference for CPU builds.
 
-1. Per-stage frame timers, plus `perf` if installed, to pin down the remaining serial/contended hotspot.
-2. **CPU restructure:** bin drawables into 64-px cells as flat scalar data. Render each cell with flat loops and
-   no shared boxed data in the hot path. Reuse the previous frame's memory. Overlap the next sim tick with the
-   window blit.
-3. **GPU path:** render the cells on the RTX 3070 Ti with one bang per frame, following Bend's shader guide.
-4. Stretch: zoom levels, larger window.
-
-**Done when:** ≥60 fps live at 1024×640 with 700 guests; all laws still check.
+Measure it yourself: `PARK_PROF=1 ./park --live 700 1500` (add `PARK_NOPACE=1` for the uncapped rate).
+Still open: zoom levels and a larger window.
 
 ## M3: Riders you can see, plus the art pass
 - **Ride cycles:** load, run, unload, with seat capacity. Seats remember which guest sits in them. Riders are
