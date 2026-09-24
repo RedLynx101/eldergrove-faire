@@ -227,6 +227,15 @@ Small design decisions made while working, listed here so they can be revisited.
 - **Dynamic resolution** now drops to half size only after two 32-frame samples under 22 fps, and returns
   after ten samples at 45 fps or more; it used to drop below 52 fps and retry every ten seconds.
 - **needs_bounded covers the bladder** (LAWS.bend, at the owner's request); the clamp proof gained a step.
+- **Picking uses the renderer.** A click walks the drawn world list front to back at the cursor pixel and
+  takes the first opaque drawable: a guest (id from its animation phase), a staff member, a ride (ride
+  drawables now carry their index), the ground or track (then the tile decides), or scenery (nothing
+  opens). It is built only on inspect clicks.
+- **The follow cam follows the train with the lowest id.** The block ring turns every tick, so "the first
+  train in the list" alternated between trains.
+- **Stairs are walked in the drawing only:** within half a tile of an edge toward a path a level up or
+  down, a guest or staff member is drawn blended toward that height (continuous across the edge). The
+  simulation still moves them tile to tile.
 
 ## Done: M1, the vertical slice
 Isometric fantasy map, paths, terrain editing, 4 enchanted tree kinds, Dragon Carousel, Arcane Spire, Potion
@@ -416,7 +425,7 @@ Spikes, in order:
 - Frame time and simulation cost measured against M7: within noise (about 1.4 ms a tick at 200 guests;
   16 ms a frame).
 
-## M9: Fixes, polish and the deferred items (in progress: spike 1 done)
+## M9: Fixes, polish and the deferred items (in progress: spikes 1-2 done)
 Decisions from the owner (2026-09-24): bridges are my call (walkways for guests over paths and track);
 1 to 20 cars per train, never more than the track allows; steep pieces only in the two headings that face
 the camera; a coaster can be demolished, and removing track re-runs the check and closes the ride if it no
