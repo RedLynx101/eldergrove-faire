@@ -186,11 +186,39 @@ def Art.foam(+nb: U32, +u: U32, +v: U32, +t: U32, +c: U32) -> U32:
   +ripple = U32.is_eq((((u + v + (t >> 3n)) >> 1n) .&. 1 : U32), 0)
   sel(edge, 14676463, sel(band && ripple, 10406879, c))
 
+def Art.mess.go(on: Bool, +u: U32, +v: U32, +seed: U32, +nb: U32) -> U32:
+  match on:
+    case True{}:
+      +cu = (u >> 2n : U32)
+      +cv = (v >> 2n : U32)
+      +hh = hash((cu * 4 + cv + seed * 16 : U32), (seed + 77 : U32))
+      +lit = ((nb >> 8n) .&. 15 : U32)
+      +sick = ((nb >> 12n) .&. 7 : U32)
+      +fu = (u .&. 3 : U32)
+      +fv = (v .&. 3 : U32)
+      +ox = ((hh >> 4n) .&. 1 : U32)
+      +oy = ((hh >> 5n) .&. 1 : U32)
+      +scrap = ((hh .&. 15) < lit : U32) && between(fv, oy, (oy + 1 : U32)) && between(fu, ox, (ox + 1 : U32))
+      +puddle = (((hh >> 12n) .&. 15) < sick * 2 : U32) && (fu < 3 : U32) && (fv < 3 : U32)
+        && (U32.is_eq(fu, 1) || U32.is_eq(fv, 1))
+      +pc = sel(U32.is_eq(fu, 1) && U32.is_eq(fv, 1), 12645472, 9412672)
+      +kind = ((hh >> 8n) .&. 3 : U32)
+      +sc = sel(U32.is_eq(kind, 0), 15263976, sel(U32.is_eq(kind, 1), 14207128,
+        sel(U32.is_eq(kind, 2), 11552320, 5275848)))
+      sel(puddle, pc, sel(scrap, sel(U32.is_eq(fv, oy), sc, shade(sc, 170)), TR()))
+    case False{}:
+      TR()
+
+# Path furniture, drawn with the tile (x, y: its top vertex). A bin stands
+# by the right-hand back edge, a bench along the left-hand back edge, a
+# lamp at the back corner.
 def Art.surface(paved: Bool, +ter: U32, +u: U32, +v: U32, +wx: U32, +wy: U32,
   +t: U32, +obj: U32, +nb: U32) -> U32:
   match paved:
     case True{}:
-      Art.paving(obj, u, v, ((wx - u + v) >> 4n : U32), nb)
+      +seed = ((wx - u + v) >> 4n : U32)
+      over(Art.mess.go(Bool.not(U32.is_eq(((nb >> 8n) .&. 127 : U32), 0)), u, v, seed, nb),
+        Art.paving(obj, u, v, seed, nb))
     case False{}:
       +n = hash(wx, (wy >> 1n : U32))
       +edge = sel((u < 1 : U32) || (v < 1 : U32), 272, sel((u > 14 : U32) || (v > 14 : U32), 236, 256))
@@ -279,16 +307,65 @@ def Art.arch.go(on: Bool, +x: U32, +y: U32, +nb: U32, +px: U32, +py: U32) -> U32
     case False{}:
       TR()
 
+# Mess on a paved tile (nb bits 8-11: litter, 12-14: sick). The top is cut
+# into 4 x 4 cells; each cell has a fixed rank, and the first `litter` ranks
+# carry a scrap, the first `sick * 2` of another ranking a puddle.
+def Art.bin(+X: U32, +Y: U32, +full: Bool, +t: U32) -> U32:
+  +body = between(X, (0 - 2 : U32), 2) && between(Y, (0 - 7 : U32), 0)
+  +rim = body && U32.is_eq(Y, (0 - 7 : U32))
+  +band = body && (U32.is_eq(Y, (0 - 2 : U32)) || U32.is_eq(Y, (0 - 5 : U32)))
+  +side = body && U32.is_eq(X, 2)
+  +heap = full && (U32.is_eq(Y, (0 - 8 : U32)) && between(X, (0 - 2 : U32), 2)
+    || U32.is_eq(Y, (0 - 9 : U32)) && between(X, (0 - 1 : U32), 1))
+  +hc = sel(U32.is_eq(((X + Y) .&. 1 : U32), 0), 15263976, sel(U32.is_eq(X, 0), 12595248, 5275848))
+  +fly = full && U32.is_eq(Y, (0 - 12 + (((t >> 3n) + X) .&. 1) : U32)) && (U32.is_eq(X, (0 - 2 : U32)) || U32.is_eq(X, 2))
+  sel(fly, 3158064, sel(heap, hc, sel(rim, 10514496, sel(band, 4862000, sel(side, 6044200, sel(body, 8016432, TR()))))))
+
+def Art.bench(+X: U32, +Y: U32) -> U32:
+  +yb = (8 - ((X + 16) >> 1n) : U32)
+  +rel = (Y - yb : U32)
+  +span = between(X, (0 - 6 : U32), 6)
+  +seat = span && between(rel, (0 - 5 : U32), (0 - 4 : U32))
+  +back = span && (U32.is_eq(rel, (0 - 10 : U32)) || U32.is_eq(rel, (0 - 8 : U32)))
+  +post = (U32.is_eq(X, (0 - 6 : U32)) || U32.is_eq(X, 5)) && between(rel, (0 - 10 : U32), (0 - 6 : U32))
+  +leg = (U32.is_eq(X, (0 - 5 : U32)) || U32.is_eq(X, 5)) && between(rel, (0 - 3 : U32), (0 - 1 : U32))
+  sel(seat, sel(U32.is_eq(rel, (0 - 5 : U32)), 11567184, 8016432), sel(back, 10514496,
+    sel(post, 5125410, sel(leg, 3811866, TR()))))
+
+def Art.lamp(+X: U32, +Y: U32, +t: U32) -> U32:
+  +post = between(X, 0, 1) && between(Y, (0 - 18 : U32), 0)
+  +foot = between(X, (0 - 1 : U32), 2) && between(Y, (0 - 1 : U32), 0)
+  +box = between(X, (0 - 1 : U32), 2) && between(Y, (0 - 24 : U32), (0 - 19 : U32))
+  +frame = box && (U32.is_eq(X, (0 - 1 : U32)) || U32.is_eq(X, 2) || U32.is_eq(Y, (0 - 24 : U32)) || U32.is_eq(Y, (0 - 19 : U32)))
+  +cap = between(X, 0, 1) && U32.is_eq(Y, (0 - 25 : U32)) || U32.is_eq(Y, (0 - 26 : U32)) && U32.is_eq(X, 0)
+  +flick = U32.is_eq((hash((t >> 3n : U32), 5) .&. 3 : U32), 0)
+  +glow = sel(flick, 16771216, 16767072)
+  +arm = U32.is_eq(Y, (0 - 18 : U32)) && between(X, (0 - 1 : U32), 2)
+  sel(cap || frame || arm, 2631720, sel(box, sel(U32.is_eq(Y, (0 - 22 : U32)) && U32.is_eq(X, 0), 16777184, glow),
+    sel(foot, 2631720, sel(post, sel(U32.is_eq(X, 0), 4210756, 2631720), TR()))))
+
+def Art.prop(+k: U32, +full: Bool, +x: U32, +y: U32, +px: U32, +py: U32, +t: U32) -> U32:
+  match k:
+    case 1:
+      Art.bin((px - (x + 8) : U32), (py - (y + 6) : U32), full, t)
+    case 2:
+      Art.bench((px - (x - 7) : U32), (py - (y + 6) : U32))
+    case 3:
+      Art.lamp((px - x : U32), (py - (y + 4) : U32), t)
+    case _:
+      TR()
+
 def Art.block(+x: U32, +y: U32, +dl: U32, +dr: U32, +ter: U32, +obj: U32,
   +hov: U32, +wx: U32, +wy: U32, +t: U32, +px: U32, +py: U32, +nb: U32) -> U32:
   +X = (px - x : U32)
   +Y = ((py - y) * 2 : U32)
   +u = iso_u(X, Y)
   +v = iso_v(X, Y)
-  over(Art.arch.go(Bool.not(U32.is_eq((nb >> 6n : U32), 0)), x, y, nb, px, py),
+  over(Art.prop(((nb >> 16n) .&. 3 : U32), Bool.not(U32.is_eq((nb .&. 262144 : U32), 0)), x, y, px, py, t),
+    over(Art.arch.go(Bool.not(U32.is_eq(((nb >> 6n) .&. 3 : U32), 0)), x, y, nb, px, py),
     over(Art.rails.go(U32.is_eq(obj, 7), x, y, nb, px, py),
     Art.block.go((u < 16 : U32) && (v < 16 : U32), x, y, dl, dr, ter, obj, hov,
-      wx, wy, t, px, py, u, v, nb)))
+      wx, wy, t, px, py, u, v, nb))))
 
 # Trees (anchored at the tile centre)
 # -----------------------------------
@@ -666,6 +743,20 @@ def Art.trow(+k: U32) -> U32:
       2696328
     case 70:
       19173961
+    case 72:
+      1311040
+    case 73:
+      10488320
+    case 74:
+      1311040
+    case 75:
+      37376
+    case 76:
+      369728
+    case 77:
+      2696840
+    case 78:
+      21603473
     case _:
       0
 
@@ -708,6 +799,12 @@ def Art.tpal(+k: U32) -> U32:
       14725184
     case 67:
       14216436
+    case 74:
+      9071162
+    case 75:
+      15261888
+    case 77:
+      5939244
     case _:
       3158080
 
@@ -780,11 +877,12 @@ def Art.guest(+dx: U32, +dy: U32, +look: U32, +t: U32) -> U32:
   +face = ((look >> 12n) .&. 3 : U32)
   +left = U32.is_eq(face, 1) || U32.is_eq(face, 2)
   +backv = (face >= 2 : U32)
-  +walk = Bool.not(U32.is_eq((look .&. 16777216 : U32), 0))
+  +sit = Bool.not(U32.is_eq((look .&. 33554432 : U32), 0))
+  +walk = Bool.not(U32.is_eq((look .&. 16777216 : U32), 0)) && Bool.not(sit)
   +it = ((look >> 16n) .&. 3 : U32)
   +fr = sel(walk, ((t >> 2n) .&. 3 : U32), 0)
   +bob = sel(U32.is_eq((fr .&. 1 : U32), 1), 1, 0)
-  +h0 = (0 - dy : U32)
+  +h0 = (0 - dy + sel(sit, 2, 0) : U32)
   +h = (h0 - bob : U32)
   +x = sel(left, (0 - dx : U32), dx)
   +sh = sel(dw, 2, 0)
@@ -794,11 +892,13 @@ def Art.guest(+dx: U32, +dy: U32, +look: U32, +t: U32) -> U32:
   # legs: apart (frames 0, 2) or together (1, 3); the near leg is lighter
   +legtop = (2 - (sh >> 1n) + bob : U32)
   +apart = U32.is_eq((fr .&. 1 : U32), 0)
-  +legat = between(h0, 0, legtop) && (apart && (U32.is_eq(x, (0 - 1 : U32)) || U32.is_eq(x, 1))
+  +legs = between(h0, 0, legtop) && (apart && (U32.is_eq(x, (0 - 1 : U32)) || U32.is_eq(x, 1))
     || Bool.not(apart) && U32.is_eq(x, 0))
+  +knees = U32.is_eq(h0, 3) && between(x, (0 - 1 : U32), 2) || U32.is_eq(h0, 2) && U32.is_eq(x, 2)
+  +legat = sit && knees || Bool.not(sit) && legs
   +near = U32.is_eq(fr, 2) && slt(x, 0) || Bool.not(U32.is_eq(fr, 2)) && Bool.not(slt(x, 0))
   +legc = sel(near || Bool.not(walk), 3811866, 2628880)
-  +foot = U32.is_eq(h0, 0) && Bool.not(apart) && U32.is_eq(x, 1)
+  +foot = U32.is_eq(h0, 0) && Bool.not(apart) && U32.is_eq(x, 1) && Bool.not(sit)
   +body = between(h, (3 - (sh >> 1n) : U32), (6 - sh : U32)) && between(x, (0 - 2 : U32), 2)
   +belt = U32.is_eq(h, (4 - (sh >> 1n) : U32)) && between(x, (0 - 2 : U32), 2)
   # the leading hand swings with the stride (or holds the item still)
@@ -1099,7 +1199,8 @@ def Art.ghost(+k: U32, +px: U32, +py: U32, +x: U32, +y: U32, +t: U32) -> U32:
   +foot = sel(edge, sel(ok, 11534220, 16748688), sel(inside && stip, col, TR()))
   +dy = (size * 8 : U32)
   +shape = sel(Bool.not(U32.is_eq(rk, 0)), Art.ride(rk, (px - x : U32), (py - y - dy : U32), t, 0, 0, 0),
-    sel(U32.is_eq(tool, 4), Art.tree(0, (px - x : U32), (py - y - 8 : U32), 1, t), TR()))
+    sel(U32.is_eq(tool, 4), Art.tree(0, (px - x : U32), (py - y - 8 : U32), 1, t),
+    sel((tool >= 13 : U32) && (tool <= 15 : U32), Art.prop((tool - 12 : U32), False{}, x, y, px, py, t), TR())))
   +shown = sel(opaque(shape) && stip, Art.tint(shape, ok), TR())
   over(shown, foot)
 
@@ -1297,14 +1398,44 @@ def Art.icon_pic(+tool: U32, +cx: U32, +cy: U32, +t: U32) -> U32:
       +handle = between(cx, 2, 7) && (sabs((cx - cy : U32)) <= 1 : U32)
       +glint = U32.is_eq(cx, (0 - 3 : U32)) && U32.is_eq(cy, (0 - 3 : U32))
       sel(glint, 16777215, sel(rim, 14725184, sel(lens, 10538751, sel(handle, 9127187, TR()))))
+    case 13:
+      Art.bin(cx, (cy - 4 : U32), U32.is_eq(((t >> 5n) .&. 1 : U32), 1), t)
+    case 14:
+      Art.bench((cx + 1 : U32), (cy + 4 : U32))
+    case 15:
+      # a lantern hung from its hook
+      +hook = U32.is_eq(cx, 0) && between(cy, (0 - 9 : U32), (0 - 8 : U32))
+      +cap = between(cy, (0 - 7 : U32), (0 - 6 : U32)) && (sabs(cx) <= ((1 + (cy + 7) * 2) : U32) : U32)
+      +box = (sabs(cx) <= 3 : U32) && between(cy, (0 - 5 : U32), 4)
+      +bar = box && (U32.is_eq(sabs(cx), 3) || U32.is_eq(cy, (0 - 5 : U32)) || U32.is_eq(cy, 4) || U32.is_eq(cx, 0))
+      +foot = U32.is_eq(cy, 5) && (sabs(cx) <= 1 : U32)
+      +flick = U32.is_eq((hash((t >> 3n : U32), 5) .&. 3 : U32), 0)
+      sel(hook || cap || bar || foot, 2631720, sel(box, sel(flick, 16771216, sel(U32.is_eq(cy, (0 - 3 : U32)) && U32.is_eq(sabs(cx), 2), 16777184, 16767072)), TR()))
     case _:
       TR()
+
+# a category tab shows the picture of its first tool
+def Art.cat_pic(+c: U32) -> U32:
+  match c:
+    case 20:
+      1
+    case 21:
+      2
+    case 22:
+      4
+    case 23:
+      5
+    case 24:
+      7
+    case _:
+      c
 def Art.icon(+tool: U32, +on: U32, +dx: U32, +dy: U32, +t: U32) -> U32:
   +edge = U32.is_eq(dx, 0) || U32.is_eq(dy, 0) || U32.is_eq(dx, 21) || U32.is_eq(dy, 21)
-  +frame = sel(U32.is_eq(on, 1), 16766282, 5917290)
-  +fill = sel(U32.is_eq(on, 1), 5917216, 3025984)
+  +cat = (tool >= 20 : U32)
+  +frame = sel(U32.is_eq(on, 1), 16766282, sel(cat, 9476272, 5917290))
+  +fill = sel(U32.is_eq(on, 1), sel(cat, 4610170, 5917216), sel(cat, 3029592, 3025984))
   +cx = (dx - 11 : U32)
   +cy = (dy - 13 : U32)
-  +pic = Art.icon_pic(tool, cx, cy, t)
+  +pic = Art.icon_pic(Art.cat_pic(tool), cx, cy, t)
   sel(edge, frame, over(pic, fill))
 

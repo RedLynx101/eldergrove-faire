@@ -147,7 +147,7 @@ def trains_rot(+xs: +List<C.Slot>)
 
 def Laws.money_conserved(p, a):
   match p:
-    case C.Park{map, guests, rides, track, cash, time, nid, fin}:
+    case C.Park{map, guests, rides, track, cash, time, nid, fin, mess, staff}:
       match a:
         case C.Tick{}:
           {==}
@@ -230,7 +230,7 @@ def hc_tick(+arr: +List<C.Guest>, +g: +List<C.Guest>, +q: C.Q, +rs: +List<C.Ride
 
 def Laws.headcount_conserved(p, a):
   match p:
-    case C.Park{map, guests, rides, track, cash, time, nid, fin}:
+    case C.Park{map, guests, rides, track, cash, time, nid, fin, mess, staff}:
       match a:
         case C.Tick{}:
           +sn = C.Track.stn(track)
@@ -364,7 +364,7 @@ def all_arrive(+go: Bool, +id: U32, +t: U32, +fee: U32)
 
 def Laws.needs_bounded(p, a, h):
   match p:
-    case C.Park{map, guests, rides, track, cash, time, nid, fin}:
+    case C.Park{map, guests, rides, track, cash, time, nid, fin, mess, staff}:
       match a:
         case C.Tick{}:
           +sn = C.Track.stn(track)
@@ -445,7 +445,7 @@ def circ_op(+t: C.Track, +op: U32, +ok: Bool, h: {Laws.circuit_ok(t) == True{} :
 
 def Laws.coaster_on_circuit(p, a, h):
   match p:
-    case C.Park{map, guests, rides, track, cash, time, nid, fin}:
+    case C.Park{map, guests, rides, track, cash, time, nid, fin, mess, staff}:
       match a:
         case C.Tick{}:
           circ_tick(track, h)
@@ -628,17 +628,38 @@ def rt_fin(+f: C.Fin, +rest: List<&2, U32>, +st: List<&2, S.Item>)
       %rt_ws(now, rl, st) : {lhs == _ : List<&2, S.Item>}
       {==}
 
+def rt_staff(+s: C.Staff, +rest: List<&2, U32>, +more: List<&2, C.Staff>, +st: List<&2, S.Item>)
+  -> {S.dec(S.Enc.staff1(s, rest), S.IStf{more} <> st) == S.dec(rest, S.IStf{s <> more} <> st) : List<&2, S.Item>}:
+  match s:
+    case C.Staff{id, x, y, dir, kind, st, tgt, tmr, zone, look}:
+      {==}
+
+def rt_stf(+xs: List<&2, C.Staff>, +rest: List<&2, U32>, +st: List<&2, S.Item>)
+  -> {S.dec(S.Enc.stf(xs, rest), st) == S.dec(rest, S.IStf{xs} <> st) : List<&2, S.Item>}:
+  match xs:
+    case []:
+      {==}
+    case x <> more:
+      +lhs = S.dec(S.Enc.stf(x <> more, rest), st)
+      %rt_staff(x, rest, more, st) : {lhs == _ : List<&2, S.Item>}
+      %rt_stf(more, S.Enc.staff1(x, rest), st) : {lhs == _ : List<&2, S.Item>}
+      {==}
+
 def rt_park(+p: C.Park, +rest: List<&2, U32>, +st: List<&2, S.Item>)
   -> {S.dec(S.Enc.park(p, rest), st) == S.dec(rest, S.IK{p} <> st) : List<&2, S.Item>}:
   match p:
-    case C.Park{q, gs, rs, t, cash, time, nid, fin}:
+    case C.Park{q, gs, rs, t, cash, time, nid, fin, mess, staff}:
       +r13 = {13 <> cash <> time <> nid <> rest : List<&2, U32>}
-      +rf = S.Enc.fin(fin, r13)
+      +rsf = S.Enc.stf(staff, r13)
+      +rm = S.Enc.ws(mess, rsf)
+      +rf = S.Enc.fin(fin, rm)
       +rt = S.Enc.track(t, rf)
       +rr = S.Enc.rs(rs, rt)
       +rg = S.Enc.gs(gs, rr)
-      +lhs = S.dec(S.Enc.park(C.Park{q, gs, rs, t, cash, time, nid, fin}, rest), st)
-      %rt_fin(fin, r13, S.IT{t} <> S.IR{rs} <> S.IG{gs} <> S.IQ{q} <> st) : {lhs == _ : List<&2, S.Item>}
+      +lhs = S.dec(S.Enc.park(C.Park{q, gs, rs, t, cash, time, nid, fin, mess, staff}, rest), st)
+      %rt_stf(staff, r13, S.IW{mess} <> S.IF{fin} <> S.IT{t} <> S.IR{rs} <> S.IG{gs} <> S.IQ{q} <> st) : {lhs == _ : List<&2, S.Item>}
+      %rt_ws(mess, rsf, S.IF{fin} <> S.IT{t} <> S.IR{rs} <> S.IG{gs} <> S.IQ{q} <> st) : {lhs == _ : List<&2, S.Item>}
+      %rt_fin(fin, rm, S.IT{t} <> S.IR{rs} <> S.IG{gs} <> S.IQ{q} <> st) : {lhs == _ : List<&2, S.Item>}
       %rt_track(t, rf, S.IR{rs} <> S.IG{gs} <> S.IQ{q} <> st) : {lhs == _ : List<&2, S.Item>}
       %rt_rs(rs, rt, S.IG{gs} <> S.IQ{q} <> st) : {lhs == _ : List<&2, S.Item>}
       %rt_gs(gs, rr, S.IQ{q} <> st) : {lhs == _ : List<&2, S.Item>}
@@ -979,9 +1000,10 @@ def build_ok(+ok: Bool, +q: C.Q, +rs: +List<C.Ride>, +tool: U32, +x: U32, +y: U3
 
 def pb_go(+a: C.Act, +map: C.Q, +guests: +List<C.Guest>, +rides: +List<C.Ride>, +track: C.Track,
   +cash: U32, +time: U32, +nid: U32, +fee: U32, +loan: U32, +rating: U32, +now: +List<U32>,
-  +last: +List<U32>, +hist: +List<U32>, +h: {Laws.prices_ok(rides) && U32.is_le(fee, 40) == True{} : Bool})
+  +last: +List<U32>, +hist: +List<U32>, +mess: +List<U32>, +staff: +List<C.Staff>,
+  +h: {Laws.prices_ok(rides) && U32.is_le(fee, 40) == True{} : Bool})
   -> {Laws.park_prices_ok(C.Out.park(C.Park.step(C.Park{map, guests, rides, track, cash, time, nid,
-    C.Fin{fee, loan, rating, now, last, hist}}, a))) == True{} : Bool}:
+    C.Fin{fee, loan, rating, now, last, hist}, mess, staff}, a))) == True{} : Bool}:
   match a:
     case C.Tick{}:
       +sn = C.Track.stn(track)
@@ -1006,7 +1028,72 @@ def pb_go(+a: C.Act, +map: C.Q, +guests: +List<C.Guest>, +rides: +List<C.Ride>, 
 
 def Laws.prices_bounded(p, a, h):
   match p:
-    case C.Park{map, guests, rides, track, cash, time, nid, fin}:
+    case C.Park{map, guests, rides, track, cash, time, nid, fin, mess, staff}:
       match fin:
         case C.Fin{fee, loan, rating, now, last, hist}:
-          pb_go(a, map, guests, rides, track, cash, time, nid, fee, loan, rating, now, last, hist, h)
+          pb_go(a, map, guests, rides, track, cash, time, nid, fee, loan, rating, now, last, hist, mess, staff, h)
+
+# Litter: a tick's mess is the drops put in front of what wasn't swept, and
+# the kept and swept pieces split the old mess between them (as the guests
+# who stay and leave do); other steps leave the mess alone.
+def mlen_app(+xs: +List<U32>, +ys: +List<U32>)
+  -> {Laws.mcount(List.append(&2, U32, xs, ys)) == Nat.add(Laws.mcount(xs), Laws.mcount(ys)) : Nat}:
+  match xs:
+    case []:
+      {==}
+    case x <> r:
+      %mlen_app(r, ys) : {1n+Laws.mcount(List.append(&2, U32, r, ys)) == 1n+_ : Nat}
+      {==}
+
+def mpart_t(+r: +List<U32>, +ss: +List<C.Staff>,
+  ih: {Nat.add(Laws.mcount(C.Mess.kept(r, ss)), Laws.mcount(C.Mess.swept(r, ss))) == Laws.mcount(r) : Nat})
+  -> {Nat.add(Laws.mcount(C.Mess.kept(r, ss)), 1n+Laws.mcount(C.Mess.swept(r, ss))) == 1n+Laws.mcount(r) : Nat}:
+  +sl = Nat.add(Laws.mcount(C.Mess.kept(r, ss)), 1n+Laws.mcount(C.Mess.swept(r, ss)))
+  %ih : {sl == 1n+_ : Nat}
+  %add_succ_r(Laws.mcount(C.Mess.kept(r, ss)), Laws.mcount(C.Mess.swept(r, ss))) : {sl == _ : Nat}
+  {==}
+
+def mpart_f(+r: +List<U32>, +ss: +List<C.Staff>,
+  ih: {Nat.add(Laws.mcount(C.Mess.kept(r, ss)), Laws.mcount(C.Mess.swept(r, ss))) == Laws.mcount(r) : Nat})
+  -> {Nat.add(1n+Laws.mcount(C.Mess.kept(r, ss)), Laws.mcount(C.Mess.swept(r, ss))) == 1n+Laws.mcount(r) : Nat}:
+  %ih : {1n+Nat.add(Laws.mcount(C.Mess.kept(r, ss)), Laws.mcount(C.Mess.swept(r, ss))) == 1n+_ : Nat}
+  {==}
+
+def mpart(+ms: +List<U32>, +ss: +List<C.Staff>)
+  -> {Nat.add(Laws.mcount(C.Mess.kept(ms, ss)), Laws.mcount(C.Mess.swept(ms, ss))) == Laws.mcount(ms) : Nat}:
+  match ms:
+    case []:
+      {==}
+    case m <> r:
+      bcase(C.Mess.sweeps(m, ss), b => {Nat.add(Laws.mcount(C.Mess.put(Bool.not(b), m, C.Mess.kept(r, ss))),
+        Laws.mcount(C.Mess.put(b, m, C.Mess.swept(r, ss)))) == 1n+Laws.mcount(r) : Nat},
+        mpart_t(r, ss, mpart(r, ss)), mpart_f(r, ss, mpart(r, ss)))
+
+def mc_tick(+d: +List<U32>, +ms: +List<U32>, +ss: +List<C.Staff>)
+  -> {Nat.add(Laws.mcount(List.append(&2, U32, d, C.Mess.kept(ms, ss))), Laws.mcount(C.Mess.swept(ms, ss)))
+    == Nat.add(Laws.mcount(ms), Laws.mcount(d)) : Nat}:
+  +k = C.Mess.kept(ms, ss)
+  +sw = C.Mess.swept(ms, ss)
+  +lhs = Nat.add(Laws.mcount(List.append(&2, U32, d, k)), Laws.mcount(sw))
+  %add_comm(Laws.mcount(d), Laws.mcount(ms)) : {lhs == _ : Nat}
+  %mpart(ms, ss) : {lhs == Nat.add(Laws.mcount(d), _) : Nat}
+  %add_assoc(Laws.mcount(d), Laws.mcount(k), Laws.mcount(sw)) : {lhs == _ : Nat}
+  %mlen_app(d, k) : {lhs == Nat.add(_, Laws.mcount(sw)) : Nat}
+  {==}
+
+def Laws.litter_accounted(p, a):
+  match p:
+    case C.Park{map, guests, rides, track, cash, time, nid, fin, mess, staff}:
+      match a:
+        case C.Tick{}:
+          +sn = C.Track.stn(track)
+          +pl = C.Boards.plan(guests, C.Occ.table(guests, rides, sn), map, rides, sn, [])
+          mc_tick(C.Mess.drops(C.Mess.events(guests, pl, map, time), (C.len32(U32, mess) < 600 : U32)), mess, staff)
+        case C.Build{tool, x, y, v}:
+          {==}
+        case C.TrackOp{op}:
+          {==}
+        case C.RideOp{ride, op}:
+          {==}
+        case C.ParkOp{op}:
+          {==}

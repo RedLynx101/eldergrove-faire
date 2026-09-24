@@ -40,12 +40,13 @@ Dev modes:
 |---|---|
 | Arrow keys / W A S D | Move the camera |
 | Mouse wheel / Page Up, Page Down | Zoom in and out (close, normal, far) |
-| Click / drag | Use the tool on a tile (or pick a tool in the bar) |
+| Click / drag | Use the tool on a tile (or pick a tab or tool in the bar) |
 | I | Inspect tool (the default): click a guest or a ride to open its window |
 | Right-click | Open a ride's window, whatever the tool |
 | P / F | The park window / the finances window (or the PARK and FINANCES buttons) |
 | M / N | Music on or off / sound effects on or off |
-| 1 - 9, 0 | Path, raise land, lower land (to water), enchanted tree, Dragon Carousel, Arcane Spire, Potion Stall, Troll Tavern, demolish, Wyrm Coaster |
+| 1 - 5 | Open a toolbar tab: paths and furniture, land, scenery, rides, shops. Press again for its next tool |
+| X | Demolish |
 | U | Queue line (12 gold a tile) |
 | R | Next tree kind (oak, moonpine, glowcap, crystal) / coaster direction |
 | Space | Pause; `+` / `-` speed (up to 3x) |
@@ -107,7 +108,20 @@ made in `sound.bend` a sample at a time; `snd.c` plays it through PulseAudio
 Every building tool shows a ghost of what it would place under the mouse:
 green where it can go, red where it can't, with its cost beside the mouse.
 
-Coaster tool (0): `Enter` opens or closes the coaster; while closed, `T`
+The toolbar: inspect and demolish on the left, then five tabs, then the open
+tab's tools. Paths and furniture: path, queue line, litter bin, bench,
+lantern. Land: raise, lower. Scenery: enchanted trees. Rides: Dragon
+Carousel, Arcane Spire, Wyrm Coaster. Shops: Potion Stall, Troll Tavern.
+Hover a button to see its name on the strip above the bar.
+
+Mess: guests drop wrappers when they finish what they carry, and very queasy
+guests are sick. Both lie on the path until swept (Brownies, coming in M5's
+staff spike), dirty paths wear guests' happiness down and lower the park
+rating, and guests say so ("this path is filthy"). A litter bin beside the
+path catches what guests finish near it, 15 pieces until full. Tired guests
+sit on benches to get their energy back. Lanterns light the way.
+
+Coaster tool (key 4, third tool): `Enter` opens or closes the coaster; while closed, `T`
 ahead, `G`/`H` turn, `Y` up, `B` down, `L` lift hill, `Backspace` removes the
 last piece (WASD always moves the camera). It opens only once the track closes back on its station. One
 coaster per park for now (the Wyrm Coaster comes pre-built).

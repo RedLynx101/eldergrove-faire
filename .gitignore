@@ -12,3 +12,5 @@ tools/_*.py
 shots/*.wav
 tools/_*.sh
 shots/z-*.png
+tools/__pycache__/
+tools/thoughts.bend.txt

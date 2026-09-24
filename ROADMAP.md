@@ -28,6 +28,26 @@ Last updated: 2026-09-24 · M1-M4 done. Next: M5 (controls, problems, staff and 
 ## Calls made along the way
 Small design decisions made while working, listed here so they can be revisited.
 
+- **Mess is capped at 600 pieces.** Past that, guests stop dropping litter. It keeps the list, the save file
+  and the per-tick sweep check bounded; a park that dirty is already failing.
+- **A bin holds 15 pieces.** A guest who finishes something within one tile of a bin with room uses it. A
+  full bin shows a heap and flies; Brownies (spike 6) will empty them.
+- **Dirt thresholds.** A tile's dirt is its litter plus three times its sick. At 2 or more, guests on it lose
+  a point of happiness every 64 ticks (two at 6 or more); at 4 or more they may think "this path is filthy".
+  Mess lowers the park rating by half a point per piece (at most 150). Measured on the starter park at month
+  2: happiness 51% with mess against 57% without, so it is pressure, not collapse, until staff arrive.
+- **Benches seat tired guests** (energy under 50) who reach a bench tile's centre, for up to 400 ticks or
+  until rested; they draw sitting on the seat.
+- **Furniture placement.** Bins stand by a path tile's right-hand back edge, benches along its left-hand back
+  edge, lamps at its back corner, so walkers stay visible. One piece of furniture per tile; demolish removes
+  it before the path.
+- **Toolbar tabs now, not in spike 8.** Adding three furniture tools made the flat bar too long, so the
+  categories came early: inspect and demolish on the left, five tabs (paths and furniture, land, scenery,
+  rides, shops), then the open tab's tools. Keys 1-5 open a tab and pressing the same key again steps through
+  its tools; I inspects, X demolishes, U picks the queue line. Hovering any button names it on the strip
+  above the bar. Spike 8 keeps the rest (window style, options, a staff tab).
+- **The starter park has furniture**: three bins, three benches and three lanterns along its paths.
+
 ## Done: M1, the vertical slice
 Isometric fantasy map, paths, terrain editing, 4 enchanted tree kinds, Dragon Carousel, Arcane Spire, Potion
 Stall, Troll Tavern, pre-built Wyrm Coaster with block signals and a track editor, guests with needs and
@@ -139,19 +159,20 @@ machine: `PARK_PROF=1 ./park --live 700 1500`.
 - Guests may pick a ride whose queue is on the far side of the park.
 - There is no music volume control besides on/off.
 
-## M5: Controls, problems, staff and people (next)
+## M5: Controls, problems, staff and people (in progress: spikes 1-3 done)
 Spikes, in order:
 
-1. **Controls and camera.** WASD (and the arrows) move the camera. Zoom in and out, in three steps (close,
+1. (Done) **Controls and camera.** WASD (and the arrows) move the camera. Zoom in and out, in three steps (close,
    normal, far) with the mouse wheel or Page Up / Page Down. Every tool shows a **ghost preview** of what it
    would place under the mouse: green where it can go, red where it can't, with the cost beside it. That
    covers paths, queues, terrain, trees, rides at their full footprint, and demolish (which highlights what
    would go).
-2. **Readable thoughts.** Redraw the thought icons at a size that reads. The hunger bubble is the worst: its
+2. (Done) **Readable thoughts.** Redraw the thought icons at a size that reads. The hunger bubble is the worst: its
    white bone vanishes on the white bubble and leaves a brown cross. Every bubble gets a clear picture with a
    dark outline, and the guest window names each thought in words (it already does).
-3. **Mess.** Guests drop litter; nauseous guests are sick after intense rides. Dirty paths lower happiness
-   and the park rating. Path furniture: bins, benches (they restore energy) and lamps.
+3. (Done) **Mess.** Guests drop litter; nauseous guests are sick after intense rides. Dirty paths lower
+   happiness and the park rating. Path furniture: bins, benches (they restore energy) and lamps. Also done
+   here: the toolbar tabs (see the calls above) and the law litter_accounted.
 4. **The Privy.** Toilets, and a bathroom need.
 5. **Breakdowns.** Rides lose reliability with age and break down; riders get stuck and unhappy until a
    repair.
@@ -218,7 +239,8 @@ Proven: money_conserved, headcount_conserved, needs_bounded, coaster_on_circuit,
 save_load_roundtrip, capacity_respected, riders_conserved.
 Proven in M4: board_only_when_loading, ride_until_unloading, seats_unique, purchase_is_transfer,
 prices_bounded (thirteen in all).
-Planned: litter_accounted and wages_booked (M5); open_only_tested, and coaster_on_circuit and no_collisions
+Proven in M5: litter_accounted (fourteen in all).
+Planned: wages_booked (M5); open_only_tested, and coaster_on_circuit and no_collisions
 extended to every coaster (M8).
 Proof maintenance rule: keep the code field-wise (each park field updated by its own function) so
 existing proofs survive new features.

@@ -69,6 +69,15 @@ ICONS = {
        ".1422221.",
        "44111111."],
       {2: 0xE8B830, 3: 0xFFE890, 4: 0xE02828}),
+  # 9 filthy: green stink rising off a heap of rubbish
+  9: (["..5...5..",
+       ".5...5...",
+       "..5...5..",
+       "...111...",
+       "..13221..",
+       ".1222321.",
+       "122322221"],
+      {2: 0x8A6A3A, 3: 0xE8E0C0, 5: 0x5AA02C}),
   # 8 waited too long: an hourglass, the sand nearly run through
   8: (["111111111",
        ".1333331.",
@@ -110,7 +119,7 @@ open('tools/thoughts.bend.txt', 'w', newline='\n').write('\n'.join(rows_out) + '
 
 if len(sys.argv) > 1:
     S = 10
-    W = (9 + 2) * 8 * S
+    W = (9 + 2) * len(ICONS) * S
     H = (7 + 2) * S
     img = [[(0x70, 0xA0, 0x50)] * W for _ in range(H)]
     for k, m in enumerate(sorted(ICONS)):

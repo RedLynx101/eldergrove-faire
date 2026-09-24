@@ -206,7 +206,7 @@ def prices_ok(+rs: +List<C.Ride>) -> Bool:
       U32.is_le(C.Ride.price(r), 20) && prices_ok(rest)
 
 def park_prices_ok(p: C.Park) -> Bool:
-  C.Park{map, guests, rides, track, cash, time, nid, fin} = p
+  C.Park{map, guests, rides, track, cash, time, nid, fin, mess, staff} = p
   prices_ok(rides) && U32.is_le(C.Fin.fee(fin), 40)
 
 law prices_bounded:
@@ -214,3 +214,15 @@ law prices_bounded:
   for +a: C.Act
   for h: {park_prices_ok(p) == True{} : Bool}
   {park_prices_ok(C.Out.park(C.Park.step(p, a))) == True{} : Bool}
+
+# 14. LITTER IS ACCOUNTED FOR. Mess appears only when a guest drops it (or is
+# sick) and goes only when a Brownie sweeps it up: after any step, the mess
+# plus what was swept equals the mess before plus what was dropped.
+def mcount(ms: +List<U32>) -> Nat:
+  List.length(&2, U32, ms)
+
+law litter_accounted:
+  for +p: C.Park
+  for +a: C.Act
+  {Nat.add(mcount(C.Park.mess(C.Out.park(C.Park.step(p, a)))), mcount(C.Out.swept(C.Park.step(p, a))))
+    == Nat.add(mcount(C.Park.mess(p)), mcount(C.Out.dropped(C.Park.step(p, a)))) : Nat}

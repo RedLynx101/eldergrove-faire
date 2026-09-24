@@ -1337,8 +1337,12 @@ def Guest.needs(g: Guest, +t: U32) -> Guest:
 
 # walking: at a tile centre pick a target and a direction; move every
 # other tick
+def Guest.sick(+st: U32, +na: U32, +id: U32, +t: U32) -> Bool:
+  (U32.is_eq(st, 0) || U32.is_eq(st, 2)) && (na > 200 : U32) && U32.is_eq((hash(id, t) .&. 63 : U32), 0)
+
+# a guest finishing what they carry this tick (the same test Guest.walk uses)
 def Guest.walk(g: Guest, +q: Q, +rs: +List<Ride>, +t: U32, +qs: +List<U32>) -> Guest:
-  Guest{+id, +x, +y, +dir, +st, +tgt, +tmr, +cash, +hu, +th, +en, na, +ha,
+  Guest{+id, +x, +y, +dir, +st, +tgt, +tmr, +cash, +hu, +th, +en, +na, +ha,
     +lk, +mind} = g
   +i = (x >> 4n : U32)
   +j = (y >> 4n : U32)
@@ -1348,9 +1352,20 @@ def Guest.walk(g: Guest, +q: Q, +rs: +List<Ride>, +t: U32, +qs: +List<U32>) -> G
   +ctr = Guest.at_center(x, y)
   +onq = U32.is_eq(Tile.obj(here), 7)
   +home = U32.is_eq(st, 2)
+  # mess underfoot (litter | sick << 8), and being sick oneself
+  +dirt = sel(U32.is_eq(Tile.obj(here), 1) || U32.is_eq(Tile.obj(here), 7),
+    ((Tile.b(here) .&. 255) + 3 * ((Tile.b(here) >> 8n) .&. 255) : U32), 0)
+  +sick = Guest.sick(st, na, id, t)
+  +grim = (dirt >= 2 : U32) && U32.is_eq(((t + id) .&. 63 : U32), 0)
+  +filthy = (dirt >= 4 : U32) && U32.is_eq(((hash(id, t) >> 4n) .&. 255 : U32), 0)
+  # a bench: a tired guest sits down; up again when rested
+  +sit = ctr && U32.is_eq(st, 0) && U32.is_eq((Tile.a(here) .&. 15 : U32), 2) && U32.is_eq(Tile.obj(here), 1)
+    && (en < 80 : U32)
+  +sitting = U32.is_eq(st, 4)
+  +rested = sitting && ((en >= 190 : U32) || U32.is_eq(tmr, 0))
   # decide to go home
   +tired = ((ha < 50) || (en < 30) || (cash < 2) : U32)
-  +st2 = sel(ctr && U32.is_eq(st, 0) && tired, 2, st)
+  +st2 = sel(sit, 4, sel(rested, 0, sel(ctr && U32.is_eq(st, 0) && tired, 2, st)))
   +athome = ctr && home && U32.is_eq(i, GATE_X()) && U32.is_eq(j, GATE_Y())
   +st3 = sel(athome, 3, st2)
   # targets: food, drink, or any attraction; patience runs out
@@ -1366,10 +1381,10 @@ def Guest.walk(g: Guest, +q: Q, +rs: +List<Ride>, +t: U32, +qs: +List<U32>) -> G
   +giveup = U32.is_eq(tmr, 0) || Bool.not(U32.is_eq(st2, 0))
   # waited too long in a queue
   +fed_up = onq && U32.is_eq(tmr, 0) && Bool.not(U32.is_eq(tgt, NONE()))
-  +mind2 = sel(dear, Mind.make(1, wish, t), sel(fed_up, Mind.make(2, tgt, t), mind))
+  +mind2 = sel(dear, Mind.make(1, wish, t), sel(fed_up, Mind.make(2, tgt, t), sel(filthy, Mind.make(9, 255, t), mind)))
   +tgt2 = sel(needt, pick, sel(giveup, NONE(), tgt))
   +slow = onq && Bool.not(U32.is_eq(((t + id) .&. 3 : U32), 0))
-  +tmr2 = sel(needt, 1500, sel(slow, tmr, sub0(tmr, 1)))
+  +tmr2 = sel(sit, 400, sel(needt, 1500, sel(slow, tmr, sub0(tmr, 1))))
   # steering
   +trd = Rides.get(rs, tgt2)
   # a ride with a queue is reached at its entrance, where its riders wait
@@ -1389,13 +1404,15 @@ def Guest.walk(g: Guest, +q: Q, +rs: +List<Ride>, +t: U32, +qs: +List<U32>) -> G
   +go = tick
     && (Bool.not(ctr) || Guest.can_step(q, i, j, h, dir2, qok, onq, fe))
     && Bool.not(there)
-    && Bool.not(U32.is_eq(st3, 3))
+    && Bool.not(U32.is_eq(st3, 3)) && Bool.not(U32.is_eq(st3, 4))
     && Bool.not(Queue.wait(tick && (onq || ahead) && Bool.not(U32.is_eq(tgt2, NONE())), qs, x, y, dir2))
   +x2 = sel(go, (x + dx_of(dir2) : U32), x)
   +y2 = sel(go, (y + dy_of(dir2) : U32), y)
   +finish = U32.is_eq(((r >> 8n) .&. 1023 : U32), 0)
   +lk2 = (sel(finish, (lk .&. 4277993471 : U32), (lk .&. 4278190079 : U32)) .|. sel(go, 16777216, 0) : U32)
-  Guest{id, x2, y2, dir2, st3, tgt2, tmr2, cash, hu, th, en, na, sel(dear || fed_up, sub0(ha, 6), ha), lk2, mind2}
+  +ha2 = sub0(sub0(ha, sel(dear || fed_up, 6, 0)), sel(sick, 10, sel(grim, sel((dirt >= 6 : U32), 2, 1), 0)))
+  +en2 = sel(sitting && U32.is_eq(((t + id) .&. 1 : U32), 0), (en + 1 : U32), en)
+  Guest{id, x2, y2, dir2, st3, tgt2, tmr2, cash, hu, th, en2, sel(sick, 60, na), ha2, lk2, mind2}
 
 def Guest.st(g: Guest) -> U32:
   Guest{id, x, y, dir, st, tgt, tmr, cash, hu, th, en, na, ha, lk, mind} = g
@@ -1586,6 +1603,168 @@ def Ride.rating(+k: U32, +ps: +List<Piece>) -> U32:
     case _:
       Ride.rate0(k)
 
+# Mess: litter and worse
+# ----------------------
+# A walking guest who finishes what they carry drops the wrapper -- into a
+# bin with room if one stands on or beside their tile, else on the path;
+# a very queasy guest is sick. The park keeps the mess as a list (packed
+# kind << 30 | x << 15 | y, kind 0 litter, 1 sick), and each path tile's `b`
+# counts what lies on it (litter | sick << 8), for drawing and for guests to
+# mind. Mess goes only when a Brownie sweeps it up.
+
+def Mess.at(+kind: U32, +x: U32, +y: U32) -> U32:
+  ((kind << 30n) .|. ((x .&. 32767) << 15n) .|. (y .&. 32767) : U32)
+
+def Mess.kind(+m: U32) -> U32:
+  (m >> 30n : U32)
+
+def Mess.x(+m: U32) -> U32:
+  ((m >> 15n) .&. 32767 : U32)
+
+def Mess.y(+m: U32) -> U32:
+  (m .&. 32767 : U32)
+
+# a guest being sick this tick (the same test Guest.walk uses)
+def Guest.finish(+id: U32, +t: U32, +x: U32, +lk: U32) -> Bool:
+  Bool.not(U32.is_eq(((lk >> 16n) .&. 3 : U32), 0)) && U32.is_eq(((hash3(id, t, x) >> 8n) .&. 1023 : U32), 0)
+
+# a bin with room on or beside tile (i, j): its tile, or NONE
+def Bin.room(+q: Q, +i: U32, +j: U32) -> U32:
+  +t = Land.get(q, i, j)
+  sel(U32.is_eq(Tile.obj(t), 1) && U32.is_eq((Tile.a(t) .&. 15 : U32), 1) && ((Tile.a(t) >> 4n) < 15 : U32),
+    pk(i, j), NONE())
+
+def Bin.near.go(on: Bool, +q: Q, +i: U32, +j: U32) -> U32:
+  match on:
+    case True{}:
+      +a = Bin.room(q, i, j)
+      +b = Bin.room(q, (i + 1 : U32), j)
+      +c = Bin.room(q, (i - 1 : U32), j)
+      +d = Bin.room(q, i, (j + 1 : U32))
+      +e = Bin.room(q, i, (j - 1 : U32))
+      sel(Bool.not(U32.is_eq(a, NONE())), a, sel(Bool.not(U32.is_eq(b, NONE())), b,
+        sel(Bool.not(U32.is_eq(c, NONE())), c, sel(Bool.not(U32.is_eq(d, NONE())), d, e))))
+    case False{}:
+      NONE()
+
+# a guest's mess event this tick: a drop (kind 0 or 1), something into a
+# bin (kind 2, the bin's tile), or NONE
+def Mess.event(g: Guest, +plan: +List<Board>, +q: Q, +t: U32) -> U32:
+  Guest{+id, +x, +y, dir, +st, tgt, tmr, cash, hu, th, en, +na, ha, +lk, mind} = g
+  +walking = Bool.not(U32.is_eq(st, 1)) && Bool.not(Boards.has(plan, id))
+  +finish = walking && Guest.finish(id, t, x, lk)
+  +bin = Bin.near.go(finish, q, (x >> 4n : U32), (y >> 4n : U32))
+  +jx = ((hash(id, t) .&. 7) - 3 : U32)
+  +jy = (((hash(id, t) >> 3n) .&. 7) - 3 : U32)
+  sel(walking && Guest.sick(st, na, id, t), Mess.at(1, (x + jx : U32), (y + jy : U32)),
+    sel(finish, sel(U32.is_eq(bin, NONE()), Mess.at(0, (x + jx : U32), (y + jy : U32)), (2147483648 .|. bin : U32)),
+      NONE()))
+
+def Mess.put(on: Bool, +m: U32, +ms: +List<U32>) -> +List<U32>:
+  match on:
+    case True{}:
+      m <> ms
+    case False{}:
+      ms
+
+def Mess.events(+gs: +List<Guest>, +plan: +List<Board>, +q: Q, +t: U32) -> +List<U32>:
+  match gs:
+    case []:
+      []
+    case g <> rest:
+      +e = Mess.event(g, plan, q, t)
+      Mess.put(Bool.not(U32.is_eq(e, NONE())), e, Mess.events(rest, plan, q, t))
+
+# the tick's drops (none once the park holds 600 pieces of mess), and the
+# bins that took something
+def Mess.only(+es: +List<U32>, +drops: Bool) -> +List<U32>:
+  match es:
+    case []:
+      []
+    case e <> rest:
+      +isdrop = (Mess.kind(e) < 2 : U32)
+      Mess.put(drops && isdrop || Bool.not(drops) && Bool.not(isdrop), e, Mess.only(rest, drops))
+
+# swept: a Brownie within half a tile of it
+def Mess.drops(+es: +List<U32>, room: Bool) -> +List<U32>:
+  match room:
+    case True{}:
+      Mess.only(es, True{})
+    case False{}:
+      []
+
+type Staff is Data:
+  Staff{id: U32, x: U32, y: U32, dir: U32, kind: U32, st: U32, tgt: U32, tmr: U32,
+    zone: U32, look: U32}
+
+# mess: litter and worse on the paths, each packed kind << 30 | x << 15 | y
+# (x, y in 1/16 tile; kind 0 litter, 1 sick); staff: the park's staff
+def Mess.sweeps(+m: U32, +ss: +List<Staff>) -> Bool:
+  match ss:
+    case []:
+      False{}
+    case s <> rest:
+      Staff{id, +x, +y, dir, +kind, st, tgt, tmr, zone, look} = s
+      +near = U32.is_eq(kind, 1) && ((absd(x, Mess.x(m)) + absd(y, Mess.y(m))) <= 8 : U32)
+      near || Mess.sweeps(m, rest)
+
+# the mess still lying about, and what was swept up (together, all of it)
+def Mess.kept(+ms: +List<U32>, +ss: +List<Staff>) -> +List<U32>:
+  match ms:
+    case []:
+      []
+    case m <> rest:
+      Mess.put(Bool.not(Mess.sweeps(m, ss)), m, Mess.kept(rest, ss))
+
+def Mess.swept(+ms: +List<U32>, +ss: +List<Staff>) -> +List<U32>:
+  match ms:
+    case []:
+      []
+    case m <> rest:
+      Mess.put(Mess.sweeps(m, ss), m, Mess.swept(rest, ss))
+
+# the tiles' counts follow the list (+1 for a drop, -1 for a sweep)
+def Mess.count.go(on: Bool, +q: Q, +i: U32, +j: U32, t: Tile) -> Q:
+  match on:
+    case True{}:
+      Land.set(q, i, j, t)
+    case False{}:
+      q
+
+def Mess.count(+q: Q, +m: U32, +up: Bool) -> Q:
+  +i = (Mess.x(m) >> 4n : U32)
+  +j = (Mess.y(m) >> 4n : U32)
+  +t = Land.get(q, i, j)
+  +o = Tile.obj(t)
+  +b = Tile.b(t)
+  +sh = sel(U32.is_eq(Mess.kind(m), 0), 0, 8)
+  +c = sel(U32.is_eq(sh, 0), (b .&. 255 : U32), ((b >> 8n) .&. 255 : U32))
+  +c2 = sel(up, U32.min((c + 1 : U32), 255), sub0(c, 1))
+  +b2 = sel(U32.is_eq(sh, 0), ((b .&. 4294967040) .|. c2 : U32), ((b .&. 4294902015) .|. (c2 << 8n) : U32))
+  +path = U32.is_eq(o, 1) || U32.is_eq(o, 5) || U32.is_eq(o, 7)
+  Mess.count.go(path, q, i, j, Tile{Tile.h(t), Tile.ter(t), o, Tile.a(t), b2})
+
+def Mess.mark(+ms: +List<U32>, +up: Bool, +q: Q) -> Q:
+  match ms:
+    case []:
+      q
+    case m <> rest:
+      Mess.mark(rest, up, Mess.count(q, m, up))
+
+# a bin that took something fills a little (fill: a's bits 4..7, 15 is full)
+def Bin.take(+q: Q, +e: U32) -> Q:
+  +i = ((e .&. 4095) >> 6n : U32)
+  +j = (e .&. 63 : U32)
+  +t = Land.get(q, i, j)
+  Land.set(q, i, j, Tile{Tile.h(t), Tile.ter(t), Tile.obj(t), (Tile.a(t) + 16 : U32), Tile.b(t)})
+
+def Bin.fill(+es: +List<U32>, +q: Q) -> Q:
+  match es:
+    case []:
+      q
+    case e <> rest:
+      Bin.fill(rest, Bin.take(q, e))
+
 # Money: every change to the park's gold is a ledger entry
 # ---------------------------------------------------------
 # kind: 1 ride tickets, 2 upkeep, 3 construction, 4 refunds, 5 food, 6 drinks,
@@ -1726,16 +1905,18 @@ def Guests.sick_sum(+gs: +List<Guest>, +acc: U32) -> U32:
       Guest{id, x, y, dir, st, tgt, tmr, cash, hu, th, en, +na, ha, lk, mind} = g
       Guests.sick_sum(rest, (acc + na : U32))
 
-def Park.rate(+gs: +List<Guest>, +rs: +List<Ride>) -> U32:
+# the park's rating: happy guests and attractions raise it; sick guests
+# and mess on the paths (nm pieces) lower it
+def Park.rate(+gs: +List<Guest>, +rs: +List<Ride>, +nm: U32) -> U32:
   +n = len32(Guest, gs)
   +happy = sel(U32.is_eq(n, 0), 200, (Guests.happy_sum(gs, 0) / U32.max(n, 1) : U32))
   +sick = sel(U32.is_eq(n, 0), 0, (Guests.sick_sum(gs, 0) / U32.max(n, 1) : U32))
-  U32.min(sub0((150 + happy * 2 + U32.min((Rides.attractions(rs) * 30 : U32), 240) : U32), sick), 999)
+  U32.min(sub0(sub0((150 + happy * 2 + U32.min((Rides.attractions(rs) * 30 : U32), 240) : U32), sick), (U32.min(nm, 300) >> 1n : U32)), 999)
 
-def Park.rate_if(now: Bool, +gs: +List<Guest>, +rs: +List<Ride>, +old: U32) -> U32:
+def Park.rate_if(now: Bool, +gs: +List<Guest>, +rs: +List<Ride>, +nm: U32, +old: U32) -> U32:
   match now:
     case True{}:
-      Park.rate(gs, rs)
+      Park.rate(gs, rs, nm)
     case False{}:
       old
 
@@ -1771,11 +1952,11 @@ def Fin.sample(go: Bool, +gs: +List<Guest>, +hist: +List<U32>) -> +List<U32>:
 
 # each tick: the rating now and then, the guest count sampled, and at a
 # month's turn this month's column becomes last month's
-def Fin.tick(f: Fin, +t: U32, +gs: +List<Guest>, +rs: +List<Ride>) -> Fin:
+def Fin.tick(f: Fin, +t: U32, +gs: +List<Guest>, +rs: +List<Ride>, +nm: U32) -> Fin:
   Fin{fee, loan, +rating, +now, +last, +hist} = f
   +month = U32.is_eq((t % MONTH() : U32), 0) && (t > 0 : U32)
   +sample = U32.is_eq((t % 450 : U32), 0)
-  Fin{fee, loan, Park.rate_if(U32.is_eq((t .&. 63 : U32), 0), gs, rs, rating),
+  Fin{fee, loan, Park.rate_if(U32.is_eq((t .&. 63 : U32), 0), gs, rs, nm, rating),
     Fin.fresh(month, now), Fin.roll(month, now, last), Fin.sample(sample, gs, hist)}
 
 # The Wyrm Coaster: track pieces and block sections
@@ -1971,9 +2152,13 @@ def Fin.hist(f: Fin) -> +List<U32>:
   Fin{fee, loan, rating, now, last, hist} = f
   hist
 
+# Staff: kind 1 Brownie (handyman), 2 Dwarven Tinker (mechanic), 3 Watch
+# Knight (security), 4 Bard (entertainer); x, y in 1/16 tile; st: what they
+# are doing; tgt: where they are headed (packed tile) or NONE; zone: their
+# patrol area (x0 | y0 << 8 | x1 << 16 | y1 << 24), or NONE for everywhere
 type Park is Data:
   Park{map: Q, guests: List<&2, Guest>, rides: List<&2, Ride>, track: Track,
-    cash: U32, time: U32, nid: U32, fin: Fin}
+    cash: U32, time: U32, nid: U32, fin: Fin, mess: List<&2, U32>, staff: List<&2, Staff>}
 
 type Act is Data:
   Tick{}
@@ -1982,27 +2167,34 @@ type Act is Data:
   RideOp{ride: U32, op: U32}
   ParkOp{op: U32}
 
+# a step's results: the park after it, its gold, the guests who came and
+# went, and the mess dropped and swept up
 type Out is Data:
   Out{park: Park, ledger: List<&2, Txn>, arrived: List<&2, Guest>,
-    departed: List<&2, Guest>}
+    departed: List<&2, Guest>, dropped: List<&2, U32>, swept: List<&2, U32>}
 
 def Track.pieces(t: Track) -> +List<Piece>:
   Track{pieces, open, blocks, start, end} = t
   pieces
 
 def Park.tick(p: Park) -> Out:
-  Park{+map, +guests, +rides, +track, cash, +time, +nid, +fin} = p
+  Park{+map, +guests, +rides, +track, cash, +time, +nid, +fin, +mess, +staff} = p
   +stn = Track.stn(track)
   +occ = Occ.table(guests, rides, stn)
   +plan = Boards.plan(guests, occ, map, rides, stn, [])
   +moved = Guests.step(guests, map, rides, time, plan, stn, Queue.list(guests, map, []))
   +arr = Guests.arrivals(guests, rides, time, nid, fin)
   +led = Ledger.tick(guests, rides, time, plan, len32(Guest, arr), fin)
-  Out{Park{map, List.append(&2, Guest, arr, Guests.stay(moved)),
+  +evs = Mess.events(guests, plan, map, time)
+  +drops = Mess.drops(evs, (len32(U32, mess) < 600 : U32))
+  +swept = Mess.swept(mess, staff)
+  +map2 = Mess.mark(swept, False{}, Mess.mark(drops, True{}, Bin.fill(Mess.only(evs, False{}), map)))
+  Out{Park{map2, List.append(&2, Guest, arr, Guests.stay(moved)),
     Rides.tick(rides, 0, map, Track.pieces(track), occ, plan,
       Qlen.fill_if(U32.is_eq((time .&. 15 : U32), 0), guests, map, len32(Ride, rides)), U32.is_eq((time .&. 15 : U32), 0)),
     Track.tick(track), Ledger.apply(led, cash), (time + 1 : U32),
-    (nid + len32(Guest, arr) : U32), Fin.tick(fin, time, guests, rides)}, led, arr, Guests.left(moved)}
+    (nid + len32(Guest, arr) : U32), Fin.tick(fin, time, guests, rides, len32(U32, mess)),
+    List.append(&2, U32, drops, Mess.kept(mess, staff)), staff}, led, arr, Guests.left(moved), drops, swept}
 
 # Building
 # --------
@@ -2039,14 +2231,21 @@ def Build.cost(+tool: U32) -> U32:
       40
     case 11:
       12
+    case 13:
+      20
+    case 14:
+      30
+    case 15:
+      25
     case _:
       Ride.cost((tool - 4 : U32))
 
 def Build.can_pay(+cash: U32, +cost: U32) -> Bool:
   Bool.not(neg(cash)) && (cash >= cost : U32)
 
+# tools 13, 14, 15: a bin, a bench, a lamp, on a path without one
 def Build.legal.go(+tool: U32, +q: Q, +trk: Track, +x: U32, +y: U32, +o: U32,
-  +h: U32, +dry: Bool, +empty: Bool) -> Bool:
+  +h: U32, +dry: Bool, +empty: Bool, +a: U32) -> Bool:
   match tool:
     case 1:
       empty && dry
@@ -2060,6 +2259,12 @@ def Build.legal.go(+tool: U32, +q: Q, +trk: Track, +x: U32, +y: U32, +o: U32,
       U32.is_eq(o, 1) || U32.is_eq(o, 2) || U32.is_eq(o, 3) || U32.is_eq(o, 7)
     case 11:
       empty && dry
+    case 13:
+      U32.is_eq(o, 1) && U32.is_eq((a .&. 15 : U32), 0)
+    case 14:
+      U32.is_eq(o, 1) && U32.is_eq((a .&. 15 : U32), 0)
+    case 15:
+      U32.is_eq(o, 1) && U32.is_eq((a .&. 15 : U32), 0)
     case 10:
       empty && dry && U32.is_eq(len32(Piece, Track.pieces(trk)), 0)
     case _:
@@ -2072,7 +2277,7 @@ def Build.legal(+q: Q, +trk: Track, +tool: U32, +x: U32, +y: U32) -> Bool:
   +h = Tile.h(t)
   +dry = Bool.not(U32.is_eq(ter, 2)) && Bool.not(U32.is_eq(ter, 4))
   +empty = U32.is_eq(o, 0) && Bool.not(U32.is_eq(ter, 4))
-  Build.legal.go(tool, q, trk, x, y, o, h, dry, empty)
+  Build.legal.go(tool, q, trk, x, y, o, h, dry, empty, Tile.a(t))
 
 def Build.ok(+q: Q, +trk: Track, +cash: U32, +tool: U32, +x: U32, +y: U32)
   -> Bool:
@@ -2114,13 +2319,16 @@ def Land.clear_ride(+q: Q, r: Ride) -> Q:
     Land.put(Land.put(Land.put(one, x1, y, 0, 0, 0), x, y1, 0, 0, 0), x1, y1,
       0, 0, 0))
 
+# demolishing: a ride goes whole; a path's furniture goes first, then the path
 def Build.demolish(+q: Q, +rs: +List<Ride>, +x: U32, +y: U32) -> Q:
   +t = Land.get(q, x, y)
+  +furn = U32.is_eq(Tile.obj(t), 1) && Bool.not(U32.is_eq((Tile.a(t) .&. 15 : U32), 0))
   Bool.pick(Q, U32.is_eq(Tile.obj(t), 3),
-    Land.clear_ride(q, Rides.get(rs, Tile.a(t))), Land.put(q, x, y, 0, 0, 0))
+    Land.clear_ride(q, Rides.get(rs, Tile.a(t))),
+    Bool.pick(Q, furn, Land.set(q, x, y, Tile{Tile.h(t), Tile.ter(t), 1, 0, Tile.b(t)}), Land.put(q, x, y, 0, 0, 0)))
 
 def Build.land.go(+tool: U32, +q: Q, +rs: +List<Ride>, +x: U32, +y: U32,
-  +v: U32, +h: U32, +ter: U32) -> Q:
+  +v: U32, +h: U32, +ter: U32, +b: U32) -> Q:
   match tool:
     case 1:
       Land.set(q, x, y, Tile{h, 1, 1, 0, 0})
@@ -2136,13 +2344,19 @@ def Build.land.go(+tool: U32, +q: Q, +rs: +List<Ride>, +x: U32, +y: U32,
       Land.set(q, x, y, Tile{h, ter, 6, (5 + (v .&. 3) * 8 : U32), h})
     case 11:
       Land.set(q, x, y, Tile{h, 1, 7, 0, 0})
+    case 13:
+      Land.set(q, x, y, Tile{h, ter, 1, 1, b})
+    case 14:
+      Land.set(q, x, y, Tile{h, ter, 1, 2, b})
+    case 15:
+      Land.set(q, x, y, Tile{h, ter, 1, 3, b})
     case _:
       Land.ride(q, (tool - 4 : U32), x, y, len32(Ride, rs))
 
 def Build.land(+q: Q, +rs: +List<Ride>, +tool: U32, +x: U32, +y: U32,
   +v: U32) -> Q:
   +t = Land.get(q, x, y)
-  Build.land.go(tool, q, rs, x, y, v, Tile.h(t), Tile.ter(t))
+  Build.land.go(tool, q, rs, x, y, v, Tile.h(t), Tile.ter(t), Tile.b(t))
 
 def Build.map(ok: Bool, +q: Q, +rs: +List<Ride>, +tool: U32, +x: U32, +y: U32,
   +v: U32) -> Q:
@@ -2195,12 +2409,12 @@ def Build.track(ok: Bool, +q: Q, +trk: Track, +tool: U32, +x: U32, +y: U32,
       trk
 
 def Park.build(p: Park, +tool: U32, +x: U32, +y: U32, +v: U32) -> Out:
-  Park{+map, guests, +rides, +track, +cash, +time, nid, fin} = p
+  Park{+map, guests, +rides, +track, +cash, +time, nid, fin, mess, staff} = p
   +ok = Build.ok(map, track, cash, tool, x, y)
   +led = Build.ledger(ok, map, rides, tool, x, y)
   Out{Park{Land.fix(Build.map(ok, map, rides, tool, x, y, v)), guests,
     Build.rides(ok, map, rides, tool, x, y, time), Build.track(ok, map, track, tool,
-    x, y, v), Ledger.apply(led, cash), time, nid, fin}, led, [], []}
+    x, y, v), Ledger.apply(led, cash), time, nid, fin, mess, staff}, led, [], [], [], []}
 
 # Coaster track editing
 # ---------------------
@@ -2325,13 +2539,13 @@ def Rides.coaster(+rs: +List<Ride>, +open: U32) -> +List<Ride>:
         <> Rides.coaster(rest, open)
 
 def Park.track_op(p: Park, +op: U32) -> Out:
-  Park{+map, guests, +rides, +track, +cash, time, nid, fin} = p
+  Park{+map, guests, +rides, +track, +cash, time, nid, fin, mess, staff} = p
   +ok = TrackOp.ok(map, track, cash, op)
   +led = TrackOp.ledger(ok, op)
   +trk2 = Track.op(track, op, ok)
   Out{Park{Land.fix(TrackOp.map(ok, map, track, op)), guests,
     Rides.coaster(rides, sel(Track.open(trk2), 1, 0)), trk2,
-    Ledger.apply(led, cash), time, nid, fin}, led, [], []}
+    Ledger.apply(led, cash), time, nid, fin, mess, staff}, led, [], [], [], []}
 
 # Ride settings (the ride window)
 # -------------------------------
@@ -2359,8 +2573,8 @@ def Rides.set(+rs: +List<Ride>, +i: U32, +op: U32) -> +List<Ride>:
       Bool.pick(Ride, U32.is_eq(i, 0), Ride.set(r, op), r) <> Rides.set(rest, (i - 1 : U32), op)
 
 def Park.ride_op(p: Park, +ride: U32, +op: U32) -> Out:
-  Park{map, guests, +rides, track, cash, time, nid, fin} = p
-  Out{Park{map, guests, Rides.set(rides, ride, op), track, cash, time, nid, fin}, [], [], []}
+  Park{map, guests, +rides, track, cash, time, nid, fin, mess, staff} = p
+  Out{Park{map, guests, Rides.set(rides, ride, op), track, cash, time, nid, fin, mess, staff}, [], [], [], [], []}
 
 # Park settings (the park and finances windows)
 # ---------------------------------------------
@@ -2373,19 +2587,19 @@ def Fin.set(f: Fin, +op: U32, +borrow: Bool, +repay: Bool) -> Fin:
     sel(borrow, (loan + 1000 : U32), sel(repay, (loan - 1000 : U32), loan)), rating, now, last, hist}
 
 def Park.park_op(p: Park, +op: U32) -> Out:
-  Park{map, guests, rides, track, +cash, time, nid, +fin} = p
+  Park{map, guests, rides, track, +cash, time, nid, +fin, mess, staff} = p
   +loan = Fin.loan(fin)
   +borrow = U32.is_eq(op, 2) && (loan + 1000 <= 20000 : U32)
   +repay = U32.is_eq(op, 3) && (loan >= 1000 : U32) && Bool.not(neg(cash)) && (cash >= 1000 : U32)
   +led = Bool.pick(+List<Txn>, borrow, [Gain{8, 1000}], Bool.pick(+List<Txn>, repay, [Spend{9, 1000}], []))
-  Out{Park{map, guests, rides, track, Ledger.apply(led, cash), time, nid, Fin.set(fin, op, borrow, repay)},
-    led, [], []}
+  Out{Park{map, guests, rides, track, Ledger.apply(led, cash), time, nid, Fin.set(fin, op, borrow, repay), mess, staff},
+    led, [], [], [], []}
 
 # every step's ledger goes into the books
 def Out.book(o: Out) -> Out:
-  Out{p, +l, ar, de} = o
-  Park{map, guests, rides, track, cash, time, nid, fin} = p
-  Out{Park{map, guests, rides, track, cash, time, nid, Fin.book(fin, l)}, l, ar, de}
+  Out{p, +l, ar, de, dr, sw} = o
+  Park{map, guests, rides, track, cash, time, nid, fin, mess, staff} = p
+  Out{Park{map, guests, rides, track, cash, time, nid, Fin.book(fin, l), mess, staff}, l, ar, de, dr, sw}
 
 def Park.step0(p: Park, a: Act) -> Out:
   match a:
@@ -2405,23 +2619,31 @@ def Park.step(p: Park, a: Act) -> Out:
   Out.book(Park.step0(p, a))
 
 def Park.new() -> Park:
-  Park{Land.fix(Q.build(6n, 0, 0)), [], [], Track.empty(), 30000, 0, 1, Fin.new()}
+  Park{Land.fix(Q.build(6n, 0, 0)), [], [], Track.empty(), 30000, 0, 1, Fin.new(), [], []}
 
 def Out.park(o: Out) -> Park:
-  Out{p, l, ar, de} = o
+  Out{p, l, ar, de, dr, sw} = o
   p
 
 def Out.ledger(o: Out) -> +List<Txn>:
-  Out{p, l, ar, de} = o
+  Out{p, l, ar, de, dr, sw} = o
   l
 
 def Out.arrived(o: Out) -> +List<Guest>:
-  Out{p, l, ar, de} = o
+  Out{p, l, ar, de, dr, sw} = o
   ar
 
 def Out.departed(o: Out) -> +List<Guest>:
-  Out{p, l, ar, de} = o
+  Out{p, l, ar, de, dr, sw} = o
   de
+
+def Out.dropped(o: Out) -> +List<U32>:
+  Out{p, l, ar, de, dr, sw} = o
+  dr
+
+def Out.swept(o: Out) -> +List<U32>:
+  Out{p, l, ar, de, dr, sw} = o
+  sw
 
 def Park.run(acts: List<Act>, +p: Park) -> Park:
   match acts:
@@ -2431,29 +2653,37 @@ def Park.run(acts: List<Act>, +p: Park) -> Park:
       Park.run(rest, Out.park(Park.step(p, a)))
 
 def Park.map(p: Park) -> Q:
-  Park{map, guests, rides, track, cash, time, nid, fin} = p
+  Park{map, guests, rides, track, cash, time, nid, fin, mess, staff} = p
   map
 
 def Park.guests(p: Park) -> +List<Guest>:
-  Park{map, guests, rides, track, cash, time, nid, fin} = p
+  Park{map, guests, rides, track, cash, time, nid, fin, mess, staff} = p
   guests
 
 def Park.track(p: Park) -> Track:
-  Park{map, guests, rides, track, cash, time, nid, fin} = p
+  Park{map, guests, rides, track, cash, time, nid, fin, mess, staff} = p
   track
 
 def Park.cash(p: Park) -> U32:
-  Park{map, guests, rides, track, cash, time, nid, fin} = p
+  Park{map, guests, rides, track, cash, time, nid, fin, mess, staff} = p
   cash
 
 def Park.time(p: Park) -> U32:
-  Park{map, guests, rides, track, cash, time, nid, fin} = p
+  Park{map, guests, rides, track, cash, time, nid, fin, mess, staff} = p
   time
 
 def Park.rides(p: Park) -> +List<Ride>:
-  Park{map, guests, rides, track, cash, time, nid, fin} = p
+  Park{map, guests, rides, track, cash, time, nid, fin, mess, staff} = p
   rides
 
 def Park.fin(p: Park) -> Fin:
-  Park{map, guests, rides, track, cash, time, nid, fin} = p
+  Park{map, guests, rides, track, cash, time, nid, fin, mess, staff} = p
   fin
+
+def Park.mess(p: Park) -> +List<U32>:
+  Park{map, guests, rides, track, cash, time, nid, fin, mess, staff} = p
+  mess
+
+def Park.staff(p: Park) -> +List<Staff>:
+  Park{map, guests, rides, track, cash, time, nid, fin, mess, staff} = p
+  staff
