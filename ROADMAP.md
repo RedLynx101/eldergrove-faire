@@ -1,6 +1,6 @@
 # Eldergrove Faire: Roadmap
 
-Last updated: 2026-09-24 · M1-M8 done. M9 (fixes, polish and the deferred items) planned below.
+Last updated: 2026-09-24 · M1-M9 done.
 
 ## Decisions
 
@@ -472,7 +472,7 @@ Spikes, in order:
 - Frame time and simulation cost measured against M7: within noise (about 1.4 ms a tick at 200 guests;
   16 ms a frame).
 
-## M9: Fixes, polish and the deferred items (done)
+## Done: M9, fixes, polish and the deferred items
 Decisions from the owner (2026-09-24): bridges are my call (walkways for guests over paths and track);
 1 to 20 cars per train, never more than the track allows; steep pieces only in the two headings that face
 the camera; a coaster can be demolished, and removing track re-runs the check and closes the ride if it no
@@ -525,6 +525,8 @@ Proven in M5: litter_accounted, wages_booked (fifteen in all).
 Extended in M8: coaster_on_circuit now covers every coaster in the park (no_collisions was already stated
 for any track, so it covers them all, and now takes the coaster's settings too). Proven in M8:
 open_only_tested (sixteen in all).
+Changed in M9: needs_bounded covers the bladder; capacity_respected reads a coaster's seats from its station
+word (its helpers take the station).
 Proof maintenance rule: keep the code field-wise (each park field updated by its own function) so
 existing proofs survive new features.
 
