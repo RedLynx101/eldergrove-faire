@@ -1,6 +1,7 @@
 # Eldergrove Faire: Roadmap
 
-Last updated: 2026-09-24 · M1-M4 done. Next: M5 (problems and staff).
+Last updated: 2026-09-24 · M1-M4 done. Next: M5 (controls, problems, staff and people). Plan runs to M8
+(custom coasters).
 
 ## Decisions
 
@@ -11,7 +12,10 @@ Last updated: 2026-09-24 · M1-M4 done. Next: M5 (problems and staff).
 | Queues | **Full RCT-style queue paths:** a queue tool, visible lines of guests, one queue per ride entrance. |
 | Terrain slopes | **Not for now.** Flat terraces with cliffs. |
 | Game mode | **Both:** sandbox and scenarios with goals. |
-| Milestone order | Performance → riders + art → economy + UI → problems + staff → content → structure. |
+| Milestone order | Performance → riders + art → economy + UI → controls + problems + staff → content → structure → custom coasters. |
+| Controls | WASD and the arrows move the camera, always; coaster building gets its own construction window (M8) instead of the W/A/D/Q/Z keys. |
+| Placing things | Every tool shows a ghost of what it would place, tinted green where it can go and red where it can't, with the cost. |
+| Coaster crashes | *(pending)* |
 | Ride exits | Any path tile touching the ride is its exit, marked with an exit arch; the queue's front tile gets an entrance arch. Riders step off toward the exit. |
 | Complete rides | A ride runs only with both an entrance (queue) and an exit (path); a warning shows until then. Shops need neither. |
 | Ride cycles | Each ride has its own cycle (load, run, unload) with minimum and maximum waits. |
@@ -129,17 +133,42 @@ machine: `PARK_PROF=1 ./park --live 700 1500`.
 - Guests may pick a ride whose queue is on the far side of the park.
 - There is no music volume control besides on/off.
 
-## M5: Problems and staff
-- Litter, plus vomit from nauseous guests after intense rides. Cleanliness affects happiness and park rating.
-- Path furniture: bins, benches (restore energy), lamps.
-- Toilets: the "Privy". A bathroom need is added.
-- Guests getting lost; vandalism.
-- Breakdowns: rides lose reliability with age and break down; guests get stuck and unhappy.
-- Staff, with wages and patrol areas:
-  - Brownies (handymen): sweep litter, empty bins, water flowers.
-  - Dwarven Tinkers (mechanics): inspect and repair rides.
-  - Watch Knights (security): deter vandals.
-  - Bards (entertainers): cheer guests up.
+## M5: Controls, problems, staff and people (next)
+Spikes, in order:
+
+1. **Controls and camera.** WASD (and the arrows) move the camera. Zoom in and out, in three steps (close,
+   normal, far) with the mouse wheel or Page Up / Page Down. Every tool shows a **ghost preview** of what it
+   would place under the mouse: green where it can go, red where it can't, with the cost beside it. That
+   covers paths, queues, terrain, trees, rides at their full footprint, and demolish (which highlights what
+   would go).
+2. **Readable thoughts.** Redraw the thought icons at a size that reads. The hunger bubble is the worst: its
+   white bone vanishes on the white bubble and leaves a brown cross. Every bubble gets a clear picture with a
+   dark outline, and the guest window names each thought in words (it already does).
+3. **Mess.** Guests drop litter; nauseous guests are sick after intense rides. Dirty paths lower happiness
+   and the park rating. Path furniture: bins, benches (they restore energy) and lamps.
+4. **The Privy.** Toilets, and a bathroom need.
+5. **Breakdowns.** Rides lose reliability with age and break down; riders get stuck and unhappy until a
+   repair.
+6. **Staff**, hired from a staff window, with wages (through the ledger) and patrol areas:
+   - Brownies (handymen) sweep litter, empty bins and water flowers.
+   - Dwarven Tinkers (mechanics) inspect and repair rides.
+   - Watch Knights (security) deter vandals, who smash benches and lamps.
+   - Bards (entertainers) cheer guests up.
+7. **More people.** More guest variants:
+   - new folk: halflings, gnomes, orcs;
+   - more outfits: nobles, merchants, pilgrims;
+   - hats, hair, beards and cloaks;
+   - children (smaller, and they prefer gentle rides).
+   Staff wear their own uniforms.
+8. **The interface, revamped:**
+   - the toolbar grouped into categories (paths, terrain, scenery, rides, shops, staff) with hover
+     tooltips;
+   - a consistent window style;
+   - an options window: window size (1024×640, 1280×800, 1600×1000), pixel scale, and dynamic resolution
+     (the drawn resolution drops when the frame rate falls below 60, and comes back when it recovers);
+   - music and effects volume.
+9. Laws: **litter_accounted** (litter appears only when a guest drops it or is sick, and disappears only when
+   a Brownie sweeps it or a bin takes it) and **wages_booked** (every wage goes through the ledger).
 
 ## M6: More to build
 - **Rides:** Griffin Swing (swinging ship), Wheel of Stars (Ferris wheel), Lich's Crypt (haunted dark ride),
@@ -147,23 +176,43 @@ machine: `PARK_PROF=1 ./park --live 700 1500`.
   (top spin), Mermaid Flume (log flume).
 - **Shops:** Healer's Tent (first aid), Wisp Seller (balloons), Enchanted Ices.
 - **Scenery:** castle walls, statues, fountains, flower beds, fences. Scenery raises the park rating.
-- **Coasters:** more than one per park, a station anywhere, banked turns and steeper drops.
+- **Stairs and bridges.** The path tool builds stairs between terrace heights by itself, as does the queue
+  tool. A bridge tool raises paths over water, lower paths and track, on supports that match the theme. The
+  land stays terraced (no slopes).
 
 ## M7: Structure
-- Zoom levels and a larger or resizable window (open since M2).
-- Crowds past 700: guests share per-ride route maps instead of each searching paths themselves.
-- Scenarios with goals and awards, alongside sandbox mode.
+- Scenarios with goals and awards, alongside sandbox mode (a main menu to choose).
 - Research that unlocks rides over time.
 - Weather and a day/night cycle, with lanterns and fireflies at night.
 - Buying land and construction rights.
+- Crowds past 700: guests share per-ride route maps instead of each searching paths themselves.
+
+## M8: Custom coasters
+- **A construction window,** built carefully for ease of use:
+  - piece buttons, grouped: straight, gentle and steep slopes, small and large turns, banked turns, lift
+    hill, brakes, block brakes, station;
+  - direction and bank toggles;
+  - a live ghost of the next piece, green if it fits and red if not, with the height shown;
+  - cost per piece, undo last piece, and a "close the circuit" hint when the track nears its start.
+  - Keyboard shortcuts on the buttons (never WASD, which stays the camera).
+- **Coasters anywhere:** several per park, each with its station where you put it, and a choice of coaster
+  types: the Wyrm (wooden), a Dwarven Minecart, a Griffin Flyer (inverted). Set trains, cars per train,
+  and the lift speed.
+- **Testing, as in RCT2:** a new coaster must be tested before it can open. Empty trains run the circuit and
+  the ride window fills in what they measured: maximum speed, length, drops, highest point, G-forces, air
+  time, then excitement, intensity and nausea. A track that fails (a train can't make a hill) says where.
+- **Follow cam:** a Follow button in ride, guest and staff windows. The camera rides along with a coaster
+  car or a ride vehicle, or trails a guest or staff member; any camera key lets go.
+- Laws extended to every coaster: coaster_on_circuit and no_collisions for each track, and a new one,
+  **open_only_tested** (a coaster opens only after a test run completed).
 
 ## Laws
 Proven: money_conserved, headcount_conserved, needs_bounded, coaster_on_circuit, no_collisions,
 save_load_roundtrip, capacity_respected, riders_conserved.
 Proven in M4: board_only_when_loading, ride_until_unloading, seats_unique, purchase_is_transfer,
 prices_bounded (thirteen in all).
-Planned (M5): litter_conserved (litter is only made by guests and only removed by staff or bins),
-wages_booked (every wage goes through the ledger; covered by money_conserved once staff exist).
+Planned: litter_accounted and wages_booked (M5); open_only_tested, and coaster_on_circuit and no_collisions
+extended to every coaster (M8).
 Proof maintenance rule: keep the code field-wise (each park field updated by its own function) so
 existing proofs survive new features.
 
