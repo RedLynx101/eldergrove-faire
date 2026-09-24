@@ -14,3 +14,4 @@ tools/_*.sh
 shots/z-*.png
 tools/__pycache__/
 tools/thoughts.bend.txt
+shots/_*.png
