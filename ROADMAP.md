@@ -151,6 +151,19 @@ Small design decisions made while working, listed here so they can be revisited.
   own) are not done.
 - Ride and shop tools had no placement ghost since M6 began (the ghost only knew tools 1-16); fixed.
 
+- **Scenarios and the main menu.** The live game opens on a menu over the running park: Sandbox (the
+  Eldergrove Faire, everything researched), three scenarios, Load and Quit. Misty Hollow: an almost empty
+  vale with 12000 gold; 400 guests and a rating of 600 by month 8. The Dragon's Debt: the starter park with
+  2000 gold and a 15000 loan; repay it with 300 guests by month 12. The Grand Tourney: the starter park,
+  20000 gold, nothing researched; rating 850 and 650 guests by month 10. Scenarios start with steady
+  research funding. The scenario and its outcome are kept in the books, so saves keep them; the outcome is
+  recorded through park ops 50 (won) and 51 (lost), checked every step, and announced in a window. OPTIONS
+  has a MAIN MENU button. `./park --scen K MONTHS` plays scenario K and reports each month.
+- **Awards**, checked each new month, first earned wins: tidiest park (under 15 pieces of mess with 150+
+  guests), most beautiful (20+ decorations), happiest guests (75%+ with 200+ guests), best staffed (8+
+  staff), most thrilling (4+ thrill rides). An award is announced in the message bar with a bell. Awards
+  don't change the simulation.
+
 ## Done: M1, the vertical slice
 Isometric fantasy map, paths, terrain editing, 4 enchanted tree kinds, Dragon Carousel, Arcane Spire, Potion
 Stall, Troll Tavern, pre-built Wyrm Coaster with block signals and a track editor, guests with needs and
@@ -310,7 +323,7 @@ Spikes, in order:
   tool. A bridge tool raises paths over water, lower paths and track, on supports that match the theme. The
   land stays terraced (no slopes).
 
-## M7: Structure (in progress: day, night, rain, research and land done)
+## M7: Structure (in progress: all but bigger crowds done)
 - Scenarios with goals and awards, alongside sandbox mode (a main menu to choose).
 - Research that unlocks rides over time.
 - Weather and a day/night cycle, with lanterns and fireflies at night.

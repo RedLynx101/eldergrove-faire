@@ -991,6 +991,19 @@ def ride_name(+k: U32) -> String:
     case _:
       "RUINS"
 
+def Award.text(+k: U32) -> String:
+  match k:
+    case 0:
+      "AWARD: THE TIDIEST PARK IN THE REALM"
+    case 1:
+      "AWARD: THE MOST BEAUTIFUL PARK"
+    case 2:
+      "AWARD: THE HAPPIEST GUESTS"
+    case 3:
+      "AWARD: THE BEST STAFFED PARK"
+    case _:
+      "AWARD: THE MOST THRILLING PARK"
+
 def msg_text(+m: U32) -> String:
   match m:
     case 1:
@@ -1022,8 +1035,9 @@ def msg_text(+m: U32) -> String:
     case 14:
       "SOUNDS OFF  (N)"
     case _:
+      Bool.pick(String, (m >= 131 : U32) && (m <= 135 : U32), Award.text((m - 131 : U32)),
       Bool.pick(String, (m >= 100 : U32) && (m < 110 : U32), "THE " ++ ride_name((m - 100 : U32)) ++ " BROKE DOWN!",
-        Bool.pick(String, (m >= 110 : U32) && (m < 120 : U32), "THE " ++ ride_name((m - 110 : U32)) ++ " IS FIXED", ""))
+        Bool.pick(String, (m >= 110 : U32) && (m < 120 : U32), "THE " ++ ride_name((m - 110 : U32)) ++ " IS FIXED", "")))
 
 def Cat.tool.go(+code: U32) -> U32:
   match code:
@@ -1443,13 +1457,15 @@ def Win.h(+k: U32) -> U32:
     case 1:
       154
     case 2:
-      164
+      176
     case 3:
       157
     case 5:
       114
     case 6:
-      112
+      124
+    case 7:
+      76
     case _:
       144
 
@@ -1513,6 +1529,18 @@ def Wins.open(+ws: +List<Win>, +k: U32, +a: U32, +x: U32, +y: U32) -> +List<Win>
 def Win.moved(w: Win, +x: U32, +y: U32) -> Win:
   Win{k, ox, oy, a} = w
   Win{k, x, y, a}
+
+def WM.drag(m: WM) -> U32:
+  WM{ws, d, x, y} = m
+  d
+
+def WM.gx(m: WM) -> U32:
+  WM{ws, d, x, y} = m
+  x
+
+def WM.gy(m: WM) -> U32:
+  WM{ws, d, x, y} = m
+  y
 
 def WM.wins(m: WM) -> +List<Win>:
   WM{ws, d, gx, gy} = m
@@ -1960,10 +1988,36 @@ def res_rows(+r: U32, +x: U32, +y: U32, +acc: +List<Dr>) -> +List<Dr>:
   R((x + 6 : U32), (y + 152 : U32), U32.max(((pr * 188) >> 8n : U32), 1), 5, 7324480,
   R((x + 6 : U32), (y + 152 : U32), 188, 5, 4210752, acc)))))))
 
+def Scn.name(+k: U32) -> String:
+  match k:
+    case 1:
+      "MISTY HOLLOW"
+    case 2:
+      "THE DRAGON'S DEBT"
+    case 3:
+      "THE GRAND TOURNEY"
+    case _:
+      "THE ELDERGROVE FAIRE"
+
+def Scn.goal(+k: U32) -> String:
+  match k:
+    case 1:
+      "400 GUESTS AND RATING 600 BY MONTH 8"
+    case 2:
+      "REPAY THE LOAN, 300 GUESTS, BY MONTH 12"
+    case 3:
+      "RATING 850 AND 650 GUESTS BY MONTH 10"
+    case _:
+      "NO GOALS: BUILD AS YOU LIKE"
+
 def park_win(+p: C.Park, +x: U32, +y: U32, +acc: +List<Dr>) -> +List<Dr>:
   C.Park{map, +guests, +rides, track, cash, time, nid, +fin, mess, staff} = p
   +rating = C.Fin.rating(fin)
-  +frame = res_rows(C.Fin.res(fin), x, y, window_box("ELDERGROVE FAIRE", x, y, 200, 164, acc))
+  +k = ((C.Fin.res(fin) >> 26n) .&. 15 : U32)
+  +st = (C.Fin.res(fin) >> 30n : U32)
+  +frame = T(Bool.pick(String, U32.is_eq(k, 0), "SANDBOX", "GOAL: " ++ Scn.goal(k)), (x + 6 : U32), (y + 162 : U32),
+    sel(U32.is_eq(st, 1), 7324480, sel(U32.is_eq(st, 2), 16748688, 16766282)),
+    res_rows(C.Fin.res(fin), x, y, window_box(Scn.name(k), x, y, 200, 176, acc)))
   T("PARK RATING " ++ U32.show(rating), (x + 6 : U32), (y + 15 : U32), 16766282,
   R((x + 96 : U32), (y + 15 : U32), U32.max((rating / 10 : U32), 1), 5, sel((rating < 400 : U32), 14163020, 7324480),
   R((x + 96 : U32), (y + 15 : U32), 100, 5, 4210752,
@@ -2050,7 +2104,7 @@ def opts_win(+o: U32, +x: U32, +y: U32, +acc: +List<Dr>) -> +List<Dr>:
   +whole = Bool.not(U32.is_eq((o .&. 4 : U32), 0))
   +dyn = U32.is_eq((o .&. 8 : U32), 0)
   +lo = Bool.not(U32.is_eq((o .&. 256 : U32), 0))
-  +frame = window_box("OPTIONS", x, y, 210, 112, acc)
+  +frame = button("MAIN MENU", (x + 6 : U32), (y + 110 : U32), 60, 10498096, window_box("OPTIONS", x, y, 210, 124, acc))
   T("WINDOW SIZE", (x + 6 : U32), (y + 16 : U32), 16766282,
   opt_button("1024X640", U32.is_eq(s, 0), (x + 6 : U32), (y + 26 : U32), 60,
   opt_button("1280X800", U32.is_eq(s, 1), (x + 70 : U32), (y + 26 : U32), 60,
@@ -2068,6 +2122,31 @@ def opts_win(+o: U32, +x: U32, +y: U32, +acc: +List<Dr>) -> +List<Dr>:
 
 # dynamic resolution: when a second of frames runs under 52 a second, draw
 # at half resolution for about ten seconds, then try full again
+def Scn.of(+p: C.Park) -> U32:
+  ((C.Fin.res(C.Park.fin(p)) >> 26n) .&. 15 : U32)
+
+def Scn.status(+p: C.Park) -> U32:
+  (C.Fin.res(C.Park.fin(p)) >> 30n : U32)
+
+def Scn.award(+k: U32) -> String:
+  match k:
+    case 1:
+      "THE SILVER LANTERN"
+    case 2:
+      "THE DRAGON'S SEAL"
+    case _:
+      "THE GOLDEN GRIFFIN"
+
+def goal_win(+p: C.Park, +x: U32, +y: U32, +acc: +List<Dr>) -> +List<Dr>:
+  +k = Scn.of(p)
+  +won = U32.is_eq(Scn.status(p), 1)
+  +frame = window_box(Bool.pick(String, won, "SCENARIO COMPLETE!", "THE SCENARIO IS LOST"), x, y, 210, 76, acc)
+  T(Scn.name(k), (x + 6 : U32), (y + 16 : U32), 16766282,
+  T(Scn.goal(k), (x + 6 : U32), (y + 28 : U32), 15261888,
+  T(Bool.pick(String, won, "AWARDED " ++ Scn.award(k) ++ "!", "THE DEADLINE HAS PASSED."), (x + 6 : U32), (y + 44 : U32),
+    sel(won, 7324480, 16748688),
+  T("PLAY ON AS LONG AS YOU LIKE.", (x + 6 : U32), (y + 60 : U32), 11579568, frame))))
+
 def win_dr.go(+k: U32, +x: U32, +y: U32, +a: U32, +p: C.Park, +o: U32, +acc: +List<Dr>) -> +List<Dr>:
   match k:
     case 1:
@@ -2082,6 +2161,8 @@ def win_dr.go(+k: U32, +x: U32, +y: U32, +a: U32, +p: C.Park, +o: U32, +acc: +Li
       staff_win(p, x, y, acc)
     case 6:
       opts_win(o, x, y, acc)
+    case 7:
+      goal_win(p, x, y, acc)
     case _:
       acc
 
@@ -2183,7 +2264,7 @@ def Opt.click(+o: U32, +code: U32) -> U32:
   +o1 = sel(size, ((o .&. 4294967292) .|. (code - 1000) .|. 16384 : U32),
     sel(mode, ((o .&. 4294967291) .|. ((code - 1010) << 2n) .|. 16384 : U32),
     sel(U32.is_eq(code, 1020), (o .^. 8 : U32), o)))
-  ((o1 .&. 4294967055) .|. (mq2 << 4n) .|. (fq2 << 6n) : U32)
+  ((o1 .&. 4294967055) .|. (mq2 << 4n) .|. (fq2 << 6n) .|. sel(U32.is_eq(code, 1040), 262144, 0) : U32)
 
 def opts_click(+lx: U32, +ly: U32) -> U32:
   sel(in_box(lx, ly, 6, 26, 60, 9), 1000, sel(in_box(lx, ly, 70, 26, 60, 9), 1001,
@@ -2191,7 +2272,8 @@ def opts_click(+lx: U32, +ly: U32) -> U32:
   sel(in_box(lx, ly, 6, 50, 96, 9), 1010, sel(in_box(lx, ly, 106, 50, 98, 9), 1011,
   sel(in_box(lx, ly, 164, 63, 40, 9), 1020,
   sel(in_box(lx, ly, 130, 86, 11, 9), 1030, sel(in_box(lx, ly, 144, 86, 11, 9), 1031,
-  sel(in_box(lx, ly, 130, 98, 11, 9), 1032, sel(in_box(lx, ly, 144, 98, 11, 9), 1033, 0))))))))))
+  sel(in_box(lx, ly, 130, 98, 11, 9), 1032, sel(in_box(lx, ly, 144, 98, 11, 9), 1033,
+  sel(in_box(lx, ly, 6, 110, 60, 9), 1040, 0)))))))))))
 
 def Opt.dyn(+o: U32, +f: U32) -> U32:
   +dyn = U32.is_eq((o .&. 8 : U32), 0)
@@ -2201,6 +2283,172 @@ def Opt.dyn(+o: U32, +f: U32) -> U32:
   +cnt2 = sel(lo2 && lo, (cnt + 1 : U32), 0)
   ((o .&. 4294951167) .|. sel(lo2, 256, 0) .|. (cnt2 << 9n) : U32)
 
+# Scenarios (the books' res bits 26-29; 0 sandbox) and their goals
+def Scn.deadline(+k: U32) -> U32:
+  match k:
+    case 1:
+      8
+    case 2:
+      12
+    case 3:
+      10
+    case _:
+      0
+
+def Goal.met(+k: U32, +p: C.Park) -> Bool:
+  +n = C.len32(C.Guest, C.Park.guests(p))
+  +rating = C.Fin.rating(C.Park.fin(p))
+  +loan = C.Fin.loan(C.Park.fin(p))
+  U32.is_eq(k, 1) && (n >= 400 : U32) && (rating >= 600 : U32)
+    || U32.is_eq(k, 2) && U32.is_eq(loan, 0) && (n >= 300 : U32)
+    || U32.is_eq(k, 3) && (rating >= 850 : U32) && (n >= 650 : U32)
+
+# the park op a running scenario calls for now: 50 won, 51 lost, 0 none
+def Goal.op(+p: C.Park) -> U32:
+  +k = Scn.of(p)
+  +run = Bool.not(U32.is_eq(k, 0)) && U32.is_eq(Scn.status(p), 0)
+  +late = (C.Park.time(p) >= Scn.deadline(k) * 3600 : U32)
+  sel(run && Goal.met(k, p), 50, sel(run && late, 51, 0))
+
+def hollow_acts() -> List<C.Act>:
+  [C.Build{5, 33, 30, 0}, C.Build{7, 33, 44, 0}, C.Build{16, 33, 50, 0}, C.ParkOp{21}]
+
+# a scenario's park: its land and rides, gold, loan and research (steady
+# funding; the Dragon's Debt starts with three shops researched)
+type Game is Data:
+  Game{park: C.Park, ui: UI, wm: WM, snd: Z.Snd}
+
+def Game.park(g: Game) -> C.Park:
+  Game{p, ui, wm, snd} = g
+  p
+
+# Placing things: a ghost of what the tool would build under the mouse, green
+# where it can go and red where it can't (k: tool | ok << 8 | size << 9 |
+# ride kind << 12), and its cost beside the mouse
+def UI.new() -> UI:
+  UI{930, 880, 0, 0, 0, 0, 12, 0, 1, 0, 0, 0, 99999, 0, 0, 0n, 0}
+
+def coaster_acts() -> List<C.Act>:
+  [C.Build{10, 16, 38, 0}, C.TrackOp{5}, C.TrackOp{5}, C.TrackOp{6},
+   C.TrackOp{6}, C.TrackOp{6}, C.TrackOp{0}, C.TrackOp{4}, C.TrackOp{2},
+   C.TrackOp{2}, C.TrackOp{0}, C.TrackOp{0}, C.TrackOp{4}, C.TrackOp{0},
+   C.TrackOp{0}, C.TrackOp{0}, C.TrackOp{0}, C.TrackOp{0}, C.TrackOp{0},
+   C.TrackOp{2}, C.TrackOp{4}, C.TrackOp{0}, C.TrackOp{0}, C.TrackOp{0},
+   C.TrackOp{0}, C.TrackOp{4}, C.TrackOp{8}]
+
+def start_acts() -> List<C.Act>:
+  [C.Build{5, 33, 30, 0}, C.Build{6, 31, 40, 0}, C.Build{7, 33, 44, 0},
+   C.Build{8, 31, 48, 0}, C.Build{7, 13, 26, 0}, C.Build{6, 33, 24, 0},
+   C.Build{8, 51, 30, 0}, C.Build{5, 47, 37, 0},
+   C.Build{14, 32, 53, 0}, C.Build{13, 32, 52, 0}, C.Build{15, 32, 50, 0},
+   C.Build{15, 32, 34, 0}, C.Build{14, 24, 36, 0}, C.Build{13, 26, 36, 0},
+   C.Build{15, 28, 36, 0}, C.Build{14, 30, 46, 0}, C.Build{13, 34, 46, 0},
+   C.Build{16, 33, 50, 0}, C.Build{16, 13, 31, 0}, C.Build{30, 33, 47, 0}, C.Build{32, 31, 37, 0}, C.Build{31, 35, 37, 0},
+   C.Build{34, 33, 38, 0}, C.Build{11, 34, 37, 0},
+   C.Build{41, 31, 33, 0}, C.Build{41, 33, 33, 2}, C.Build{43, 31, 35, 0}, C.Build{43, 33, 35, 2},
+   C.Build{42, 29, 38, 0}, C.Build{44, 35, 22, 0}, C.Build{44, 36, 22, 0}, C.Build{44, 37, 22, 0},
+   C.Build{44, 37, 23, 0}, C.Build{45, 27, 25, 0}, C.Build{45, 27, 26, 0}, C.Build{45, 27, 27, 0},
+   C.Build{2, 44, 19, 0}, C.Build{9, 44, 19, 0}, C.Build{1, 44, 19, 0}, C.Build{9, 44, 18, 0},
+   C.Build{1, 44, 18, 0}, C.Build{9, 44, 17, 0}, C.Build{1, 44, 17, 0}, C.Build{9, 44, 16, 0},
+   C.Build{1, 44, 16, 0}, C.Build{9, 44, 15, 0}, C.Build{1, 44, 15, 0}, C.Build{9, 44, 14, 0},
+   C.Build{1, 44, 14, 0}, C.Build{9, 44, 13, 0}, C.Build{41, 44, 13, 3},
+   C.Build{9, 22, 21, 0}, C.Build{1, 22, 21, 0}, C.Build{9, 22, 22, 0}, C.Build{1, 22, 22, 0},
+   C.Build{9, 22, 23, 0}, C.Build{1, 22, 23, 0}, C.Build{9, 22, 24, 0}, C.Build{1, 22, 24, 0},
+   C.Build{9, 22, 25, 0}, C.Build{1, 22, 25, 0}, C.Build{9, 22, 26, 0}, C.Build{1, 22, 26, 0},
+   C.Build{9, 22, 27, 0}, C.Build{1, 22, 27, 0}, C.Build{9, 22, 28, 0}, C.Build{1, 22, 28, 0},
+   C.Build{9, 22, 29, 0}, C.Build{1, 22, 29, 0}, C.Build{9, 22, 30, 0}, C.Build{1, 22, 30, 0},
+   C.Build{9, 22, 31, 0}, C.Build{1, 22, 31, 0}, C.Build{9, 22, 32, 0}, C.Build{1, 22, 32, 0},
+   C.Build{9, 22, 33, 0}, C.Build{1, 22, 33, 0}, C.Build{9, 22, 34, 0}, C.Build{1, 22, 34, 0},
+   C.Build{9, 22, 35, 0}, C.Build{1, 22, 35, 0},
+   C.ParkOp{21}, C.ParkOp{21}, C.ParkOp{22}, C.ParkOp{23}, C.ParkOp{24}]
+
+def Game.new() -> Game:
+  +p0 = C.Park.run(start_acts(), C.Park.new())
+  +p1 = C.Park.run(coaster_acts(), p0)
+  Game{p1, UI.new(), WM.new(), Z.Snd.new()}
+
+# The app
+# -------
+
+def Scn.park(+k: U32) -> C.Park:
+  match k:
+    case 1:
+      C.Park.setup(C.Park.run(hollow_acts(), C.Park.new()), 12000, 0, ((1 << 26n) .|. (1 << 24n) : U32))
+    case 2:
+      C.Park.setup(Game.park(Game.new()), 2000, 15000, (41 .|. (2 << 26n) .|. (1 << 24n) : U32))
+    case 3:
+      C.Park.setup(Game.park(Game.new()), 20000, 0, ((3 << 26n) .|. (1 << 24n) : U32))
+    case _:
+      Game.park(Game.new())
+
+def Scn.swap(ask: Bool, +req: U32, +p: C.Park) -> C.Park:
+  match ask:
+    case True{}:
+      Scn.park((req - 1 : U32))
+    case False{}:
+      p
+
+# Awards, each new month: the first the park earns (0 none)
+def Award.thrills(+rs: +List<C.Ride>) -> U32:
+  match rs:
+    case []:
+      0
+    case r <> rest:
+      +k = C.Ride.kind(r)
+      (sel(U32.is_eq(k, 2) || U32.is_eq(k, 5) || U32.is_eq(k, 10) || U32.is_eq(k, 16) || U32.is_eq(k, 17), 1, 0) + Award.thrills(rest) : U32)
+
+def Award.pick(now: Bool, +p: C.Park) -> U32:
+  match now:
+    case True{}:
+      +n = C.len32(C.Guest, C.Park.guests(p))
+      +tidy = (C.len32(U32, C.Park.mess(p)) < 15 : U32) && (n >= 150 : U32)
+      +pretty = (C.Scen.count(4096n, 0, C.Park.map(p), 0) >= 20 : U32)
+      +happy = (happy_avg(C.Park.guests(p), 0, 0) >= 75 : U32) && (n >= 200 : U32)
+      +staffed = (C.len32(C.Staff, C.Park.staff(p)) >= 8 : U32)
+      +thrill = (Award.thrills(C.Park.rides(p)) >= 4 : U32)
+      sel(tidy, 131, sel(pretty, 132, sel(happy, 133, sel(staffed, 134, sel(thrill, 135, 0)))))
+    case False{}:
+      0
+
+# The main menu (UI opt bit 18), over the park; a choice asks (bits 15-17)
+# for a new park, which the next step builds
+def menu_btn(label: String, sub: String, +y: U32, +hot: Bool, +acc: +List<Dr>) -> +List<Dr>:
+  T(label, 122, (y + 2 : U32), sel(hot, 16766282, 16777215),
+  T(sub, 122, (y + 13 : U32), 11579568,
+  R(116, y, 280, 11, sel(hot, 6957706, 4863024), acc)))
+
+def menu_hot(+mx: U32, +my: U32, +y: U32) -> Bool:
+  in_box(mx, my, 116, y, 280, 11)
+
+def menu_dr(+mx: U32, +my: U32) -> +List<Dr>:
+  T("ELDERGROVE FAIRE", 222, 50, 16766282,
+  T("A FAIRE OF WONDERS, BUILT BY YOU", 190, 60, 12648447,
+  menu_btn("SANDBOX: THE ELDERGROVE FAIRE", "EVERY RIDE, NO GOALS", 76, menu_hot(mx, my, 76),
+  menu_btn("SCENARIO: MISTY HOLLOW", "AN EMPTY VALE. " ++ Scn.goal(1), 104, menu_hot(mx, my, 104),
+  menu_btn("SCENARIO: THE DRAGON'S DEBT", "15000 OWED. " ++ Scn.goal(2), 132, menu_hot(mx, my, 132),
+  menu_btn("SCENARIO: THE GRAND TOURNEY", Scn.goal(3), 160, menu_hot(mx, my, 160),
+  menu_btn("LOAD THE SAVED PARK", "F9 IN THE PARK DOES THE SAME", 188, menu_hot(mx, my, 188),
+  menu_btn("QUIT", "", 216, menu_hot(mx, my, 216),
+  R(106, 40, 300, 200, 2763330, R(104, 38, 304, 204, 13148232, R(108, 43, 304, 204, 1052688, [])))))))))))
+
+type EV is Data:
+  EV{ui: UI, wm: WM, acts: List<&2, C.Act>, quit: Bool}
+
+# the camera: the arrows, or W A S D
+def on_menu(+lx: U32, +ly: U32, +down: Bool, +ui: UI, +wm: WM) -> EV:
+  UI{cx, cy, keys, mx, my, md, tool, var, sp, msg, fr, inc, last, +io, fps, tl, +opt} = ui
+  +k = sel(menu_hot(lx, ly, 76), 1, sel(menu_hot(lx, ly, 104), 2, sel(menu_hot(lx, ly, 132), 3,
+    sel(menu_hot(lx, ly, 160), 4, sel(menu_hot(lx, ly, 188), 5, sel(menu_hot(lx, ly, 216), 6, 0))))))
+  +pick = down && (k >= 1 : U32) && (k <= 4 : U32)
+  +load = down && U32.is_eq(k, 5)
+  +opt2 = sel(pick, ((opt .&. 4294705151) .|. (k << 15n) : U32), sel(load, (opt .&. 4294705151 : U32), opt))
+  EV{UI{cx, cy, keys, lx, ly, md, tool, var, sp, msg, fr, inc, last, sel(load, 2, io), fps, tl, opt2}, wm, [],
+    down && U32.is_eq(k, 6)}
+
+def Menu.on(+ui: UI) -> Bool:
+  Bool.not(U32.is_eq((UI.opt(ui) .&. 262144 : U32), 0))
+
+# the scenario's outcome
 def win_code(+k: U32, +lx: U32, +ly: U32) -> U32:
   sel((ly < 10 : U32) && (lx + 10 >= Win.w(k) : U32), 1, sel((ly < 10 : U32), 2,
     sel(U32.is_eq(k, 1), ride_click(lx, ly), sel(U32.is_eq(k, 2), park_click(lx, ly),
@@ -2217,9 +2465,6 @@ def win_act(+p: C.Park, +arg: U32, +code: U32) -> +List<C.Act>:
     Bool.pick(+List<C.Act>, (code >= 100 : U32), [ride_act(p, arg, (code - 100 : U32))], [])))
 
 # a ride setting; opening the coaster goes through its track
-type Game is Data:
-  Game{park: C.Park, ui: UI, wm: WM, snd: Z.Snd}
-
 def Dyn.is_below(+d: Dyn, +k: U32) -> Bool:
   (Dyn.key(d) < k : U32)
 
@@ -2295,18 +2540,12 @@ def scene(+g: Game) -> +List<Dr>:
   # the back and front halves of the map are built in parallel
   hi lo = diags(63n, 64, map, rides, rt, ar, vx, vy, vw, vh, hov, dyn_from(sorted, 64), [])
     diags(64n, 0, map, rides, rt, ar, vx, vy, vw, vh, hov, dyn_below(sorted, 64), [])
-  +overwin = Bool.not(U32.is_eq(Wins.at(WM.wins(wm), mx, my, 0), C.NONE()))
+  +overwin = Bool.not(U32.is_eq(Wins.at(WM.wins(wm), mx, my, 0), C.NONE())) || Bool.not(U32.is_eq((UI.opt(ui) .&. 262144 : U32), 0))
   +ghost = ghost_dr(p, tool, hov, vx, vy, overwin)
-  +front = ghost_cost(p, tool, hov, mx, my, overwin, wins_dr(WM.wins(wm), p, UI.opt(ui), hud(p, ui, hov)))
+  +front = ghost_cost(p, tool, hov, mx, my, overwin, wins_dr(WM.wins(wm), p, UI.opt(ui),
+    Bool.pick(+List<Dr>, Menu.on(ui), menu_dr(mx, my), hud(p, ui, hov))))
   List.append(&2, Dr, front, List.append(&2, Dr, ghost, List.append(&2, Dr, hi, lo)))
 
-def Game.park(g: Game) -> C.Park:
-  Game{p, ui, wm, snd} = g
-  p
-
-# Placing things: a ghost of what the tool would build under the mouse, green
-# where it can go and red where it can't (k: tool | ok << 8 | size << 9 |
-# ride kind << 12), and its cost beside the mouse
 def Game.zoom(g: Game) -> U32:
   Game{p, ui, wm, snd} = g
   UI{cx, cy, keys, mx, my, md, tool, var, sp, msg, fr, inc, last, io, fps, tl, opt} = ui
@@ -2320,16 +2559,9 @@ def frame(+g: Game) -> Image:
   R.frame(scene(g), ((C.Park.time(Game.park(g)) .&. 536870911) .|. (Game.zoom(g) << 30n)
     .|. sel(Game.lo(g), 536870912, 0) : U32))
 
-def UI.new() -> UI:
-  UI{930, 880, 0, 0, 0, 0, 12, 0, 1, 0, 0, 0, 99999, 0, 0, 0n, 0}
-
 def u32s(+n: U32) -> String:
   U32.show(n)
 
-type EV is Data:
-  EV{ui: UI, wm: WM, acts: List<&2, C.Act>, quit: Bool}
-
-# the camera: the arrows, or W A S D
 def key_bit(+c: U32) -> U32:
   match c:
     case 63232:
@@ -2559,11 +2791,18 @@ def on_mouse.go(inwin: Bool, +wi: U32, +lx: U32, +ly: U32, +button: U32, +down: 
     case False{}:
       on_map(lx, ly, button, down, ui, wm, p)
 
+def on_mouse.menu(menu: Bool, +x: U32, +y: U32, +button: U32, +down: Bool, +ui: UI, +wm: WM, +p: C.Park) -> EV:
+  match menu:
+    case True{}:
+      on_menu((x >> 1n : U32), (y >> 1n : U32), down, ui, wm)
+    case False{}:
+      +lx = (x >> 1n : U32)
+      +ly = (y >> 1n : U32)
+      +wi = Wins.at(WM.wins(wm), lx, ly, 0)
+      on_mouse.go(down && Bool.not(U32.is_eq(wi, C.NONE())), wi, lx, ly, button, down, ui, wm, p)
+
 def on_mouse(+x: U32, +y: U32, +button: U32, +down: Bool, +ui: UI, +wm: WM, +p: C.Park) -> EV:
-  +lx = (x >> 1n : U32)
-  +ly = (y >> 1n : U32)
-  +wi = Wins.at(WM.wins(wm), lx, ly, 0)
-  on_mouse.go(down && Bool.not(U32.is_eq(wi, C.NONE())), wi, lx, ly, button, down, ui, wm, p)
+  on_mouse.menu(Menu.on(ui), x, y, button, down, ui, wm, p)
 
 def on_event(e: Event, +ui: UI, +wm: WM, +p: C.Park) -> EV:
   match e:
@@ -2739,22 +2978,30 @@ def UI.said(u: UI, +m: U32) -> UI:
 
 def step_game.go(+p: C.Park, +ui: UI, +wm: WM, +acts: +List<C.Act>, quit: Bool,
   snd: Z.Snd, +clicked: Bool) -> Maybe<Game>:
-  UI{+cx, +cy, +keys, mx, my, md, tool, +var, +sp, +msg, +fr, +inc, last, io, fps, tl, opt} = ui
-  +r1 = apply(acts, p, msg, inc)
-  +r2 = ticks(U32.to_nat(sp), Res.park(r1), Res.inc(r1))
+  UI{+cx, +cy, +keys, mx, my, md, tool, +var, +sp, +msg, +fr, +inc, last, io, fps, tl, +opt} = ui
+  +req = ((opt >> 15n) .&. 7 : U32)
+  +p0 = Scn.swap((req > 0 : U32), req, p)
+  +r1 = apply(acts, p0, msg, inc)
+  +r20 = ticks(U32.to_nat(sp), Res.park(r1), Res.inc(r1))
+  +gop = Goal.op(Res.park(r20))
+  +r2 = {Res{C.Park.run(Bool.pick(List<C.Act>, (gop > 0 : U32), [C.ParkOp{gop}], []), Res.park(r20)), Res.msg(r20), Res.inc(r20)} : Res}
   +time = C.Park.time(Res.park(r2))
   +newmonth = U32.is_eq((time % 3600 : U32), 0)
   +m2 = sel(U32.is_eq((fr .&. 255 : U32), 0), 0, Res.msg(r1))
   +step = sel(U32.is_eq(View.z(var), 1), 4, sel(U32.is_eq(View.z(var), 2), 16, 8))
   +ui2 = {UI{cam(keys, cx, 4, 8, step, 260, 2000), cam(keys, cy, 1, 2, step, 170, 1500), keys, mx, my, md, tool,
     var, sp, sel(U32.is_eq(Res.msg(r1), msg), m2, Res.msg(r1)), (fr + 1 : U32),
-    sel(newmonth, 0, Res.inc(r2)), last, io, fps, tl, opt} : UI}
+    sel(newmonth, 0, Res.inc(r2)), last, io, fps, tl,
+    sel((req > 0 : U32), (opt .&. 4294705151 .&. 4294737919 : U32), opt)} : UI}
   +bk = Rides.broke(C.Park.rides(p), C.Park.rides(Res.park(r2)))
   +word = (snd_word(p, Res.park(r2), inc, Res.inc(r2), msg, Res.msg(r1), clicked, var)
     .|. (Opt.vol(opt, 4n) << 27n) .|. (Opt.vol(opt, 6n) << 29n)
     .|. sel(A.Art.rain(C.Park.time(Res.park(r2))), 2147483648, 0)
     .|. sel((bk >= 100 : U32) && (bk < 110 : U32), 8, sel((bk >= 110 : U32), 16, 0)) : U32)
-  Bool.pick(Maybe<Game>, quit, None{}, Some{Game{Res.park(r2), UI.said(ui2, bk), wm, Z.Snd.cue(snd, word)}})
+  +award = Award.pick(newmonth && (time > 0 : U32), Res.park(r2))
+  +wm2 = {WM{Bool.pick(+List<Win>, (gop > 0 : U32), Wins.open(WM.wins(wm), 7, 0, 150, 90), WM.wins(wm)), WM.drag(wm), WM.gx(wm), WM.gy(wm)} : WM}
+  Bool.pick(Maybe<Game>, quit, None{}, Some{Game{Res.park(r2), UI.said(ui2, sel((award > 0 : U32), award, bk)), wm2,
+    Z.Snd.cue(snd, (word .|. sel((gop > 0 : U32) || (award > 0 : U32), 16, 0) : U32))}})
 
 def UI.tool(u: UI) -> U32:
   UI{cx, cy, keys, mx, my, md, tool, var, sp, msg, fr, inc, last, io, fps, tl, opt} = u
@@ -2771,48 +3018,6 @@ def step_game(+g: Game, events: List<Event>) -> Maybe<Game>:
 
 # The starting park
 # -----------------
-
-def coaster_acts() -> List<C.Act>:
-  [C.Build{10, 16, 38, 0}, C.TrackOp{5}, C.TrackOp{5}, C.TrackOp{6},
-   C.TrackOp{6}, C.TrackOp{6}, C.TrackOp{0}, C.TrackOp{4}, C.TrackOp{2},
-   C.TrackOp{2}, C.TrackOp{0}, C.TrackOp{0}, C.TrackOp{4}, C.TrackOp{0},
-   C.TrackOp{0}, C.TrackOp{0}, C.TrackOp{0}, C.TrackOp{0}, C.TrackOp{0},
-   C.TrackOp{2}, C.TrackOp{4}, C.TrackOp{0}, C.TrackOp{0}, C.TrackOp{0},
-   C.TrackOp{0}, C.TrackOp{4}, C.TrackOp{8}]
-
-def start_acts() -> List<C.Act>:
-  [C.Build{5, 33, 30, 0}, C.Build{6, 31, 40, 0}, C.Build{7, 33, 44, 0},
-   C.Build{8, 31, 48, 0}, C.Build{7, 13, 26, 0}, C.Build{6, 33, 24, 0},
-   C.Build{8, 51, 30, 0}, C.Build{5, 47, 37, 0},
-   C.Build{14, 32, 53, 0}, C.Build{13, 32, 52, 0}, C.Build{15, 32, 50, 0},
-   C.Build{15, 32, 34, 0}, C.Build{14, 24, 36, 0}, C.Build{13, 26, 36, 0},
-   C.Build{15, 28, 36, 0}, C.Build{14, 30, 46, 0}, C.Build{13, 34, 46, 0},
-   C.Build{16, 33, 50, 0}, C.Build{16, 13, 31, 0}, C.Build{30, 33, 47, 0}, C.Build{32, 31, 37, 0}, C.Build{31, 35, 37, 0},
-   C.Build{34, 33, 38, 0}, C.Build{11, 34, 37, 0},
-   C.Build{41, 31, 33, 0}, C.Build{41, 33, 33, 2}, C.Build{43, 31, 35, 0}, C.Build{43, 33, 35, 2},
-   C.Build{42, 29, 38, 0}, C.Build{44, 35, 22, 0}, C.Build{44, 36, 22, 0}, C.Build{44, 37, 22, 0},
-   C.Build{44, 37, 23, 0}, C.Build{45, 27, 25, 0}, C.Build{45, 27, 26, 0}, C.Build{45, 27, 27, 0},
-   C.Build{2, 44, 19, 0}, C.Build{9, 44, 19, 0}, C.Build{1, 44, 19, 0}, C.Build{9, 44, 18, 0},
-   C.Build{1, 44, 18, 0}, C.Build{9, 44, 17, 0}, C.Build{1, 44, 17, 0}, C.Build{9, 44, 16, 0},
-   C.Build{1, 44, 16, 0}, C.Build{9, 44, 15, 0}, C.Build{1, 44, 15, 0}, C.Build{9, 44, 14, 0},
-   C.Build{1, 44, 14, 0}, C.Build{9, 44, 13, 0}, C.Build{41, 44, 13, 3},
-   C.Build{9, 22, 21, 0}, C.Build{1, 22, 21, 0}, C.Build{9, 22, 22, 0}, C.Build{1, 22, 22, 0},
-   C.Build{9, 22, 23, 0}, C.Build{1, 22, 23, 0}, C.Build{9, 22, 24, 0}, C.Build{1, 22, 24, 0},
-   C.Build{9, 22, 25, 0}, C.Build{1, 22, 25, 0}, C.Build{9, 22, 26, 0}, C.Build{1, 22, 26, 0},
-   C.Build{9, 22, 27, 0}, C.Build{1, 22, 27, 0}, C.Build{9, 22, 28, 0}, C.Build{1, 22, 28, 0},
-   C.Build{9, 22, 29, 0}, C.Build{1, 22, 29, 0}, C.Build{9, 22, 30, 0}, C.Build{1, 22, 30, 0},
-   C.Build{9, 22, 31, 0}, C.Build{1, 22, 31, 0}, C.Build{9, 22, 32, 0}, C.Build{1, 22, 32, 0},
-   C.Build{9, 22, 33, 0}, C.Build{1, 22, 33, 0}, C.Build{9, 22, 34, 0}, C.Build{1, 22, 34, 0},
-   C.Build{9, 22, 35, 0}, C.Build{1, 22, 35, 0},
-   C.ParkOp{21}, C.ParkOp{21}, C.ParkOp{22}, C.ParkOp{23}, C.ParkOp{24}]
-
-def Game.new() -> Game:
-  +p0 = C.Park.run(start_acts(), C.Park.new())
-  +p1 = C.Park.run(coaster_acts(), p0)
-  Game{p1, UI.new(), WM.new(), Z.Snd.new()}
-
-# The app
-# -------
 
 def view(g: Game) -> Game & Image:
   +g2 = g
@@ -3098,6 +3303,26 @@ def crowd(g: Game, +n: U32) -> Game:
   Game{C.Park{map, crowd.go(U32.to_nat(n), nid, time, guests), rides, track, cash, time,
     (nid + n : U32), fin, mess, staff}, ui, wm, snd}
 
+# --scen K MONTHS: play scenario K a month at a time, reporting its state
+def scen.line(+p: C.Park) -> String:
+  +r = C.Fin.res(C.Park.fin(p))
+  "month " ++ U32.show((C.Park.time(p) / 3600 : U32)) ++ ": guests " ++ U32.show(C.len32(C.Guest, C.Park.guests(p)))
+    ++ ", rating " ++ U32.show(C.Fin.rating(C.Park.fin(p))) ++ ", gold " ++ U32.show(C.Park.cash(p))
+    ++ ", loan " ++ U32.show(C.Fin.loan(C.Park.fin(p))) ++ ", researched " ++ U32.show((r .&. 8191 : U32))
+    ++ ", progress " ++ U32.show(((r >> 16n) .&. 255 : U32)) ++ ", status " ++ U32.show(Scn.status(p))
+
+def scen.run(+n: Nat, +p: C.Park) -> IO(Unit):
+  match n:
+    case 0n:
+      IO.pure(Unit, Unit{})
+    case 1n+m:
+      +p1 = Res.park(ticks(3600n, p, 0))
+      +op = Goal.op(p1)
+      +p2 = C.Park.run(Bool.pick(List<C.Act>, (op > 0 : U32), [C.ParkOp{op}], []), p1)
+      do IO<Unit>:
+        IO.print(scen.line(p2))
+        scen.run(m, p2)
+
 def warm(g: Game, +n: Nat) -> Game:
   Game{+p, +ui, wm, snd} = g
   Game{Res.park(ticks(n, p, 0)), ui, wm, snd}
@@ -3265,7 +3490,7 @@ def Loop.start(g: Game) -> IO(Unit):
 def Loop.run(g: Game) -> IO(Unit):
   do IO<Unit>:
     env : Result<&1, &1, U32 & String, String> <- IO.get_env("PARK_OPT")
-    Loop.start(Game.with_opt(g, env_opt(env)))
+    Loop.start(Game.with_opt(g, (env_opt(env) .|. 262144 : U32)))
 
 def is_arg(+args: +List<String>, s: String) -> Bool:
   match args:
@@ -3466,6 +3691,7 @@ def ui.report(g: Game) -> String:
     ++ ", open " ++ U32.show(C.Ride.open_flag(r0)) ++ ", max wait " ++ U32.show(C.Ride.wmax(r0))
     ++ ", fee " ++ U32.show(C.Fin.fee(C.Park.fin(p))) ++ ", loan " ++ U32.show(C.Fin.loan(C.Park.fin(p)))
     ++ ", gold " ++ U32.show(C.Park.cash(p)) ++ ", tool " ++ U32.show(UI.tool(ui)) ++ " (tab " ++ U32.show(UI.cat(UI.var(ui))) ++ ")"
+    ++ ", scenario " ++ U32.show(Scn.of(p)) ++ ", menu " ++ Bool.show(Menu.on(ui))
 
 # each stage: what it did, then the game after it
 def ui.s1(g: Game) -> Game:
@@ -3515,6 +3741,10 @@ def ui.s8(g: Game) -> Game:
 def ui.s9(g: Game) -> Game:
   ui.step(g, [Key{49, True{}}, Key{49, False{}}, Key{49, True{}}, Key{49, False{}}])
 
+# the main menu, then Misty Hollow
+def ui.s10(g: Game) -> Game:
+  ui.step(Game.with_opt(g, 262144), ui.click(200, 108, 0))
+
 def ui.next(+k: U32, g: Game) -> Game:
   match k:
     case 1:
@@ -3533,6 +3763,8 @@ def ui.next(+k: U32, g: Game) -> Game:
       ui.s8(ui.step(g, [Key{27, True{}}]))
     case 8:
       ui.s9(g)
+    case 9:
+      ui.s10(g)
     case _:
       g
 
@@ -3549,7 +3781,7 @@ def ui.run(+n: Nat, +k: U32, +g: Game) -> IO(Unit):
         ui.run(m, (k + 1 : U32), ui.next(k, g))
 
 def ui.test() -> IO(Unit):
-  ui.run(9n, 1, ui.s1(Game.new()))
+  ui.run(10n, 1, ui.s1(Game.new()))
 
 # --people out.ppm: every folk (columns) as adults facing front and back,
 # as children, and in the three outfits, at close zoom, to check the art
@@ -3592,7 +3824,8 @@ def start.go(bench: Bool, +args: +List<String>) -> IO(Unit):
       Bool.pick(IO(Unit), is_arg(args, "--uitest"), ui.test(),
         Bool.pick(IO(Unit), is_arg(args, "--people"), people_shot(nth(args, 1)),
         Bool.pick(IO(Unit), is_arg(args, "--rides"), rides_shot(nth(args, 1), arg_u32(nth(args, 2))),
-          start.test(is_arg(args, "--savetest"), args))))
+        Bool.pick(IO(Unit), is_arg(args, "--scen"), scen.run(arg_nat(nth(args, 2)), Scn.park(arg_u32(nth(args, 1)))),
+          start.test(is_arg(args, "--savetest"), args)))))
 
 def start(+args: +List<String>) -> IO(Unit):
   start.go(is_bench(args), args)

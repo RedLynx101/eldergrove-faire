@@ -30,6 +30,7 @@ Dev modes:
 - `./park --uitest` clicks through a ride window headlessly and reports what changed.
 - `./park --people out.ppm` draws every folk and outfit on one sheet.
 - `./park --rides out.ppm T` draws the M6 rides T ticks into a run, every seat taken.
+- `./park --scen K MONTHS` plays scenario K (0 sandbox, 1-3) a month at a time and reports it.
 - `./park --wav out.wav SECONDS` records the music with every effect in turn;
   `python3 tools/wavcheck.py out.wav out.png` prints its levels and draws it. `PARK_MUTE=1` plays nothing.
 - `--shot` takes an optional 6th argument, a window to show (kind * 256 + ride; 256 is the carousel's), and a 7th, the zoom (0 normal, 1 close, 2 far).
@@ -129,7 +130,9 @@ The path tool also builds over water: a plank bridge with rails.
 Days turn to night and back (about half a minute a day): lanterns and ride lights glow, fireflies come
 out. Some days it rains, and fewer guests come.
 
-The park window funds research (none, steady, lavish), which unlocks rides and scenery one at a time in
+The game opens on a main menu: sandbox, or one of three scenarios with a goal and a deadline (Misty
+Hollow, The Dragon's Debt, The Grand Tourney); a window says when a scenario is won or lost. Awards come
+now and then at the turn of a month. The park window funds research (none, steady, lavish), which unlocks rides and scenery one at a time in
 scenarios; locked tools show a padlock. Buy Land (land tab) opens up the wild forest at the park's edge.
 
 Mess: guests drop wrappers when they finish what they carry, and very queasy

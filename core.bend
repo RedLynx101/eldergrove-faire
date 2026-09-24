@@ -3173,7 +3173,8 @@ def Fin.set(f: Fin, +op: U32, +borrow: Bool, +repay: Bool) -> Fin:
   Fin{+fee, +loan, rating, now, last, hist, +res} = f
   Fin{Fee.cap(sel(U32.is_eq(op, 0), (fee + 1 : U32), sel(U32.is_eq(op, 1), sub0(fee, 1), fee))),
     sel(borrow, (loan + 1000 : U32), sel(repay, (loan - 1000 : U32), loan)), rating, now, last, hist,
-    sel((op >= 40 : U32) && (op <= 42 : U32), ((res .&. 4244635647) .|. ((op - 40) << 24n) : U32), res)}
+    sel(U32.is_eq(op, 50), (res .|. 1073741824 : U32), sel(U32.is_eq(op, 51), (res .|. 2147483648 : U32),
+    sel((op >= 40 : U32) && (op <= 42 : U32), ((res .&. 4244635647) .|. ((op - 40) << 24n) : U32), res)))}
 
 def Park.park_op(p: Park, +op: U32) -> Out:
   Park{map, guests, +rides, track, +cash, +time, nid, +fin, mess, +staff} = p
@@ -3206,6 +3207,15 @@ def Park.step0(p: Park, a: Act) -> Out:
 # the one door every change comes through
 def Park.step(p: Park, a: Act) -> Out:
   Out.book(Park.step0(p, a))
+
+# a scenario's opening: gold, loan and research set before play begins
+def Fin.setup(f: Fin, +loan: U32, +res: U32) -> Fin:
+  Fin{fee, l, rating, now, last, hist, r} = f
+  Fin{fee, loan, rating, now, last, hist, res}
+
+def Park.setup(p: Park, +cash: U32, +loan: U32, +res: U32) -> Park:
+  Park{map, guests, rides, track, c, time, nid, fin, mess, staff} = p
+  Park{map, guests, rides, track, cash, time, nid, Fin.setup(fin, loan, res), mess, staff}
 
 def Park.new() -> Park:
   Park{Land.fix(Q.build(6n, 0, 0)), [], [], Track.empty(), 30000, 0, 1, Fin.new(), [], []}
