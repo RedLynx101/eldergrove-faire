@@ -91,9 +91,27 @@ def Dr.shade(d: Dr, +px: U32, +py: U32, +t: U32) -> U32:
 # The rasterizer
 # --------------
 
+# The rasterizer
+# --------------
+# The frame is cut into 64-px cells and 16-px tiles, as Bend's shader guide
+# prescribes. Each cell cuts the frame's list once for itself and each tile
+# cuts its cell's list; the tile's pixels then walk that short list in
+# straight-line code (no forks below the tile). A list handed down the tree
+# is only ever matched, so every read is a borrow, not a reference count;
+# a kept entry is copied from its fields, so no entry is shared between
+# cores; and each list has one last consumer (R.fin) that frees it.
+
 def SKY() -> U32:
   1714237
 
+def Dr.shade_if(hit: Bool, d: Dr, +px: U32, +py: U32, +t: U32) -> U32:
+  match hit:
+    case True{}:
+      Dr.shade(d, px, py, t)
+    case False{}:
+      A.TR()
+
+# front-to-back: the first opaque sample wins; `done` stops the walk
 def first(+xs: +List<Dr>, done: Bool, +c: U32, +px: U32, +py: U32, +t: U32)
   -> U32:
   match xs done:
@@ -101,92 +119,11 @@ def first(+xs: +List<Dr>, done: Bool, +c: U32, +px: U32, +py: U32, +t: U32)
       c
     case Nil{} False{}:
       SKY()
-    case Con{d, rest} False{}:
-      +c2 = Dr.shade(d, px, py, t)
+    case Con{+d, rest} False{}:
+      +c2 = Dr.shade_if(Dr.hits(d, px, py, 1), d, px, py, t)
       first(rest, A.opaque(c2), c2, px, py, t)
 
-def put(keep: Bool, +d: Dr, +xs: +List<Dr>) -> +List<Dr>:
-  match keep:
-    case True{}:
-      d <> xs
-    case False{}:
-      xs
-
-def filt(+xs: +List<Dr>, +bx: U32, +by: U32, +s: U32) -> +List<Dr>:
-  match xs:
-    case []:
-      []
-    case d <> rest:
-      put(Dr.hits(d, bx, by, s), d, filt(rest, bx, by, s))
-
-# a node wholly inside a solid rectangle at the front of its list
-def Dr.solid(d: Dr, +x0: U32, +y0: U32, +s: U32) -> U32:
-  match d:
-    case DRect{+x, +y, +w, +h, col}:
-      sel(((x <= x0) && (y <= y0) && (x0 + s <= x + w) && (y0 + s <= y + h) : U32), col, A.TR())
-    case _:
-      A.TR()
-
-def solid(+xs: +List<Dr>, +x0: U32, +y0: U32, +s: U32) -> U32:
-  match xs:
-    case []:
-      A.TR()
-    case d <> rest:
-      Dr.solid(d, x0, y0, s)
-
-# each node partitions its drawables among its four children in one pass,
-# so every child task owns its list outright. Reading shared data across
-# cores is slow in this runtime, so each list is consumed exactly once: the
-# pass also notes, per child, whether it is empty or sits wholly inside a
-# solid rectangle (f: EMPTY, that colour, or TR to draw it pixel by pixel).
-type Q4 is Data:
-  Q4{a: List<&2, Dr>, b: List<&2, Dr>, c: List<&2, Dr>, d: List<&2, Dr>,
-    fa: U32, fb: U32, fc: U32, fd: U32}
-
-def EMPTY() -> U32:
-  4294967295
-
-def mask4(+x0: U32, +y0: U32, +x1: U32, +y1: U32, +bx: U32, +by: U32, +s: U32)
-  -> U32:
-  +mx = (bx + s : U32)
-  +my = (by + s : U32)
-  +l = (x0 < mx : U32)
-  +r = (x1 > mx : U32)
-  +tp = (y0 < my : U32)
-  +bt = (y1 > my : U32)
-  +inx = ((x1 > bx) && (x0 < bx + 2 * s) : U32)
-  +iny = ((y1 > by) && (y0 < by + 2 * s) : U32)
-  +ok = inx && iny
-  (sel(ok && l && tp, 1, 0) + sel(ok && r && tp, 2, 0) + sel(ok && l && bt, 4, 0)
-    + sel(ok && r && bt, 8, 0) : U32)
-
-def Dr.mask4(d: Dr, +bx: U32, +by: U32, +s: U32) -> U32:
-  match d:
-    case DBlock{+x, +y, +dl, +dr, ter, obj, hov, wx, wy}:
-      mask4((x - 16 : U32), y, (x + 16 : U32), (y + 17 + U32.max(dl, dr) : U32), bx, by, s)
-    case DTree{+x, +y, v, n}:
-      mask4((x - 11 : U32), (y - 36 : U32), (x + 12 : U32), (y + 2 : U32), bx, by, s)
-    case DRide{+x, +y, k}:
-      mask4((x - 30 : U32), (y - 78 : U32), (x + 31 : U32), (y + 16 : U32), bx, by, s)
-    case DGate{+x, +y}:
-      mask4((x - 20 : U32), (y - 48 : U32), (x + 20 : U32), (y + 6 : U32), bx, by, s)
-    case DTrack{+x, +y, code, +zr}:
-      mask4((x - 16 : U32), (y - zr * 8 - 12 : U32), (x + 17 : U32), (y + 17 : U32), bx, by, s)
-    case DGuest{+x, +y, look, ph}:
-      mask4((x - 3 : U32), (y - 14 : U32), (x + 4 : U32), (y + 1 : U32), bx, by, s)
-    case DCar{+x, +y, d, lead}:
-      mask4((x - 10 : U32), (y - 12 : U32), (x + 11 : U32), (y + 6 : U32), bx, by, s)
-    case DGlyph{+x, +y, bits, col}:
-      mask4(x, y, (x + 4 : U32), (y + 6 : U32), bx, by, s)
-    case DRect{+x, +y, +w, +h, col}:
-      mask4(x, y, (x + w : U32), (y + h : U32), bx, by, s)
-    case DIcon{+x, +y, tool, on}:
-      mask4(x, y, (x + 22 : U32), (y + 22 : U32), bx, by, s)
-
-def bit(+m: U32, +k: U32) -> Bool:
-  Bool.not(U32.is_eq((m .&. k : U32), 0))
-
-# a fresh copy, so no drawable is shared between cores
+# a fresh copy from the fields, so no drawable is shared between lists
 def Dr.cp(d: Dr) -> Dr:
   match d:
     case DBlock{x, y, dl, dr, ter, obj, hov, wx, wy}:
@@ -210,58 +147,135 @@ def Dr.cp(d: Dr) -> Dr:
     case DIcon{x, y, tool, on}:
       DIcon{x, y, tool, on}
 
-def putc(keep: Bool, +d: Dr, xs: +List<Dr>) -> +List<Dr>:
+def cut.put(keep: Bool, d: Dr, xs: +List<Dr>) -> +List<Dr>:
   match keep:
     case True{}:
       Dr.cp(d) <> xs
     case False{}:
       xs
 
-def put4(+m: U32, +d: Dr, +x0: U32, +y0: U32, +s: U32, q: Q4) -> Q4:
-  Q4{a, b, c, e, fa, fb, fc, fe} = q
-  +x1 = (x0 + s : U32)
-  +y1 = (y0 + s : U32)
-  Q4{putc(bit(m, 1), d, a), putc(bit(m, 2), d, b), putc(bit(m, 4), d, c),
-    putc(bit(m, 8), d, e),
-    sel(bit(m, 1), Dr.solid(d, x0, y0, s), fa), sel(bit(m, 2), Dr.solid(d, x1, y0, s), fb),
-    sel(bit(m, 4), Dr.solid(d, x0, y1, s), fc), sel(bit(m, 8), Dr.solid(d, x1, y1, s), fe)}
-
-def split4(xs: +List<Dr>, +x0: U32, +y0: U32, +s: U32) -> Q4:
+# the entries that reach the square (bx, by, s), in order
+def cut(xs: +List<Dr>, +bx: U32, +by: U32, +s: U32) -> +List<Dr>:
   match xs:
     case []:
-      Q4{[], [], [], [], EMPTY(), EMPTY(), EMPTY(), EMPTY()}
+      []
     case +d <> rest:
-      put4(Dr.mask4(d, x0, y0, s), d, x0, y0, s, split4(rest, x0, y0, s))
+      cut.put(Dr.hits(d, bx, by, s), d, cut(rest, bx, by, s))
 
-def fill(+f: U32) -> U32:
-  sel(U32.is_eq(f, EMPTY()), SKY(), f)
+def empty(+xs: +List<Dr>) -> Bool:
+  match xs:
+    case []:
+      True{}
+    case d <> rest:
+      False{}
 
-def must(+f: U32) -> Bool:
-  Bool.not(U32.is_eq(f, A.TR()))
+# a square wholly inside a solid rectangle at the front of its list
+def Dr.solid(d: Dr, +x0: U32, +y0: U32, +s: U32) -> U32:
+  match d:
+    case DRect{+x, +y, +w, +h, col}:
+      sel(((x <= x0) && (y <= y0) && (x0 + s <= x + w) && (y0 + s <= y + h) : U32), col, A.TR())
+    case _:
+      A.TR()
 
-# a node of size 2^(d+1) at (x0, y0); q holds its four children's lists
-def draw4(+d: Nat, skip: Bool, +fc: U32, q: Q4, +x0: U32, +y0: U32, +t: U32)
+def solid(+xs: +List<Dr>, +x0: U32, +y0: U32, +s: U32) -> U32:
+  match xs:
+    case []:
+      SKY()
+    case d <> rest:
+      Dr.solid(d, x0, y0, s)
+
+# the list's last consumer: walks it after the readers, then answers img
+def R.fin(img: Image, xs: +List<Dr>) -> Image:
+  match xs:
+    case []:
+      img
+    case d <> rest:
+      R.fin(img, rest)
+
+def R.px4(same: Bool, +c0: U32, +c1: U32, +c2: U32, +c3: U32) -> Image:
+  match same:
+    case True{}:
+      Pix{c0}
+    case False{}:
+      Qua{Pix{c0}, Pix{c1}, Pix{c2}, Pix{c3}}
+
+def R.b2(+xs: +List<Dr>, +x: U32, +y: U32, +t: U32) -> Image:
+  +x1 = (x + 1 : U32)
+  +y1 = (y + 1 : U32)
+  +c0 = first(xs, False{}, 0, x, y, t)
+  +c1 = first(xs, False{}, 0, x1, y, t)
+  +c2 = first(xs, False{}, 0, x, y1, t)
+  +c3 = first(xs, False{}, 0, x1, y1, t)
+  R.px4(U32.is_eq(c0, c1) && U32.is_eq(c0, c2) && U32.is_eq(c0, c3), c0, c1, c2, c3)
+
+def R.b4(+xs: +List<Dr>, +x: U32, +y: U32, +t: U32) -> Image:
+  Qua{R.b2(xs, x, y, t), R.b2(xs, (x + 2 : U32), y, t), R.b2(xs, x, (y + 2 : U32), t),
+    R.b2(xs, (x + 2 : U32), (y + 2 : U32), t)}
+
+def R.b8(+xs: +List<Dr>, +x: U32, +y: U32, +t: U32) -> Image:
+  Qua{R.b4(xs, x, y, t), R.b4(xs, (x + 4 : U32), y, t), R.b4(xs, x, (y + 4 : U32), t),
+    R.b4(xs, (x + 4 : U32), (y + 4 : U32), t)}
+
+def R.b16(+xs: +List<Dr>, +x: U32, +y: U32, +t: U32) -> Image:
+  Qua{R.b8(xs, x, y, t), R.b8(xs, (x + 8 : U32), y, t), R.b8(xs, x, (y + 8 : U32), t),
+    R.b8(xs, (x + 8 : U32), (y + 8 : U32), t)}
+
+# a 16-px tile: one colour when empty or under a solid panel, else pixels
+def R.tile.go(skip: Bool, +fc: U32, +xs: +List<Dr>, +x: U32, +y: U32, +t: U32)
   -> Image:
-  match d skip:
+  match skip:
+    case True{}:
+      R.fin(Pix{fc}, xs)
+    case False{}:
+      R.fin(R.b16(xs, x, y, t), xs)
+
+def R.tile(+cl: +List<Dr>, +x: U32, +y: U32, +t: U32) -> Image:
+  +xs = cut(cl, x, y, 16)
+  +fc = solid(xs, x, y, 16)
+  R.tile.go(A.opaque(fc), fc, xs, x, y, t)
+
+def R.quad(+cl: +List<Dr>, +x: U32, +y: U32, +t: U32) -> Image:
+  +x1 = (x + 16 : U32)
+  +y1 = (y + 16 : U32)
+  a b c e = R.tile(cl, x, y, t) R.tile(cl, x1, y, t) R.tile(cl, x, y1, t)
+    R.tile(cl, x1, y1, t)
+  Qua{a, b, c, e}
+
+# a 64-px cell: four 32-px quads of four tiles, all cut from the cell's list
+def R.cell(none: Bool, +cl: +List<Dr>, +x: U32, +y: U32, +t: U32) -> Image:
+  match none:
+    case True{}:
+      R.fin(Pix{SKY()}, cl)
+    case False{}:
+      +x1 = (x + 32 : U32)
+      +y1 = (y + 32 : U32)
+      a b c e = R.quad(cl, x, y, t) R.quad(cl, x1, y, t) R.quad(cl, x, y1, t)
+        R.quad(cl, x1, y1, t)
+      R.fin(Qua{a, b, c, e}, cl)
+
+def R.off(+y: U32) -> Bool:
+  (y >= B() + 320 : U32)
+
+# the frame's tree down to the cells (64 << d px); squares below the view
+# answer sky before any cut
+def R.root(+d: Nat, off: Bool, +g: +List<Dr>, +x: U32, +y: U32, +t: U32)
+  -> Image:
+  match d off:
     case _ True{}:
-      Pix{fill(fc)}
+      Pix{SKY()}
     case 0n False{}:
-      Q4{a, b, c, e, fa, fb, fc2, fe} = q
-      +x1 = (x0 + 1 : U32)
-      +y1 = (y0 + 1 : U32)
-      Qua{Pix{first(a, False{}, 0, x0, y0, t)}, Pix{first(b, False{}, 0, x1, y0, t)},
-        Pix{first(c, False{}, 0, x0, y1, t)}, Pix{first(e, False{}, 0, x1, y1, t)}}
+      +cl = cut(g, x, y, 64)
+      R.cell(empty(cl), cl, x, y, t)
     case 1n+p False{}:
-      Q4{a, b, c, e, +fa, +fb, +fc2, +fe} = q
-      +cs = U32.shln(1, 1n+p)
-      +s2 = U32.shln(1, p)
-      +x1 = (x0 + cs : U32)
-      +y1 = (y0 + cs : U32)
-      w x y z = draw4(p, must(fa), fa, split4(a, x0, y0, s2), x0, y0, t)
-        draw4(p, must(fb), fb, split4(b, x1, y0, s2), x1, y0, t)
-        draw4(p, must(fc2), fc2, split4(c, x0, y1, s2), x0, y1, t)
-        draw4(p, must(fe), fe, split4(e, x1, y1, s2), x1, y1, t)
-      Qua{w, x, y, z}
+      +s = U32.shln(64, p)
+      +x1 = (x + s : U32)
+      +y1 = (y + s : U32)
+      a b c e = R.root(p, R.off(y), g, x, y, t) R.root(p, R.off(y), g, x1, y, t)
+        R.root(p, R.off(y1), g, x, y1, t) R.root(p, R.off(y1), g, x1, y1, t)
+      Qua{a, b, c, e}
+
+def R.frame(+g: +List<Dr>, +t: U32) -> Image:
+  R.fin(R.root(3n, False{}, g, B(), B(), t), g)
 
 def pick_at(+q: C.Q, +mx: U32, +my: U32, +camx: U32, +camy: U32, +h: U32)
   -> U32:
@@ -644,7 +658,7 @@ def Game.park(g: Game) -> C.Park:
   p
 
 def frame(+g: Game) -> Image:
-  draw4(8n, False{}, 0, split4(scene(g), B(), B(), 256), B(), B(), C.Park.time(Game.park(g)))
+  R.frame(scene(g), C.Park.time(Game.park(g)))
 
 def UI.new() -> UI:
   UI{930, 880, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 99999, 0, 0, 0n}
