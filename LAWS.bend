@@ -178,3 +178,39 @@ law seats_unique:
   for +rs: List<&2, C.Ride>
   for +stn: C.Stn
   {distinct(C.Boards.plan(gs, occ, q, rs, stn, [])) == True{} : Bool}
+
+# 12. PURCHASES ARE TRANSFERS. A guest who boards a ride (or buys at a shop)
+# pays exactly its price: their gold after is their gold before less the
+# price -- the price the ledger adds to the park's takings (Ledger.sales).
+def gold(g: C.Guest) -> U32:
+  C.Guest{id, x, y, dir, st, tgt, tmr, cash, hunger, thirst, energy, nausea,
+    happy, look, mind} = g
+  cash
+
+law purchase_is_transfer:
+  for +g: C.Guest
+  for +q: C.Q
+  for +rs: List<&2, C.Ride>
+  for +seat: U32
+  for +stn: C.Stn
+  for h: {C.Guest.wants(g, q, rs, stn) == True{} : Bool}
+  {gold(C.Guest.board(g, rs, seat, stn)) == (gold(g) - C.Guest.fee(g, rs) : U32) : U32}
+
+# 13. PRICES STAY IN BOUNDS. Every ride's price stays within 0..20 gold and
+# the entry fee within 0..40 -- if they did before a step, they do after it.
+def prices_ok(+rs: +List<C.Ride>) -> Bool:
+  match rs:
+    case []:
+      True{}
+    case r <> rest:
+      U32.is_le(C.Ride.price(r), 20) && prices_ok(rest)
+
+def park_prices_ok(p: C.Park) -> Bool:
+  C.Park{map, guests, rides, track, cash, time, nid, fin} = p
+  prices_ok(rides) && U32.is_le(C.Fin.fee(fin), 40)
+
+law prices_bounded:
+  for +p: C.Park
+  for +a: C.Act
+  for h: {park_prices_ok(p) == True{} : Bool}
+  {park_prices_ok(C.Out.park(C.Park.step(p, a))) == True{} : Bool}

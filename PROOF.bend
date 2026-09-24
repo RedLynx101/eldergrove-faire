@@ -856,3 +856,156 @@ def uniq_plan(+gs: +List<C.Guest>, +occ: +List<U32>, +q: C.Q, +rs: +List<C.Ride>
 
 def Laws.seats_unique(gs, occ, q, rs, stn):
   uniq_plan(gs, occ, q, rs, stn, [], {==})
+
+# Purchases: Guest.wants puts Guest.affords (price <= gold) right after
+# Ride.loading, and Guest.board pays with Guest.pay, which takes exactly the
+# price whenever it is affordable.
+def Laws.purchase_is_transfer(g, q, rs, seat, stn, h):
+  match g:
+    case C.Guest{id, x, y, dir, st, tgt, tmr, cash, hu, th, en, na, ha, lk, mind}:
+      +rd = C.Rides.get(rs, tgt)
+      +hp = and_l(C.Guest.affords(rd, cash), C.Guest.at_ride(rd, st, tgt, x, y),
+        and_r(C.Ride.loading(rd, stn), C.Guest.ready(rd, st, tgt, x, y, cash), h))
+      %Equal.sym(Bool, U32.is_le(C.Ride.price(rd), cash), True{}, hp)
+        : {C.sel(_, (cash - C.Ride.price(rd) : U32), 0) == (cash - C.Ride.price(rd) : U32) : U32}
+      {==}
+
+# Prices: every price a step can make passes through Price.cap (or keeps an
+# old price); the entry fee through Fee.cap.
+def cap_ok(+v: U32) -> {U32.is_le(C.Price.cap(v), 20) == True{} : Bool}:
+  bcase_eq(U32.is_le(v, 20), c => {U32.is_le(C.sel(c, v, 20), 20) == True{} : Bool},
+    e => Equal.sym(Bool, True{}, U32.is_le(v, 20), e), e => {==})
+
+def fee_cap_ok(+v: U32) -> {U32.is_le(C.Fee.cap(v), 40) == True{} : Bool}:
+  bcase_eq(U32.is_le(v, 40), c => {U32.is_le(C.sel(c, v, 40), 40) == True{} : Bool},
+    e => Equal.sym(Bool, True{}, U32.is_le(v, 40), e), e => {==})
+
+def tick_ok(+rs: +List<C.Ride>, +idx: U32, +q: C.Q, +ps: +List<C.Piece>, +occ: +List<U32>,
+  +plan: +List<C.Board>, +qt: +List<U32>, +h: {Laws.prices_ok(rs) == True{} : Bool})
+  -> {Laws.prices_ok(C.Rides.tick(rs, idx, q, ps, occ, plan, qt)) == True{} : Bool}:
+  match rs:
+    case []:
+      {==}
+    case r <> rest:
+      match r:
+        case C.Ride{kind, x, y, w, hh, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate}:
+          and_i(U32.is_le(price, 20), Laws.prices_ok(C.Rides.tick(rest, (idx + 1 : U32), q, ps, occ, plan, qt)),
+            and_l(U32.is_le(price, 20), Laws.prices_ok(rest), h),
+            tick_ok(rest, (idx + 1 : U32), q, ps, occ, plan, qt, and_r(U32.is_le(price, 20), Laws.prices_ok(rest), h)))
+
+def coaster_ok(+rs: +List<C.Ride>, +op: U32, +h: {Laws.prices_ok(rs) == True{} : Bool})
+  -> {Laws.prices_ok(C.Rides.coaster(rs, op)) == True{} : Bool}:
+  match rs:
+    case []:
+      {==}
+    case r <> rest:
+      match r:
+        case C.Ride{kind, x, y, w, hh, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate}:
+          and_i(U32.is_le(price, 20), Laws.prices_ok(C.Rides.coaster(rest, op)),
+            and_l(U32.is_le(price, 20), Laws.prices_ok(rest), h),
+            coaster_ok(rest, op, and_r(U32.is_le(price, 20), Laws.prices_ok(rest), h)))
+
+def set_ok(+rs: +List<C.Ride>, +i: U32, +op: U32, +h: {Laws.prices_ok(rs) == True{} : Bool})
+  -> {Laws.prices_ok(C.Rides.set(rs, i, op)) == True{} : Bool}:
+  match rs:
+    case []:
+      {==}
+    case r <> rest:
+      match r:
+        case C.Ride{kind, x, y, w, hh, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate}:
+          +rr = {C.Ride{kind, x, y, w, hh, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate} : C.Ride}
+          +tail = set_ok(rest, (i - 1 : U32), op, and_r(U32.is_le(price, 20), Laws.prices_ok(rest), h))
+          bcase(U32.is_eq(i, 0),
+            c => {Laws.prices_ok(Bool.pick(C.Ride, c, C.Ride.set(rr, op), rr) <> C.Rides.set(rest, (i - 1 : U32), op)) == True{} : Bool},
+            and_i(U32.is_le(C.Ride.price(C.Ride.set(rr, op)), 20), Laws.prices_ok(C.Rides.set(rest, (i - 1 : U32), op)),
+              cap_ok(C.sel(U32.is_eq(op, 1), (price + 1 : U32), C.sel(U32.is_eq(op, 2), C.sub0(price, 1), price))), tail),
+            and_i(U32.is_le(price, 20), Laws.prices_ok(C.Rides.set(rest, (i - 1 : U32), op)),
+              and_l(U32.is_le(price, 20), Laws.prices_ok(rest), h), tail))
+
+def kill_ok(+rs: +List<C.Ride>, +i: U32, +h: {Laws.prices_ok(rs) == True{} : Bool})
+  -> {Laws.prices_ok(C.Rides.kill(rs, i)) == True{} : Bool}:
+  match rs:
+    case []:
+      {==}
+    case r <> rest:
+      match r:
+        case C.Ride{kind, x, y, w, hh, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate}:
+          +rr = {C.Ride{kind, x, y, w, hh, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate} : C.Ride}
+          +hp = and_l(U32.is_le(price, 20), Laws.prices_ok(rest), h)
+          +tail = kill_ok(rest, (i - 1 : U32), and_r(U32.is_le(price, 20), Laws.prices_ok(rest), h))
+          bcase(U32.is_eq(i, 0),
+            c => {Laws.prices_ok(Bool.pick(C.Ride, c, C.Ride.killed(rr), rr) <> C.Rides.kill(rest, (i - 1 : U32))) == True{} : Bool},
+            and_i(U32.is_le(price, 20), Laws.prices_ok(C.Rides.kill(rest, (i - 1 : U32))), hp, tail),
+            and_i(U32.is_le(price, 20), Laws.prices_ok(C.Rides.kill(rest, (i - 1 : U32))), hp, tail))
+
+def app_ok(+rs: +List<C.Ride>, +n: C.Ride, +h: {Laws.prices_ok(rs) == True{} : Bool},
+  +hn: {U32.is_le(C.Ride.price(n), 20) == True{} : Bool})
+  -> {Laws.prices_ok(List.append(&2, C.Ride, rs, [n])) == True{} : Bool}:
+  match rs:
+    case []:
+      and_i(U32.is_le(C.Ride.price(n), 20), True{}, hn, {==})
+    case r <> rest:
+      and_i(U32.is_le(C.Ride.price(r), 20), Laws.prices_ok(List.append(&2, C.Ride, rest, [n])),
+        and_l(U32.is_le(C.Ride.price(r), 20), Laws.prices_ok(rest), h),
+        app_ok(rest, n, and_r(U32.is_le(C.Ride.price(r), 20), Laws.prices_ok(rest), h), hn))
+
+def new_ok(+k: U32, +x: U32, +y: U32, +s: U32, +o: U32, +t: U32)
+  -> {U32.is_le(C.Ride.price(C.Ride.new(k, x, y, s, o, t)), 20) == True{} : Bool}:
+  cap_ok(C.Ride.fee(k))
+
+def build_ok(+ok: Bool, +q: C.Q, +rs: +List<C.Ride>, +tool: U32, +x: U32, +y: U32, +time: U32,
+  +h: {Laws.prices_ok(rs) == True{} : Bool})
+  -> {Laws.prices_ok(C.Build.rides(ok, q, rs, tool, x, y, time)) == True{} : Bool}:
+  match ok:
+    case True{}:
+      +t = C.Land.get(q, x, y)
+      +k = (tool - 4 : U32)
+      +s = C.Ride.size(k)
+      +coast = Bool.pick(+List<C.Ride>, U32.is_eq(tool, 10), List.append(&2, C.Ride, rs, [C.Ride.new(5, x, y, 1, 0, time)]), rs)
+      +add = Bool.pick(+List<C.Ride>, (tool >= 5 : U32) && (tool <= 8 : U32),
+        List.append(&2, C.Ride, rs, [C.Ride.new(k, x, y, s, 1, time)]), coast)
+      bcase(U32.is_eq(tool, 9) && U32.is_eq(C.Tile.obj(t), 3),
+        c => {Laws.prices_ok(Bool.pick(+List<C.Ride>, c, C.Rides.kill(rs, C.Tile.a(t)), add)) == True{} : Bool},
+        kill_ok(rs, C.Tile.a(t), h),
+        bcase((tool >= 5 : U32) && (tool <= 8 : U32),
+          c => {Laws.prices_ok(Bool.pick(+List<C.Ride>, c, List.append(&2, C.Ride, rs, [C.Ride.new(k, x, y, s, 1, time)]), coast)) == True{} : Bool},
+          app_ok(rs, C.Ride.new(k, x, y, s, 1, time), h, new_ok(k, x, y, s, 1, time)),
+          bcase(U32.is_eq(tool, 10),
+            c => {Laws.prices_ok(Bool.pick(+List<C.Ride>, c, List.append(&2, C.Ride, rs, [C.Ride.new(5, x, y, 1, 0, time)]), rs)) == True{} : Bool},
+            app_ok(rs, C.Ride.new(5, x, y, 1, 0, time), h, new_ok(5, x, y, 1, 0, time)),
+            h)))
+    case False{}:
+      h
+
+def pb_go(+a: C.Act, +map: C.Q, +guests: +List<C.Guest>, +rides: +List<C.Ride>, +track: C.Track,
+  +cash: U32, +time: U32, +nid: U32, +fee: U32, +loan: U32, +rating: U32, +now: +List<U32>,
+  +last: +List<U32>, +hist: +List<U32>, +h: {Laws.prices_ok(rides) && U32.is_le(fee, 40) == True{} : Bool})
+  -> {Laws.park_prices_ok(C.Out.park(C.Park.step(C.Park{map, guests, rides, track, cash, time, nid,
+    C.Fin{fee, loan, rating, now, last, hist}}, a))) == True{} : Bool}:
+  match a:
+    case C.Tick{}:
+      +sn = C.Track.stn(track)
+      +occ = C.Occ.table(guests, rides, sn)
+      +pl = C.Boards.plan(guests, occ, map, rides, sn, [])
+      +qt = C.Qlen.fill(guests, map, C.Tab.zero(C.len32(C.Ride, rides), []))
+      and_i(Laws.prices_ok(C.Rides.tick(rides, 0, map, C.Track.pieces(track), occ, pl, qt)), U32.is_le(fee, 40),
+        tick_ok(rides, 0, map, C.Track.pieces(track), occ, pl, qt, and_l(Laws.prices_ok(rides), U32.is_le(fee, 40), h)), and_r(Laws.prices_ok(rides), U32.is_le(fee, 40), h))
+    case C.Build{tool, x, y, v}:
+      and_i(Laws.prices_ok(C.Build.rides(C.Build.ok(map, track, cash, tool, x, y), map, rides, tool, x, y, time)),
+        U32.is_le(fee, 40), build_ok(C.Build.ok(map, track, cash, tool, x, y), map, rides, tool, x, y, time, and_l(Laws.prices_ok(rides), U32.is_le(fee, 40), h)), and_r(Laws.prices_ok(rides), U32.is_le(fee, 40), h))
+    case C.TrackOp{op}:
+      +trk2 = C.Track.op(track, op, C.TrackOp.ok(map, track, cash, op))
+      and_i(Laws.prices_ok(C.Rides.coaster(rides, C.sel(C.Track.open(trk2), 1, 0))), U32.is_le(fee, 40),
+        coaster_ok(rides, C.sel(C.Track.open(trk2), 1, 0), and_l(Laws.prices_ok(rides), U32.is_le(fee, 40), h)), and_r(Laws.prices_ok(rides), U32.is_le(fee, 40), h))
+    case C.RideOp{ride, op}:
+      and_i(Laws.prices_ok(C.Rides.set(rides, ride, op)), U32.is_le(fee, 40), set_ok(rides, ride, op, and_l(Laws.prices_ok(rides), U32.is_le(fee, 40), h)), and_r(Laws.prices_ok(rides), U32.is_le(fee, 40), h))
+    case C.ParkOp{op}:
+      +f2 = C.sel(U32.is_eq(op, 0), (fee + 1 : U32), C.sel(U32.is_eq(op, 1), C.sub0(fee, 1), fee))
+      and_i(Laws.prices_ok(rides), U32.is_le(C.Fee.cap(f2), 40), and_l(Laws.prices_ok(rides), U32.is_le(fee, 40), h), fee_cap_ok(f2))
+
+def Laws.prices_bounded(p, a, h):
+  match p:
+    case C.Park{map, guests, rides, track, cash, time, nid, fin}:
+      match fin:
+        case C.Fin{fee, loan, rating, now, last, hist}:
+          pb_go(a, map, guests, rides, track, cash, time, nid, fee, loan, rating, now, last, hist, h)

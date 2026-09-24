@@ -434,8 +434,15 @@ def Ride.shop(+k: U32) -> Bool:
 def Ride.cycles(+k: U32) -> Bool:
   U32.is_eq(k, 1) || U32.is_eq(k, 2)
 
+# prices: 0..20 gold; the entry fee: 0..40
+def Price.cap(+v: U32) -> U32:
+  sel(U32.is_le(v, 20), v, 20)
+
+def Fee.cap(+v: U32) -> U32:
+  sel(U32.is_le(v, 40), v, 40)
+
 def Ride.new(+k: U32, +x: U32, +y: U32, +s: U32, +open: U32, +t: U32) -> Ride:
-  Ride{k, x, y, s, s, Ride.fee(k), open, 0, 0, NONE(), NONE(), 0, 60, 420, 0, 0, t, Ride.rate0(k)}
+  Ride{k, x, y, s, s, Price.cap(Ride.fee(k)), open, 0, 0, NONE(), NONE(), 0, 60, 420, 0, 0, t, Ride.rate0(k)}
 
 def Ride.fun(+k: U32) -> U32:
   match k:
@@ -1169,10 +1176,15 @@ def Ride.at_door(r: Ride, +i: U32, +j: U32) -> Bool:
   Ride.shop(kind) && U32.is_eq((absd(i, ci) + absd(j, cj) : U32), 1)
     || Bool.not(Ride.shop(kind)) && U32.is_eq(pk(i, j), ent)
 
-def Guest.ready(+rd: Ride, +st: U32, +tgt: U32, +x: U32, +y: U32, +cash: U32) -> Bool:
+def Guest.affords(+rd: Ride, +cash: U32) -> Bool:
+  U32.is_le(Ride.price(rd), cash)
+
+def Guest.at_ride(+rd: Ride, +st: U32, +tgt: U32, +x: U32, +y: U32) -> Bool:
   U32.is_eq(st, 0) && Bool.not(U32.is_eq(tgt, NONE())) && Guest.at_center(x, y)
-    && Ride.is_open(rd) && U32.is_le(Ride.price(rd), cash)
-    && Ride.at_door(rd, (x >> 4n : U32), (y >> 4n : U32))
+    && Ride.is_open(rd) && Ride.at_door(rd, (x >> 4n : U32), (y >> 4n : U32))
+
+def Guest.ready(+rd: Ride, +st: U32, +tgt: U32, +x: U32, +y: U32, +cash: U32) -> Bool:
+  Guest.affords(rd, cash) && Guest.at_ride(rd, st, tgt, x, y)
 
 # whether a walking guest boards (or buys at) their target ride now: it is
 # loading, and they stand at its door, open, with the fare
@@ -1209,6 +1221,10 @@ def Guest.fee(g: Guest, +rs: +List<Ride>) -> U32:
   Ride.price(Rides.get(rs, tgt))
 
 # boarding: take the seat, pay, then the ride's effects
+# gold after paying p (the guests who board can always afford it)
+def Guest.pay(+cash: U32, +p: U32) -> U32:
+  sel(U32.is_le(p, cash), (cash - p : U32), 0)
+
 # how much intensity a guest enjoys (hundredths): set by their look, so the
 # same adventurer always likes the same rides
 def Ride.joy(+rate: U32, +lk: U32) -> U32:
@@ -1223,7 +1239,7 @@ def Guest.board(g: Guest, +rs: +List<Ride>, +seat: U32, +stn: Stn) -> Guest:
   +coaster = U32.is_eq(k, 5)
   +item = sel(U32.is_eq(k, 3), 65536, sel(U32.is_eq(k, 4), 131072, 0))
   Guest{id, x, y, sel(coaster, (Stn.id(stn) * 8 + seat : U32), seat), 1, tgt,
-    sel(coaster, 3000, Ride.duration(k)), sub0(cash, Ride.price(rd)),
+    sel(coaster, 3000, Ride.duration(k)), Guest.pay(cash, Ride.price(rd)),
     sel(U32.is_eq(k, 4), sub0(hu, 160), hu),
     sel(U32.is_eq(k, 3), sub0(th, 160), th), en,
     (na + Rate.n(rate) / 4 : U32), (ha + Ride.joy(rate, lk) : U32), ((lk .&. 4294770687) .|. item : U32), mind}
@@ -2281,8 +2297,7 @@ def MAX_PRICE() -> U32:
 def Ride.set(r: Ride, +op: U32) -> Ride:
   Ride{+kind, x, y, w, h, +price, +open, ph, tm, ent, ex, qlen, +wmin, +wmax, total, earned, born, rate} = r
   +flip = U32.is_eq(op, 0) && Bool.not(U32.is_eq(kind, 5))
-  +price2 = sel(U32.is_eq(op, 1), U32.min((price + 1 : U32), MAX_PRICE()),
-    sel(U32.is_eq(op, 2), sub0(price, 1), price))
+  +price2 = Price.cap(sel(U32.is_eq(op, 1), (price + 1 : U32), sel(U32.is_eq(op, 2), sub0(price, 1), price)))
   +wmin2 = sel(U32.is_eq(op, 3), U32.min((wmin + 30 : U32), wmax),
     sel(U32.is_eq(op, 4), sub0(wmin, 30), wmin))
   +wmax2 = sel(U32.is_eq(op, 5), U32.min((wmax + 60 : U32), 3600),
@@ -2307,7 +2322,7 @@ def Park.ride_op(p: Park, +ride: U32, +op: U32) -> Out:
 
 def Fin.set(f: Fin, +op: U32, +borrow: Bool, +repay: Bool) -> Fin:
   Fin{+fee, +loan, rating, now, last, hist} = f
-  Fin{sel(U32.is_eq(op, 0), U32.min((fee + 1 : U32), 40), sel(U32.is_eq(op, 1), sub0(fee, 1), fee)),
+  Fin{Fee.cap(sel(U32.is_eq(op, 0), (fee + 1 : U32), sel(U32.is_eq(op, 1), sub0(fee, 1), fee))),
     sel(borrow, (loan + 1000 : U32), sel(repay, (loan - 1000 : U32), loan)), rating, now, last, hist}
 
 def Park.park_op(p: Park, +op: U32) -> Out:
