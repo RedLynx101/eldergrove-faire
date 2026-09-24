@@ -38,7 +38,8 @@ Dev modes:
   `python3 tools/wavcheck.py out.wav out.png` prints its levels and draws it. `PARK_MUTE=1` plays nothing.
 - `--shot` takes an optional 6th argument, a window to show (kind * 256 + ride; 256 is the carousel's), and a 7th, the zoom (0 normal, 1 close, 2 far).
   Window kind 8 (construction) adds an unfinished second coaster to picture; piece * 4096 added to it
-  picks the piece previewed (15 instead pictures a coaster whose test run failed).
+  picks the piece previewed (15 instead pictures a coaster whose test run failed). TOOL 99 follows the
+  starter coaster's lead car.
 - Environment: `PARK_OPT=n` starts with options n (bits: 0-1 window size, 2 whole pixels, 3 dynamic
   resolution off), `PARK_PROF=1` prints frame timings, `PARK_NOPACE=1` removes the 60 Hz cap,
   `PARK_DUMP=out.ppm` writes the 300th shown frame. `tools/prof.sh ./park ...` profiles with perf.
@@ -186,6 +187,10 @@ The window also sets the coaster's type (the wooden Wyrm; the Dwarven Minecart, 
 gentler; the Griffin Flyer, fastest, its cars hanging below the rails), how many trains run (up to one
 in every third block) and the lift hill's speed. A park holds up to 8 coasters; the Wyrm Coaster comes
 pre-built.
+
+Follow cam: the FOLLOW button in a ride's window rides along with a coaster's lead car (or centres on
+any other ride); in a guest's window it trails that guest; in the staff window it trails a staff member
+of that row (press again for the next one). Any camera key lets go.
 
 ## Files
 

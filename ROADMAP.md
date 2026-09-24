@@ -1,6 +1,6 @@
 # Eldergrove Faire: Roadmap
 
-Last updated: 2026-09-24 · M1-M7 done. Working on M8 (custom coasters), the last milestone in the plan.
+Last updated: 2026-09-24 · M1-M8 done: the planned roadmap is complete.
 
 ## Decisions
 
@@ -213,6 +213,12 @@ Small design decisions made while working, listed here so they can be revisited.
   sets `open` to (a condition and the circuit check) and "the test stands", so both coaster laws follow
   from two small Boolean lemmas.
 - **Tracks are capped at 250 pieces**, so a piece index fits the test's bookkeeping.
+- **The follow cam lives in the UI, not the park.** Following is a view setting (UI field `fol`: guest,
+  staff member or ride, and its id), so it isn't saved and costs the simulation nothing. The camera centres
+  the target each step; a coaster's target is its lead car, any other ride its middle, and a guest who
+  leaves ends the follow. The staff window's FOLLOW steps through that row's staff.
+- **Steep-up pieces get a taller hit box than the rest** (22 px over 12): giving every piece the taller box
+  cost about 4% of frame time.
 
 ## Done: M1, the vertical slice
 Isometric fantasy map, paths, terrain editing, 4 enchanted tree kinds, Dragon Carousel, Arcane Spire, Potion
@@ -380,28 +386,27 @@ Spikes, in order:
 - Buying land and construction rights.
 - Crowds past 700: guests share per-ride route maps instead of each searching paths themselves.
 
-## M8: Custom coasters
-Progress: spikes 1-4 done (several coasters per park; the construction window and new pieces; coaster types,
-trains and lift speed; test runs and open_only_tested).
-
-- **A construction window,** built carefully for ease of use:
-  - piece buttons, grouped: straight, gentle and steep slopes, small and large turns, banked turns, lift
-    hill, brakes, block brakes, station;
-  - direction and bank toggles;
-  - a live ghost of the next piece, green if it fits and red if not, with the height shown;
-  - cost per piece, undo last piece, and a "close the circuit" hint when the track nears its start.
-  - Keyboard shortcuts on the buttons (never WASD, which stays the camera).
-- **Coasters anywhere:** several per park, each with its station where you put it, and a choice of coaster
-  types: the Wyrm (wooden), a Dwarven Minecart, a Griffin Flyer (inverted). Set trains, cars per train,
-  and the lift speed.
-- **Testing, as in RCT2:** a new coaster must be tested before it can open. Empty trains run the circuit and
-  the ride window fills in what they measured: maximum speed, length, drops, highest point, G-forces, air
-  time, then excitement, intensity and nausea. A track that fails (a train can't make a hill) says where.
-- **Follow cam:** a Follow button in ride, guest and staff windows. The camera rides along with a coaster
-  car or a ride vehicle, or trails a guest or staff member; any camera key lets go.
-- Laws extended to every coaster: coaster_on_circuit and no_collisions for each track, and a new one,
-  **open_only_tested** (a coaster is open only if its track is a closed circuit and a test run completed).
-  Editing closes a ride first; no crashes (a failed test reports the problem).
+## Done: M8, custom coasters
+- **A construction window** for each coaster: piece buttons in groups (straight, turns, brakes; gentle and
+  steep slopes; banked turns, lift hill, station; undo and TEST RUN), each with its key (never WASD); a live
+  ghost of the next piece at the end of the track, green where it fits and red where it doesn't; the
+  piece's price and the heights it runs between; buttons that won't fit turn brown; how far the track's end
+  is from its station. A new station opens it; the ride window's BUILD button reopens it.
+- **New pieces:** brakes, banked turns and steep slopes (two levels a tile), with their own art and
+  physics. Each piece has its own price; taking one off gives half back.
+- **Coasters anywhere:** up to 8 per park, each with its own track, trains and station. Three types, each
+  with its own speed, track colours and cars: the Wyrm (wooden), the Dwarven Minecart (slower, tamer) and
+  the Griffin Flyer (fastest, its cars hanging below the rails). Trains (up to one in every third block)
+  and lift speed are set in the construction window. Cars per train stay at three.
+- **Testing, as in RCT2:** a coaster opens only after a test run. An empty train laps the track while the
+  ride stays shut to guests; a pass fills the ride window with top speed, length, height, drops, air time
+  and G-forces, and sets the ratings; a failure names the piece the train couldn't climb and puts a red
+  sign over it. Any edit or setting change needs a new test. No crashes: a failed test just reports.
+- **Follow cam:** FOLLOW in ride, guest and staff windows; any camera key lets go.
+- **Laws:** coaster_on_circuit covers every coaster, no_collisions takes the coaster's settings, and the
+  new open_only_tested is proven (sixteen laws).
+- Frame time and simulation cost measured against M7: within noise (about 1.4 ms a tick at 200 guests;
+  16 ms a frame).
 
 ## Laws
 Proven: money_conserved, headcount_conserved, needs_bounded, coaster_on_circuit, no_collisions,
