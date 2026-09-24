@@ -66,7 +66,7 @@ def Dr.hits.go(d: Dr, +bx0: U32, +by0: U32, +s0: U32, +bx: U32, +by: U32, +s: U3
     case DTree{+x, +y, v, n}:
       ov((x - 13 : U32), (y - 40 : U32), (x + 14 : U32), (y + 6 : U32), bx, by, s)
     case DRide{+x, +y, k, ra, rb, st}:
-      ov((x - 30 : U32), (y - 92 : U32), (x + 31 : U32), (y + 16 : U32), bx, by, s)
+      ov((x - 46 : U32), (y - 92 : U32), (x + 47 : U32), (y + 16 : U32), bx, by, s)
     case DGate{+x, +y}:
       ov((x - 20 : U32), (y - 48 : U32), (x + 20 : U32), (y + 6 : U32), bx, by, s)
     case DTrack{+x, +y, +code, +zr}:
@@ -894,6 +894,22 @@ def tool_name(+t: U32) -> String:
       "WISP SELLER  250*"
     case 32:
       "ENCHANTED ICES  300*"
+    case 33:
+      "GRIFFIN SWING  1400*"
+    case 34:
+      "WHEEL OF STARS  1100*"
+    case 38:
+      "DRAGON'S EYRIE  1000*"
+    case 39:
+      "WIZARD'S WHIRL  1600*"
+    case 35:
+      "LICH'S CRYPT  1500*"
+    case 36:
+      "GOLEM BUMPERS  1000*"
+    case 37:
+      "HEDGE LABYRINTH  700*"
+    case 40:
+      "MERMAID FLUME  1900*"
     case _:
       "INSPECT (I): CLICK A RIDE OR A GUEST"
 
@@ -990,9 +1006,25 @@ def Cat.tool.go(+code: U32) -> U32:
       4
     case 24:
       5
+    case 25:
+      34
+    case 26:
+      37
+    case 27:
+      38
+    case 28:
+      36
+    case 29:
+      35
     case 32:
       6
     case 33:
+      33
+    case 34:
+      39
+    case 35:
+      40
+    case 36:
       10
     case 40:
       7
@@ -1021,9 +1053,9 @@ def Cat.len(+c: U32) -> U32:
     case 2:
       1
     case 3:
-      1
+      6
     case 4:
-      2
+      5
     case 5:
       6
     case _:
@@ -1049,7 +1081,23 @@ def Cat.of(+t: U32) -> U32:
       2
     case 5:
       3
+    case 34:
+      3
+    case 35:
+      3
+    case 36:
+      3
+    case 37:
+      3
+    case 38:
+      3
+    case 40:
+      4
     case 6:
+      4
+    case 33:
+      4
+    case 39:
       4
     case 10:
       4
@@ -1080,8 +1128,24 @@ def Cat.pos(+t: U32) -> U32:
       4
     case 3:
       1
-    case 10:
+    case 34:
       1
+    case 37:
+      2
+    case 38:
+      3
+    case 36:
+      4
+    case 35:
+      5
+    case 33:
+      1
+    case 39:
+      2
+    case 40:
+      3
+    case 10:
+      4
     case 8:
       1
     case 16:
@@ -2561,6 +2625,7 @@ def start_acts() -> List<C.Act>:
    C.Build{15, 32, 34, 0}, C.Build{14, 24, 36, 0}, C.Build{13, 26, 36, 0},
    C.Build{15, 28, 36, 0}, C.Build{14, 30, 46, 0}, C.Build{13, 34, 46, 0},
    C.Build{16, 33, 50, 0}, C.Build{16, 13, 31, 0}, C.Build{30, 33, 47, 0}, C.Build{32, 31, 37, 0}, C.Build{31, 35, 37, 0},
+   C.Build{34, 33, 38, 0}, C.Build{11, 34, 37, 0},
    C.ParkOp{21}, C.ParkOp{21}, C.ParkOp{22}, C.ParkOp{23}, C.ParkOp{24}]
 
 def Game.new() -> Game:
@@ -3264,9 +3329,9 @@ def ui.s7(g: Game) -> Game:
   +pos = ui.guest_at(C.Park.guests(Game.park(g2)), C.Park.map(Game.park(g2)), 930, 880)
   ui.step(g2, ui.click((pos >> 16n : U32), (pos .&. 65535 : U32), 0))
 
-# the THRILL RIDES tab, then its second tool (the coaster)
+# the THRILL RIDES tab, then its fifth tool (the coaster)
 def ui.s8(g: Game) -> Game:
-  ui.step(ui.step(g, ui.click(167, 305, 0)), ui.click(247, 305, 0))
+  ui.step(ui.step(g, ui.click(167, 305, 0)), ui.click(319, 305, 0))
 
 # key 1 twice: the paths tab's path, then its queue line
 def ui.s9(g: Game) -> Game:
@@ -3322,6 +3387,21 @@ def people.dr(+n: Nat, +k: U32, +acc: +List<Dr>) -> +List<Dr>:
         .|. sel(U32.is_eq(rw, 3), ((((c % 3) + 1) << 14n) : U32), 0) : U32)
       people.dr(m, (k + 1 : U32), DGuest{(B() + 14 + c * 30 : U32), (B() + 34 + rw * 36 : U32), look, 0} <> acc)
 
+def rides.dr(+n: Nat, +k: U32, +ks: +List<U32>, +tm: U32, +acc: +List<Dr>) -> +List<Dr>:
+  match n ks:
+    case 1n+m Con{kind, rest}:
+      +col = (k .&. 3 : U32)
+      +rw = (k >> 2n : U32)
+      +ra = (137 .|. (178 << 8n) .|. (212 << 16n) .|. (231 << 24n) : U32)
+      +rb = (140 .|. (190 << 8n) .|. (163 << 16n) .|. (254 << 24n) : U32)
+      rides.dr(m, (k + 1 : U32), rest, tm,
+        DRide{(B() + 64 + col * 128 : U32), (B() + 118 + rw * 150 : U32), kind, ra, rb, ((1 << 16n) .|. tm : U32)} <> acc)
+    case _ _:
+      acc
+
+def rides_shot(path: String, +tm: U32) -> IO(Unit):
+  shot.write(path, bytes(163840n, R.frame(rides.dr(8n, 0, [10, 11, 15, 16, 12, 13, 14, 17], tm, [DRect{B(), B(), 512, 320, 5214768}]), (tm .&. 65535 : U32)), 163839, []))
+
 def people_shot(path: String) -> IO(Unit):
   shot.write(path, bytes(163840n, R.frame(people.dr(32n, 0, [DRect{B(), B(), 512, 320, 5214768}]), 1073741824), 163839, []))
 
@@ -3332,7 +3412,9 @@ def start.go(bench: Bool, +args: +List<String>) -> IO(Unit):
         arg_nat(nth(args, 1)), arg_or(nth(args, 3), 0))
     case False{}:
       Bool.pick(IO(Unit), is_arg(args, "--uitest"), ui.test(),
-        Bool.pick(IO(Unit), is_arg(args, "--people"), people_shot(nth(args, 1)), start.test(is_arg(args, "--savetest"), args)))
+        Bool.pick(IO(Unit), is_arg(args, "--people"), people_shot(nth(args, 1)),
+        Bool.pick(IO(Unit), is_arg(args, "--rides"), rides_shot(nth(args, 1), arg_u32(nth(args, 2))),
+          start.test(is_arg(args, "--savetest"), args))))
 
 def start(+args: +List<String>) -> IO(Unit):
   start.go(is_bench(args), args)

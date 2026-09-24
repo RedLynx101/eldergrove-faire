@@ -1323,6 +1323,406 @@ def Art.ices(+dx: U32, +dy: U32, +t: U32) -> U32:
   over(sel(spark, 16777215, TR()), over(sel(mint, 10085546, sel(scoop, 16758488, sel(cone, 14200928, TR()))),
     over(awning, over(sel(post, 7031338, TR()), booth))))
 
+# signed shift right, for rotations
+def sar(+v: U32, +n: Nat) -> U32:
+  sel(neg(v), (0 - ((0 - v) >> n) : U32), (v >> n : U32))
+
+# a ride's phase and time into it (st: phase << 16 | ticks)
+def Art.running(+st: U32) -> Bool:
+  U32.is_eq(((st >> 16n) .&. 3 : U32), 1)
+
+def Art.tm(+st: U32) -> U32:
+  (st .&. 65535 : U32)
+
+# A-frame legs from (+-w0, 0) up to a hub at height hy: w0 * (hy + dy) / hy
+# wide at dy, given k = w0 * 256 / hy
+def Art.leg(+dx: U32, +dy: U32, +hy: U32, +k: U32) -> Bool:
+  +w = (((hy + dy) * k) >> 8n : U32)
+  between(dy, (0 - hy : U32), 0) && (sabs((sabs(dx) - w : U32)) <= 1 : U32)
+
+# The Wheel of Stars: a wheel on two A-frames, its rim twinkling gold and
+# blue, eight gondolas hanging level as it turns twice
+def Art.wheel.gon.go(near: Bool, +ex: U32, +ey: U32, +code: U32) -> U32:
+  match near:
+    case True{}:
+      +hang = U32.is_eq(ex, 0) && between(ey, 0, 1)
+      +canopy = U32.is_eq(ey, 2) && (sabs(ex) <= 3 : U32)
+      +posts = U32.is_eq(sabs(ex), 3) && between(ey, 3, 9)
+      +front = between(ey, 10, 13) && (sabs(ex) <= 3 : U32)
+      +rider = Art.rider(ex, (ey - 12 : U32), code)
+      over(sel(front, sel(U32.is_eq(ey, 10), 14725184, 4219088), sel(canopy, 14725184, sel(posts, 3166384, TR()))),
+        over(rider, sel(hang, 3158064, TR())))
+    case False{}:
+      TR()
+
+def Art.wheel.gon(+dx: U32, +dy: U32, +a: U32, +code: U32) -> U32:
+  +ex = (dx - wcos(a, 30) : U32)
+  +ey = (dy - (0 - 48 + wsin(a, 30)) : U32)
+  Art.wheel.gon.go((sabs(ex) <= 4 : U32) && between(ey, (0 - 3 : U32), 14), ex, ey, code)
+
+def Art.wheel(+dx: U32, +dy: U32, +t: U32, +ra: U32, +rb: U32, +st: U32) -> U32:
+  +a0 = sel(Art.running(st), ((Art.tm(st) * 205) >> 8n : U32), 0)
+  +hy = (dy + 48 : U32)
+  +rim = ell(dx, hy, 32, 32) && Bool.not(ell(dx, hy, 29, 29))
+  +inner = ell(dx, hy, 13, 13) && Bool.not(ell(dx, hy, 11, 11))
+  +inr = ell(dx, hy, 29, 29)
+  +spoke = inr && (U32.is_eq(dx, 0) || U32.is_eq(hy, 0) || U32.is_eq(sabs(dx), sabs(hy)))
+  +hub = ell(dx, hy, 3, 3)
+  +lit = U32.is_eq((((((dx + 64) >> 2n) + ((dy + 128) >> 2n)) + (t >> 4n)) .&. 1 : U32), 0)
+  +legs = Art.leg(dx, dy, 48, 107)
+  +base = over(Art.box((dx + 20 : U32), dy, 0, 4, 3, 9602196, 8418172, 6708076),
+    Art.box((dx - 20 : U32), dy, 0, 4, 3, 9602196, 8418172, 6708076))
+  +g0 = Art.wheel.gon(dx, dy, a0, Art.code(ra, rb, 0))
+  +g1 = Art.wheel.gon(dx, dy, (a0 + 32 : U32), Art.code(ra, rb, 1))
+  +g2 = Art.wheel.gon(dx, dy, (a0 + 64 : U32), Art.code(ra, rb, 2))
+  +g3 = Art.wheel.gon(dx, dy, (a0 + 96 : U32), Art.code(ra, rb, 3))
+  +g4 = Art.wheel.gon(dx, dy, (a0 + 128 : U32), Art.code(ra, rb, 4))
+  +g5 = Art.wheel.gon(dx, dy, (a0 + 160 : U32), Art.code(ra, rb, 5))
+  +g6 = Art.wheel.gon(dx, dy, (a0 + 192 : U32), Art.code(ra, rb, 6))
+  +g7 = Art.wheel.gon(dx, dy, (a0 + 224 : U32), Art.code(ra, rb, 7))
+  +gons = over(g0, over(g1, over(g2, over(g3, over(g4, over(g5, over(g6, g7)))))))
+  +frame = sel(hub, sel(U32.is_eq(dx, 0) && U32.is_eq(hy, 0), 16777215, 14725184),
+    sel(rim, sel(lit, 16766282, 6320595), sel(legs, 5913120, sel(inner, 12092939, sel(spoke, 11053224, TR())))))
+  over(gons, over(frame, base))
+
+# The Griffin Swing: a griffin-headed ship on a long arm, swinging higher
+# and higher and back to rest; eight riders along its deck
+def Art.swing.hull(+ux: U32, +uy: U32, +t: U32) -> U32:
+  +hull = ell(ux, uy, 18, 7) && sle(0, uy)
+  +deck = U32.is_eq(uy, 0) && (sabs(ux) <= 18 : U32)
+  +plank = U32.is_eq(((ux + 64) .&. 3 : U32), 0)
+  +trim = U32.is_eq(uy, 1) && (sabs(ux) <= 17 : U32)
+  +head = between(ux, 17, 21) && between(uy, (0 - 7 : U32), (0 - 1 : U32)) && Bool.not(U32.is_eq(ux, 21) && slt(uy, (0 - 5 : U32)))
+  +beak = between(ux, 22, 23) && between(uy, (0 - 5 : U32), (0 - 4 : U32))
+  +eye = U32.is_eq(ux, 20) && U32.is_eq(uy, (0 - 5 : U32))
+  +crest = between(ux, 17, 19) && U32.is_eq(uy, (0 - 8 : U32))
+  +tail = between(ux, (0 - 22 : U32), (0 - 18 : U32)) && between(uy, (0 - 6 : U32), (0 - 1 : U32))
+    && sle((0 - 6 : U32), (uy - (ux + 18) : U32))
+  sel(eye, 2105376, sel(beak, 14725184, sel(crest, 14725184, sel(head, 15263968, sel(tail, 12092939,
+    sel(deck, 11567184, sel(trim, 14725184, sel(hull, sel(plank, 7027228, 9062442), TR()))))))))
+
+def Art.swing.rider(+dx: U32, +dy: U32, +bx: U32, +by: U32, +c: U32, +s: U32, +ux: U32, +code: U32) -> U32:
+  +rx = (bx + sar((ux * c : U32), 8n) : U32)
+  +ry = (by + sar((ux * s : U32), 8n) : U32)
+  Art.rider((dx - rx : U32), (dy - ry + 1 : U32), code)
+
+def Art.swing(+dx: U32, +dy: U32, +t: U32, +ra: U32, +rb: U32, +st: U32) -> U32:
+  +tm = Art.tm(st)
+  +amp = sel(Art.running(st), U32.min(((U32.min(tm, (480 - tm : U32)) * 102) >> 8n : U32), 44), 0)
+  +th = wsin((tm * 3 : U32), amp)
+  +c = wcos(th, 256)
+  +s = wsin(th, 256)
+  +bx = wsin(th, 32)
+  +by = (0 - 56 + wcos(th, 32) : U32)
+  +ex = (dx - bx : U32)
+  +ey = (dy - by : U32)
+  +ux = sar(((ex * c) + (ey * s) : U32), 8n)
+  +uy = sar(((ey * c) - (ex * s) : U32), 8n)
+  +hull = Art.swing.hull(ux, uy, t)
+  +front = sel(slt(0, uy), hull, TR())
+  +r0 = Art.swing.rider(dx, dy, bx, by, c, s, (0 - 14 : U32), Art.code(ra, rb, 0))
+  +r1 = Art.swing.rider(dx, dy, bx, by, c, s, (0 - 10 : U32), Art.code(ra, rb, 1))
+  +r2 = Art.swing.rider(dx, dy, bx, by, c, s, (0 - 6 : U32), Art.code(ra, rb, 2))
+  +r3 = Art.swing.rider(dx, dy, bx, by, c, s, (0 - 2 : U32), Art.code(ra, rb, 3))
+  +r4 = Art.swing.rider(dx, dy, bx, by, c, s, 2, Art.code(ra, rb, 4))
+  +r5 = Art.swing.rider(dx, dy, bx, by, c, s, 6, Art.code(ra, rb, 5))
+  +r6 = Art.swing.rider(dx, dy, bx, by, c, s, 10, Art.code(ra, rb, 6))
+  +r7 = Art.swing.rider(dx, dy, bx, by, c, s, 14, Art.code(ra, rb, 7))
+  +riders = over(r0, over(r1, over(r2, over(r3, over(r4, over(r5, over(r6, r7)))))))
+  # the arm from the pivot (0, -56) to the ship
+  +px = dx
+  +py = (dy + 56 : U32)
+  +cross = ((px * (by + 56)) - (py * bx) : U32)
+  +dot = ((px * bx) + (py * (by + 56)) : U32)
+  +arm = (sabs(cross) <= 36 : U32) && sle(0, dot) && sle(dot, 1024)
+  +pivot = ell(dx, (dy + 56 : U32), 2, 2)
+  +legs = Art.leg(dx, dy, 56, 82)
+  +bar = U32.is_eq(dy, (0 - 30 : U32)) && (sabs(dx) <= 9 : U32)
+  +base = over(Art.box((dx + 18 : U32), dy, 0, 4, 3, 9602196, 8418172, 6708076),
+    Art.box((dx - 18 : U32), dy, 0, 4, 3, 9602196, 8418172, 6708076))
+  over(front, over(riders, over(hull, over(sel(pivot, 14725184, sel(arm, 6970184, TR())),
+    over(sel(legs || bar, 5913120, TR()), base)))))
+
+# The Wizard's Whirl: a bench between two star-topped pillars that swings
+# ever wider until it goes right over, riders upside down at the top
+def Art.whirl.rider(+dx: U32, +dy: U32, +rx: U32, +by: U32, +inv: Bool, +code: U32) -> U32:
+  +ey = (dy - by : U32)
+  Art.rider((dx - rx : U32), sel(inv, (0 - ey - 13 : U32), ey), code)
+
+def Art.whirl(+dx: U32, +dy: U32, +t: U32, +ra: U32, +rb: U32, +st: U32) -> U32:
+  +tm = Art.tm(st)
+  +amp = sel(Art.running(st), U32.min((U32.min(tm, (420 - tm : U32)) * 2 : U32), 200), 0)
+  +a = wsin((tm * 3 : U32), amp)
+  +off = wcos(a, 14)
+  +by = (0 - 32 + off : U32)
+  +inv = neg(off)
+  +bench = (sabs(dx) <= 12 : U32) && between((dy - by : U32), 0, 2)
+  +rim = bench && U32.is_eq((dy - by : U32), sel(inv, 2, 0))
+  +rod = U32.is_eq(sabs(dx), 12) && (between(dy, by, (0 - 32 : U32)) || between(dy, (0 - 32 : U32), by))
+  +pl = Art.cyl((dx + 14 : U32), dy, 0, 3, 36, 6957706)
+  +pr = Art.cyl((dx - 14 : U32), dy, 0, 3, 36, 6957706)
+  +starl = U32.is_eq((sabs((dx + 14 : U32)) + sabs((dy + 40 : U32)) : U32), 2) || U32.is_eq(dx, (0 - 14 : U32)) && U32.is_eq(dy, (0 - 40 : U32))
+  +starr = U32.is_eq((sabs((dx - 14 : U32)) + sabs((dy + 40 : U32)) : U32), 2) || U32.is_eq(dx, 14) && U32.is_eq(dy, (0 - 40 : U32))
+  +axle = U32.is_eq(dy, (0 - 32 : U32)) && (sabs(dx) <= 13 : U32)
+  +spark = Art.running(st) && ell(dx, (dy + 32 : U32), 20, 18) && Bool.not(ell(dx, (dy + 32 : U32), 16, 15))
+    && U32.is_eq((hash((dx + 64 : U32), ((dy + 64) + (t >> 2n) : U32)) .&. 15 : U32), 0)
+  +f0 = Art.whirl.rider(dx, dy, (0 - 9 : U32), by, inv, Art.code(ra, rb, 0))
+  +f1 = Art.whirl.rider(dx, dy, (0 - 3 : U32), by, inv, Art.code(ra, rb, 1))
+  +f2 = Art.whirl.rider(dx, dy, 3, by, inv, Art.code(ra, rb, 2))
+  +f3 = Art.whirl.rider(dx, dy, 9, by, inv, Art.code(ra, rb, 3))
+  +b0 = Art.whirl.rider(dx, dy, (0 - 6 : U32), (by - 2 : U32), inv, Art.code(ra, rb, 4))
+  +b1 = Art.whirl.rider(dx, dy, 0, (by - 2 : U32), inv, Art.code(ra, rb, 5))
+  +b2 = Art.whirl.rider(dx, dy, 6, (by - 2 : U32), inv, Art.code(ra, rb, 6))
+  +base = Art.box(dx, dy, 0, 14, 3, 7035000, 5919584, 4870480)
+  over(sel(spark, sel(U32.is_eq((t .&. 8 : U32), 0), 16777215, 12623103), TR()),
+    over(sel(rim, 14725184, sel(bench, 4860000, TR())), over(f0, over(f1, over(f2, over(f3,
+    over(b0, over(b1, over(b2, over(sel(starl || starr, 16766282, sel(rod, 11053224, sel(axle, 14725184, TR()))),
+    over(pl, over(pr, base))))))))))))
+
+# The Dragon's Eyrie: a stone tower with a red dragon perched on top; the
+# glass cabin rises around it, turns slowly at the top and comes down
+def Art.eseat(+dx: U32, +dy: U32, +ringy: U32, +a: U32, +code: U32) -> U32:
+  +ex = (dx - wcos(a, 9) : U32)
+  +ey = (dy - (ringy + wsin(a, 4)) : U32)
+  Art.rider(ex, ey, sel((sabs(ex) <= 3 : U32) && between(ey, (0 - 14 : U32), 0), code, 0))
+
+def Art.eyrie(+dx: U32, +dy: U32, +t: U32, +ra: U32, +rb: U32, +st: U32) -> U32:
+  +tm = U32.min(Art.tm(st), 599)
+  +run = Art.running(st)
+  +up = sel(run, sel((tm < 210 : U32), ((tm * 234) >> 10n : U32), sel((tm < 390 : U32), 48, (((599 - tm) * 234) >> 10n : U32))), 0)
+  +ringy = (0 - 8 - up : U32)
+  +rot = sel(run, (tm >> 1n : U32), 0)
+  +tower = Art.cyl(dx, dy, (0 - 2 : U32), 6, 64, 9079446)
+  +course = U32.is_eq(((dy + 1024) .&. 7 : U32), 0)
+  +slit = U32.is_eq(dx, 0) && U32.is_eq(((dy + 1024) .&. 15 : U32), 4) && slt(dy, (0 - 10 : U32))
+  +towerc = sel(opaque(tower) && slit, 2105376, sel(opaque(tower) && course, shade(tower, 180), tower))
+  +cap = ell(dx, (dy + 68 : U32), 8, 4) || (sabs(dx) <= 8 : U32) && between(dy, (0 - 70 : U32), (0 - 67 : U32))
+    && U32.is_eq(((dx + 64) .&. 3 : U32), 0)
+  # the dragon, wings beating slowly
+  +flap = ((t >> 4n) .&. 1 : U32)
+  +body = ell(dx, (dy + 74 : U32), 4, 2)
+  +neck = between(dx, 3, 5) && between(dy, (0 - 79 : U32), (0 - 75 : U32))
+  +head = between(dx, 5, 8) && between(dy, (0 - 81 : U32), (0 - 79 : U32))
+  +wing = between(sabs(dx), 3, 11) && U32.is_eq(dy, (0 - 77 - flap - ((sabs(dx) - 3) >> 1n) : U32))
+    || between(sabs(dx), 4, 9) && U32.is_eq(dy, (0 - 76 - flap - ((sabs(dx) - 3) >> 1n) : U32))
+  +deye = U32.is_eq(dx, 7) && U32.is_eq(dy, (0 - 80 : U32))
+  +dragon = sel(deye, 16766282, sel(head || neck || body, 12595248, sel(wing, 9056288, TR())))
+  +ring = ell(dx, (dy - ringy : U32), 12, 6) && Bool.not(ell(dx, (dy - ringy : U32), 7, 3))
+  +glass = ring && U32.is_eq(((dx + 64) .&. 3 : U32), 1)
+  +far = slt(dy, ringy)
+  +ringc = sel(glass, 10538751, sel(ring, 4221088, TR()))
+  +s0 = Art.eseat(dx, dy, ringy, (rot + 16 : U32), Art.code(ra, rb, 0))
+  +s1 = Art.eseat(dx, dy, ringy, (rot + 48 : U32), Art.code(ra, rb, 1))
+  +s2 = Art.eseat(dx, dy, ringy, (rot + 80 : U32), Art.code(ra, rb, 2))
+  +s3 = Art.eseat(dx, dy, ringy, (rot + 112 : U32), Art.code(ra, rb, 3))
+  +s4 = Art.eseat(dx, dy, ringy, (rot + 144 : U32), Art.code(ra, rb, 4))
+  +s5 = Art.eseat(dx, dy, ringy, (rot + 176 : U32), Art.code(ra, rb, 5))
+  +s6 = Art.eseat(dx, dy, ringy, (rot + 208 : U32), Art.code(ra, rb, 6))
+  +s7 = Art.eseat(dx, dy, ringy, (rot + 240 : U32), Art.code(ra, rb, 7))
+  +f0 = Art.front((rot + 16 : U32))
+  +f1 = Art.front((rot + 48 : U32))
+  +f2 = Art.front((rot + 80 : U32))
+  +f3 = Art.front((rot + 112 : U32))
+  +f4 = Art.front((rot + 144 : U32))
+  +f5 = Art.front((rot + 176 : U32))
+  +f6 = Art.front((rot + 208 : U32))
+  +f7 = Art.front((rot + 240 : U32))
+  +fronts = over(sel(f0, s0, TR()), over(sel(f1, s1, TR()), over(sel(f2, s2, TR()), over(sel(f3, s3, TR()),
+    over(sel(f4, s4, TR()), over(sel(f5, s5, TR()), over(sel(f6, s6, TR()), sel(f7, s7, TR()))))))))
+  +backs = over(sel(f0, TR(), s0), over(sel(f1, TR(), s1), over(sel(f2, TR(), s2), over(sel(f3, TR(), s3),
+    over(sel(f4, TR(), s4), over(sel(f5, TR(), s5), over(sel(f6, TR(), s6), sel(f7, TR(), s7))))))))
+  +base = Art.box(dx, dy, 0, 12, 4, 9602196, 8418172, 6708076)
+  over(dragon, over(sel(far, TR(), ringc), over(fronts, over(sel(cap, 10132122, towerc),
+    over(backs, over(sel(far, ringc, TR()), base))))))
+
+# an iso box of any size on (0, base): top diamond half-width r, height h
+def Art.box2(+dx: U32, +dy: U32, +base: U32, +r: U32, +h: U32, +top: U32, +left: U32, +right: U32) -> U32:
+  +ax = sabs(dx)
+  +cy = (base - h : U32)
+  +ontop = ((ax + 2 * sabs((dy - cy : U32))) <= r : U32)
+  +lowtop = (cy + ((r - ax) >> 1n) : U32)
+  +lowbot = (base + ((r - ax) >> 1n) : U32)
+  +side = (ax <= r : U32) && sle(lowtop, dy) && sle(dy, lowbot)
+  sel(ontop, top, sel(side, sel(neg(dx), left, right), TR()))
+
+# The Lich's Crypt: a dark ride inside a mossy crypt, green light flickering
+# in its windows while the riders are inside; their carts wait at the door
+def Art.cart(+dx: U32, +dy: U32, +cx: U32, +cy: U32, +c0: U32, +c1: U32, +c2: U32, +c3: U32) -> U32:
+  +ex = (dx - cx : U32)
+  +ey = (dy - cy : U32)
+  +body = between(ex, (0 - 9 : U32), 9) && between(ey, 0, 3)
+  +trim = body && U32.is_eq(ey, 0)
+  +r0 = Art.rider((ex + 6 : U32), (ey + 1 : U32), c0)
+  +r1 = Art.rider((ex + 2 : U32), (ey + 1 : U32), c1)
+  +r2 = Art.rider((ex - 2 : U32), (ey + 1 : U32), c2)
+  +r3 = Art.rider((ex - 6 : U32), (ey + 1 : U32), c3)
+  over(sel(trim, 12092939, sel(body, 5387882, TR())), over(r0, over(r1, over(r2, r3))))
+
+def Art.crypt(+dx: U32, +dy: U32, +t: U32, +ra: U32, +rb: U32, +st: U32) -> U32:
+  +ph = ((st >> 16n) .&. 3 : U32)
+  +walls = Art.box2(dx, dy, 0, 26, 18, 7039866, 6316656, 4868698)
+  +course = opaque(walls) && U32.is_eq(((dy + 1024) .&. 3 : U32), 0) && slt(dy, (0 - 2 : U32))
+  +ax = sabs(dx)
+  +upper = (0 - 44 + ((ax * 3) >> 2n) : U32)
+  +lower = (0 - 18 + ((26 - ax) >> 1n) : U32)
+  +roof = (ax <= 26 : U32) && sle(upper, dy) && sle(dy, lower)
+  +slate = U32.is_eq(((dy + ax + 1024) .&. 3 : U32), 0)
+  +moss = U32.is_eq((hash((dx + 64 : U32), (dy + 64 : U32)) .&. 7 : U32), 0)
+  +roofc = sel(moss, 4880944, sel(neg(dx), sel(slate, 3815002, 4868698), sel(slate, 2894404, 3815002)))
+  +spire = U32.is_eq(dx, 0) && between(dy, (0 - 54 : U32), (0 - 44 : U32))
+  +orb = ell(dx, (dy + 56 : U32), 2, 2)
+  +glow = Art.running(st) && Bool.not(U32.is_eq((hash((t >> 3n : U32), 3) .&. 3 : U32), 0))
+  +win = (U32.is_eq(dx, (0 - 20 : U32)) || U32.is_eq(dx, 20) || U32.is_eq(dx, (0 - 6 : U32)) || U32.is_eq(dx, 6))
+    && between((dy + 10 - ((26 - ax) >> 1n) : U32), 0, 3)
+  +door = between(dx, (0 - 16 : U32), (0 - 10 : U32)) && between((dy - ((26 - ax) >> 1n) : U32), (0 - 10 : U32), 0)
+    && sle((0 - 12 : U32), ((dy - ((26 - ax) >> 1n)) - sabs((dx + 13 : U32)) : U32))
+  +torch = (U32.is_eq(dx, (0 - 18 : U32)) || U32.is_eq(dx, (0 - 8 : U32))) && between((dy - ((26 - ax) >> 1n) : U32), (0 - 8 : U32), (0 - 6 : U32))
+  +flame = (U32.is_eq(dx, (0 - 18 : U32)) || U32.is_eq(dx, (0 - 8 : U32))) && U32.is_eq((dy - ((26 - ax) >> 1n) : U32), (0 - 9 - ((t >> 2n) .&. 1) : U32))
+  +carts = sel(U32.is_eq(ph, 1), TR(),
+    over(Art.cart(dx, dy, (0 - 8 : U32), 6, Art.code(ra, rb, 0), Art.code(ra, rb, 1), Art.code(ra, rb, 2), Art.code(ra, rb, 3)),
+      Art.cart(dx, dy, 12, 11, Art.code(ra, rb, 4), Art.code(ra, rb, 5), Art.code(ra, rb, 6), Art.code(ra, rb, 7))))
+  over(carts, over(sel(flame, 7864234, sel(torch, 3811866, TR())),
+    over(sel(orb, 7864234, sel(spire, 2894404, sel(roof, roofc, TR()))),
+    sel(door, sel(glow, 3448136, 1579032), sel(win, sel(glow, 7864234, 1579032), sel(course, shade(walls, 170), walls))))))
+
+# The Golem Bumpers: stone golem cars bumping about an arena with a glowing
+# grid; parked in a row between rides
+def Art.golem.go(near: Bool, +ex: U32, +ey: U32, +code: U32, +hue: U32) -> U32:
+  match near:
+    case True{}:
+      +car = ell(ex, ey, 5, 3)
+      +top = ell(ex, (ey + 1 : U32), 4, 2)
+      +eye = U32.is_eq(ey, 0) && U32.is_eq(sabs(ex), 2)
+      over(sel(eye, hue, TR()), over(Art.rider(ex, (ey - 1 : U32), code), sel(top, 10132122, sel(car, 7039866, TR()))))
+    case False{}:
+      TR()
+
+def Art.golem(+dx: U32, +dy: U32, +cx: U32, +cy: U32, +code: U32, +hue: U32) -> U32:
+  +ex = (dx - cx : U32)
+  +ey = (dy - cy : U32)
+  Art.golem.go((sabs(ex) <= 5 : U32) && between(ey, (0 - 14 : U32), 3), ex, ey, code, hue)
+
+def Art.bumpers(+dx: U32, +dy: U32, +t: U32, +ra: U32, +rb: U32, +st: U32) -> U32:
+  +run = Art.running(st)
+  +tm = Art.tm(st)
+  +ax = sabs(dx)
+  +d = (ax + 2 * sabs((dy + 2 : U32)) : U32)
+  +floor = (d <= 26 : U32)
+  +grid = floor && (U32.is_eq(((dx + dy * 2 + 1024) .&. 7 : U32), 0) || U32.is_eq(((dx - dy * 2 + 1024) .&. 7 : U32), 0))
+  +rim = (d <= 30 : U32) && Bool.not(floor)
+  +rimside = Bool.not(floor) && Bool.not(rim) && ((ax + 2 * sabs((dy + 0 : U32))) <= 30 : U32) && sle((0 - 2 : U32), dy)
+  +post = (U32.is_eq(dx, 0) && between(dy, (0 - 24 : U32), (0 - 17 : U32)))
+  +lamp = U32.is_eq(dx, 0) && U32.is_eq(dy, (0 - 25 : U32))
+  +g0 = Art.golem(dx, dy, sel(run, wsin((tm * 3 : U32), 16), (0 - 15 : U32)), sel(run, (0 - 2 + wsin((tm * 2 + 20 : U32), 7) : U32), (0 - 2 : U32)), Art.code(ra, rb, 0), 7864234)
+  +g1 = Art.golem(dx, dy, sel(run, wsin((tm * 2 + 90 : U32), 16), (0 - 5 : U32)), sel(run, (0 - 2 + wsin((tm * 3 + 60 : U32), 7) : U32), (0 - 7 : U32)), Art.code(ra, rb, 1), 16748640)
+  +g2 = Art.golem(dx, dy, sel(run, wsin((tm * 4 + 30 : U32), 15), 5), sel(run, (0 - 2 + wsin((tm * 2 + 150 : U32), 7) : U32), (0 - 7 : U32)), Art.code(ra, rb, 2), 6352127)
+  +g3 = Art.golem(dx, dy, sel(run, wsin((tm * 3 + 170 : U32), 15), 15), sel(run, (0 - 2 + wsin((tm * 4 + 10 : U32), 6) : U32), (0 - 2 : U32)), Art.code(ra, rb, 3), 16766282)
+  +g4 = Art.golem(dx, dy, sel(run, wsin((tm * 2 + 200 : U32), 14), (0 - 15 : U32)), sel(run, (0 - 2 + wsin((tm * 3 + 100 : U32), 6) : U32), 4), Art.code(ra, rb, 4), 12623103)
+  +g5 = Art.golem(dx, dy, sel(run, wsin((tm * 4 + 120 : U32), 14), (0 - 5 : U32)), sel(run, (0 - 2 + wsin((tm * 2 + 220 : U32), 6) : U32), 9), Art.code(ra, rb, 5), 7864234)
+  +g6 = Art.golem(dx, dy, sel(run, wsin((tm * 3 + 60 : U32), 13), 5), sel(run, (0 - 2 + wsin((tm * 4 + 180 : U32), 5) : U32), 9), Art.code(ra, rb, 6), 16748640)
+  +g7 = Art.golem(dx, dy, sel(run, wsin((tm * 2 + 240 : U32), 13), 15), sel(run, (0 - 2 + wsin((tm * 3 + 200 : U32), 5) : U32), 4), Art.code(ra, rb, 7), 6352127)
+  +cars = over(g0, over(g1, over(g2, over(g3, over(g4, over(g5, over(g6, g7)))))))
+  over(cars, over(sel(lamp, sel(run, 16766282, 9079434), sel(post, 3158064, TR())),
+    sel(rim, 9079446, sel(rimside, 6316656, sel(grid, sel(run, 5277842, 4216950), sel(floor, 3162714, TR()))))))
+
+# The Hedge Labyrinth: hedges four pixels high on a two-tile square, a gilt
+# statue in the heart of it; visitors walk the ring inside
+def Art.maze.wall(+i: U32, +j: U32) -> Bool:
+  +outer = U32.is_eq(i, 0) || U32.is_eq(j, 0) || U32.is_eq(i, 7) || U32.is_eq(j, 7)
+  +gate = U32.is_eq(i, 7) && U32.is_eq(j, 3) || U32.is_eq(i, 0) && U32.is_eq(j, 4)
+  +box = between(i, 2, 5) && between(j, 2, 5) && (U32.is_eq(i, 2) || U32.is_eq(i, 5) || U32.is_eq(j, 2) || U32.is_eq(j, 5))
+  +gap = U32.is_eq(i, 5) && U32.is_eq(j, 4) || U32.is_eq(i, 3) && U32.is_eq(j, 2)
+  (outer && Bool.not(gate)) || (box && Bool.not(gap)) || U32.is_eq(i, 1) && U32.is_eq(j, 5) || U32.is_eq(i, 6) && U32.is_eq(j, 2)
+
+def Art.maze.at(+dx: U32, +dy: U32) -> Bool:
+  +y2 = ((dy + 16) * 2 : U32)
+  +u = iso_u(dx, y2)
+  +v = iso_v(dx, y2)
+  (u < 32 : U32) && (v < 32 : U32) && Art.maze.wall((u >> 2n : U32), (v >> 2n : U32))
+
+# the ring corridor, cells (1..6, 1) (6, 1..6) (6..1, 6) (1, 6..1): 20 steps
+def Art.maze.walker(+dx: U32, +dy: U32, +s: U32, +code: U32) -> U32:
+  +k = sel((s >= 40 : U32), (s - 40 : U32), sel((s >= 20 : U32), (s - 20 : U32), s))
+  +ci = sel((k < 5 : U32), (1 + k : U32), sel((k < 10 : U32), 6, sel((k < 15 : U32), (6 - (k - 10) : U32), 1)))
+  +cj = sel((k < 5 : U32), 1, sel((k < 10 : U32), (1 + (k - 5) : U32), sel((k < 15 : U32), 6, (6 - (k - 15) : U32))))
+  +u = (ci * 4 + 2 : U32)
+  +v = (cj * 4 + 2 : U32)
+  +wx = (u - v : U32)
+  +wy = (((u + v) >> 1n) - 16 : U32)
+  Art.rider((dx - wx : U32), (dy - wy : U32), code)
+
+def Art.maze(+dx: U32, +dy: U32, +t: U32, +ra: U32, +rb: U32, +st: U32) -> U32:
+  +tm = Art.tm(st)
+  +y2 = ((dy + 16) * 2 : U32)
+  +u = iso_u(dx, y2)
+  +v = iso_v(dx, y2)
+  +inside = (u < 32 : U32) && (v < 32 : U32)
+  +w0 = Art.maze.at(dx, dy)
+  +w1 = Art.maze.at(dx, (dy + 1 : U32))
+  +w2 = Art.maze.at(dx, (dy + 2 : U32))
+  +w3 = Art.maze.at(dx, (dy + 3 : U32))
+  +w4 = Art.maze.at(dx, (dy + 4 : U32))
+  +leafy = U32.is_eq((hash((dx + 64 : U32), (dy + 64 : U32)) .&. 3 : U32), 0)
+  +hedge = sel(w4, sel(leafy, 7324480, 5275712), sel(w3 || w2 || w1, sel(leafy, 3834938, 3040816), TR()))
+  +gravel = inside && Bool.not(w0)
+  +statue = ell(dx, (dy + 2 : U32), 2, 1) || U32.is_eq(dx, 0) && between(dy, (0 - 8 : U32), (0 - 2 : U32))
+    || ell(dx, (dy + 9 : U32), 1, 1)
+  +step = (tm >> 5n : U32)
+  +run = Art.running(st)
+  +v0 = Art.maze.walker(dx, dy, sel(run, (step + 0 : U32), 0), Art.code(ra, rb, 0))
+  +v1 = Art.maze.walker(dx, dy, sel(run, (step + 3 : U32), 1), Art.code(ra, rb, 1))
+  +v2 = Art.maze.walker(dx, dy, sel(run, (step + 5 : U32), 2), Art.code(ra, rb, 2))
+  +v3 = Art.maze.walker(dx, dy, sel(run, (step + 8 : U32), 3), Art.code(ra, rb, 3))
+  +v4 = Art.maze.walker(dx, dy, sel(run, (step + 10 : U32), 4), Art.code(ra, rb, 4))
+  +v5 = Art.maze.walker(dx, dy, sel(run, (step + 13 : U32), 5), Art.code(ra, rb, 5))
+  +v6 = Art.maze.walker(dx, dy, sel(run, (step + 15 : U32), 6), Art.code(ra, rb, 6))
+  +v7 = Art.maze.walker(dx, dy, sel(run, (step + 18 : U32), 7), Art.code(ra, rb, 7))
+  +walkers = over(v0, over(v1, over(v2, over(v3, over(v4, over(v5, over(v6, v7)))))))
+  over(sel(w4, hedge, TR()), over(walkers, over(hedge, sel(statue, 14725184, sel(gravel, 12628608, TR())))))
+
+# The Mermaid Flume: a water channel on stilts around a lagoon rock where a
+# mermaid sits; it climbs along the back and drops at the right with a
+# splash; four logs of two riders
+def Art.flume.h(+x: U32, +back: Bool) -> U32:
+  sel(back, (4 + (((x + 26) * 69) >> 8n) : U32), 4)
+
+def Art.flume.log(+dx: U32, +dy: U32, +a: U32, +ca: U32, +cb: U32) -> U32:
+  +lx = wcos(a, 22)
+  +ly0 = wsin(a, 11)
+  +back = neg(ly0)
+  +ly = (ly0 - Art.flume.h(lx, back) : U32)
+  +ex = (dx - lx : U32)
+  +ey = (dy - ly : U32)
+  +log = ell(ex, ey, 5, 2)
+  +end = log && U32.is_eq(sabs(ex), 5)
+  over(Art.rider((ex + 2 : U32), (ey + 1 : U32), ca), over(Art.rider((ex - 2 : U32), (ey + 1 : U32), cb),
+    sel(end, 9062442, sel(log, 11567184, TR()))))
+
+def Art.flume(+dx: U32, +dy: U32, +t: U32, +ra: U32, +rb: U32, +st: U32) -> U32:
+  +run = Art.running(st)
+  +a0 = sel(run, (Art.tm(st) * 2 : U32), 64)
+  +back = slt(dy, 0)
+  +h = Art.flume.h(dx, back)
+  +cy = (dy + h : U32)
+  +chan = ell(dx, cy, 26, 13) && Bool.not(ell(dx, cy, 18, 9))
+  +water = ell(dx, cy, 25, 12) && Bool.not(ell(dx, cy, 19, 10))
+  +ripple = water && U32.is_eq((((dx + dy * 2) + (t >> 2n) + 1024) .&. 7 : U32), 0)
+  +side = Bool.not(chan) && (ell(dx, (cy - 2 : U32), 26, 13) && Bool.not(ell(dx, (cy - 2 : U32), 18, 9)))
+  +lagoon = ell(dx, (dy + 2 : U32), 14, 7)
+  +rock = ell(dx, (dy + 6 : U32), 6, 4)
+  +tail = between(dx, 1, 4) && between(dy, (0 - 9 : U32), (0 - 7 : U32))
+  +mbody = U32.is_eq(dx, 0) && between(dy, (0 - 13 : U32), (0 - 9 : U32))
+  +hair = between(dx, (0 - 1 : U32), 0) && between(dy, (0 - 15 : U32), (0 - 12 : U32))
+  +splash = run && ell((dx - 22 : U32), (dy + 3 : U32), 4, 5) && U32.is_eq((hash((dx + 64 : U32), ((dy + 64) + (t >> 2n) : U32)) .&. 1 : U32), 0)
+  +l0 = Art.flume.log(dx, dy, a0, Art.code(ra, rb, 0), Art.code(ra, rb, 1))
+  +l1 = Art.flume.log(dx, dy, (a0 + 64 : U32), Art.code(ra, rb, 2), Art.code(ra, rb, 3))
+  +l2 = Art.flume.log(dx, dy, (a0 + 128 : U32), Art.code(ra, rb, 4), Art.code(ra, rb, 5))
+  +l3 = Art.flume.log(dx, dy, (a0 + 192 : U32), Art.code(ra, rb, 6), Art.code(ra, rb, 7))
+  +logs = over(l0, over(l1, over(l2, l3)))
+  over(sel(splash, 16316664, TR()), over(logs, over(sel(ripple, 10538751, sel(water, 4221152, sel(chan, 9062442,
+    sel(side, 7031338, TR())))), over(sel(hair, 14200928, sel(mbody, 15781004, sel(tail, 4889242, sel(rock, 9079446,
+    sel(lagoon, 3108784, TR()))))), TR()))))
+
 def Art.ride.go(+k: U32, +dx: U32, +dy: U32, +t: U32, +ra: U32, +rb: U32, +st: U32) -> U32:
   match k:
     case 1:
@@ -1341,6 +1741,22 @@ def Art.ride.go(+k: U32, +dx: U32, +dy: U32, +t: U32, +ra: U32, +rb: U32, +st: U
       Art.wisps(dx, dy, t)
     case 9:
       Art.ices(dx, dy, t)
+    case 10:
+      Art.swing(dx, dy, t, ra, rb, st)
+    case 11:
+      Art.wheel(dx, dy, t, ra, rb, st)
+    case 12:
+      Art.crypt(dx, dy, t, ra, rb, st)
+    case 13:
+      Art.bumpers(dx, dy, t, ra, rb, st)
+    case 14:
+      Art.maze(dx, dy, t, ra, rb, st)
+    case 17:
+      Art.flume(dx, dy, t, ra, rb, st)
+    case 15:
+      Art.eyrie(dx, dy, t, ra, rb, st)
+    case 16:
+      Art.whirl(dx, dy, t, ra, rb, st)
     case _:
       TR()
 
@@ -1616,6 +2032,22 @@ def Art.icon_pic(+tool: U32, +cx: U32, +cy: U32, +t: U32) -> U32:
     case 16:
       # the privy at half size
       Art.privy((cx * 2 : U32), (cy * 2 - 12 : U32), t)
+    case 33:
+      Art.ride.go(10, (cx * 3 : U32), (cy * 3 - 30 : U32), t, 0, 0, 0)
+    case 34:
+      Art.ride.go(11, (cx * 4 : U32), (cy * 4 - 44 : U32), t, 0, 0, 0)
+    case 38:
+      Art.ride.go(15, (cx * 4 : U32), (cy * 4 - 46 : U32), t, 0, 0, 0)
+    case 35:
+      Art.ride.go(12, (cx * 3 : U32), (cy * 3 - 22 : U32), t, 0, 0, 0)
+    case 36:
+      Art.ride.go(13, (cx * 3 : U32), (cy * 3 - 12 : U32), t, 0, 0, 0)
+    case 37:
+      Art.ride.go(14, (cx * 3 : U32), (cy * 3 - 8 : U32), t, 0, 0, 0)
+    case 40:
+      Art.ride.go(17, (cx * 3 : U32), (cy * 3 - 8 : U32), t, 0, 0, 0)
+    case 39:
+      Art.ride.go(16, (cx * 3 : U32), (cy * 3 - 28 : U32), t, 0, 0, 0)
     case 30:
       Art.healer((cx * 2 : U32), (cy * 2 - 8 : U32), t)
     case 31:

@@ -108,6 +108,15 @@ Small design decisions made while working, listed here so they can be revisited.
   takes 150 off their nausea. Wisp Seller: a glowing wisp on a string, bought on a whim by happy guests with
   empty hands (+20 happiness); a finished wisp floats away, leaving no litter. Enchanted Ices: bought on a
   whim too, eases hunger and thirst, and its wrapper is litter. Carried items now take three bits.
+- **The eight new rides** (excitement, intensity, nausea in hundredths; cost; seats 8; size):
+  Griffin Swing 3.20/3.80/2.50, 1400, 2x2; Wheel of Stars 1.90/0.40/0.20, 1100, 2x2; Lich's Crypt
+  2.70/1.20/0.60, 1500, 2x2; Golem Bumpers 2.30/1.50/0.50, 1000, 2x2; Hedge Labyrinth 1.60/0.20/0.10, 700,
+  2x2; Dragon's Eyrie 1.80/0.30/0.30, 1000, 1x1; Wizard's Whirl 3.90/4.60/3.80, 1600, 1x1; Mermaid Flume
+  3.10/2.00/0.90, 1900, 2x2. All run in cycles with loading waits like the carousel and wear like it.
+  Gentle ones (wheel, labyrinth, eyrie, bumpers, crypt) sit in their own tab, so children's rides are easy
+  to find. The Lich's Crypt hides its riders while they are inside; the flume is drawn as a raised loop on
+  the ride's own square rather than a track of its own. `./park --rides out.ppm T` draws all eight at T ticks
+  into a run with every seat taken. The starter park gets a Wheel of Stars at the central crossing.
 
 ## Done: M1, the vertical slice
 Isometric fantasy map, paths, terrain editing, 4 enchanted tree kinds, Dragon Carousel, Arcane Spire, Potion
@@ -258,7 +267,7 @@ Spikes, in order:
 9. (Done) Laws: **litter_accounted** (litter appears only when a guest drops it or is sick, and disappears only when
    a Brownie sweeps it or a bin takes it) and **wages_booked** (every wage goes through the ledger).
 
-## M6: More to build (in progress: tabs and shops done)
+## M6: More to build (in progress: tabs, shops and rides done)
 - **Rides:** Griffin Swing (swinging ship), Wheel of Stars (Ferris wheel), Lich's Crypt (haunted dark ride),
   Golem Bumpers (dodgems), Hedge Labyrinth (maze), Dragon's Eyrie (observation tower), Wizard's Whirl
   (top spin), Mermaid Flume (log flume).

@@ -29,6 +29,7 @@ Dev modes:
 - `./park --savetest TICKS` saves a busy park to disk, loads it and compares.
 - `./park --uitest` clicks through a ride window headlessly and reports what changed.
 - `./park --people out.ppm` draws every folk and outfit on one sheet.
+- `./park --rides out.ppm T` draws the M6 rides T ticks into a run, every seat taken.
 - `./park --wav out.wav SECONDS` records the music with every effect in turn;
   `python3 tools/wavcheck.py out.wav out.png` prints its levels and draws it. `PARK_MUTE=1` plays nothing.
 - `--shot` takes an optional 6th argument, a window to show (kind * 256 + ride; 256 is the carousel's), and a 7th, the zoom (0 normal, 1 close, 2 far).
@@ -115,7 +116,9 @@ green where it can go, red where it can't, with its cost beside the mouse.
 The toolbar: inspect and demolish on the left, then five tabs, then the open
 tab's tools. Paths and furniture: path, queue line, litter bin, bench,
 lantern. Land: raise, lower. Scenery: enchanted trees. Rides: Dragon
-Carousel (gentle); Arcane Spire, Wyrm Coaster (thrill). Shops: Potion Stall, Troll Tavern, Privy,
+Gentle rides: Dragon Carousel, Wheel of Stars, Hedge Labyrinth, Dragon's Eyrie, Golem Bumpers, Lich's
+Crypt. Thrill rides: Arcane Spire, Griffin Swing, Wizard's Whirl, Mermaid Flume, Wyrm Coaster. Shops:
+Potion Stall, Troll Tavern, Privy,
 Healer's Tent (for queasy guests), Wisp Seller, Enchanted Ices.
 Hover a button to see its name on the strip above the bar.
 
