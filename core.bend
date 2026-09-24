@@ -3103,7 +3103,7 @@ def Build.legal.go(+tool: U32, +q: Q, +trk: +List<Track>, +x: U32, +y: U32, +o: 
     case 46:
       Land.buyable(q, x, y)
     case 10:
-      empty && dry && (len32(Track, trk) < 8 : U32)
+      empty && dry
     case _:
       Bool.not(U32.is_eq(Tool.kind(tool), 0)) && Build.fits(q, Tool.kind(tool), x, y)
 
@@ -3318,23 +3318,92 @@ def Track.room(+q: Q, +e: Pose, +op: U32) -> Bool:
   inmap(x, y) && U32.is_eq(Tile.obj(t), 0) && Bool.not(U32.is_eq(Tile.ter(t), 4))
     && (z >= dr : U32) && (Tile.h(t) + dr <= z : U32) && (z + Piece.rise(op) <= 12 : U32)
 
+# A track op: code (bits 0-4) | coaster << 5 (11 bits) | piece << 16 (the
+# piece a cut starts at)
+def TrackOp.k(+op: U32) -> U32:
+  ((op >> 5n) .&. 2047 : U32)
+
+def TrackOp.idx(+op: U32) -> U32:
+  (op >> 16n : U32)
+
+# steep pieces only face the camera: climbs heading toward it (-u, -v),
+# drops heading away (+u, +v)
+def Piece.faces(+op: U32, +d: U32) -> Bool:
+  (Bool.not(U32.is_eq(op, 12)) || (d >= 2 : U32)) && (Bool.not(U32.is_eq(op, 13)) || (d < 2 : U32))
+
+# edits need the coaster shut, or on its test run (an edit ends the test);
+# cutting (26: from a piece to the end; 27: the whole coaster) works any time
 def TrackOp.ok(+q: Q, +trk: Track, +cash: U32, +op: U32) -> Bool:
   +n = len32(Piece, Track.pieces(trk))
-  +shut = Bool.not(Track.open(trk))
+  +shut = Bool.not(Track.open(trk)) || Test.testing(Track.stats(trk))
   +plat = Bool.not(U32.is_eq(op, 5)) || U32.is_eq(Piece.kind(Pieces.last(Track.pieces(trk))), 5)
   +add = Piece.adds(op) && shut && (n > 0 : U32) && (n < 250 : U32) && Bool.not(Track.closed(trk)) && plat
-    && Track.room(q, Track.end(trk), op) && Build.can_pay(cash, Piece.cost(op))
+    && Piece.faces(op, Pose.d(Track.end(trk))) && Track.room(q, Track.end(trk), op) && Build.can_pay(cash, Piece.cost(op))
   +del = U32.is_eq(op, 7) && shut && (n > 1 : U32)
   +set = (op >= 16 : U32) && (op < 24 : U32) && shut
   +tst = (U32.is_eq(op, 24) || U32.is_eq(op, 25)) && shut && Track.closed(trk)
-  add || del || set || tst || U32.is_eq(op, 8)
+  +cut = U32.is_eq(op, 26) && (n > 1 : U32) || U32.is_eq(op, 27) && (n > 0 : U32)
+  add || del || set || tst || cut || U32.is_eq(op, 8)
 
-# a piece costs its price; taking one off gives half of its price back
-def TrackOp.ledger(ok: Bool, +op: U32, +last: U32) -> +List<Txn>:
+# where a cut starts: the whole coaster (27), else never the first station
+# piece
+def TrackOp.from(+op: U32, +ix: U32) -> U32:
+  sel(U32.is_eq(op, 27), 0, U32.max(ix, 1))
+
+def Pieces.refund(+ps: +List<Piece>, +i: U32, +from: U32) -> U32:
+  match ps:
+    case []:
+      0
+    case p <> rest:
+      +p2 = p
+      (sel((i >= from : U32), (Piece.cost(Piece.kind(p2)) >> 1n : U32), 0) + Pieces.refund(rest, (i + 1 : U32), from) : U32)
+
+# half the price of every piece a cut takes off
+def TrackOp.refund(+trk: Track, +op: U32, +ix: U32) -> U32:
+  Pieces.refund(Track.pieces(trk), 0, TrackOp.from(op, ix))
+
+def Pieces.take(+ps: +List<Piece>, +n: U32) -> +List<Piece>:
+  match ps:
+    case []:
+      []
+    case p <> rest:
+      Bool.pick(+List<Piece>, U32.is_eq(n, 0), [], p <> Pieces.take(rest, (n - 1 : U32)))
+
+def Pieces.drop(+ps: +List<Piece>, +n: U32) -> +List<Piece>:
+  match ps:
+    case []:
+      []
+    case p <> rest:
+      Bool.pick(+List<Piece>, U32.is_eq(n, 0), p <> rest, Pieces.drop(rest, (n - 1 : U32)))
+
+def Land.clear_pieces(+ps: +List<Piece>, +q: Q) -> Q:
+  match ps:
+    case []:
+      q
+    case p <> rest:
+      Piece{+x, +y, z, kind, dir} = p
+      Land.clear_pieces(rest, Land.put(q, x, y, 0, 0, 0))
+
+# a cut: the pieces from `from` on come off; the track closes
+def Track.cut(t: Track, +from: U32) -> Track:
+  Track{+ps, open, bs, +s, +e, +cfg, stats} = t
+  +n = len32(Piece, ps)
+  +e2 = Bool.pick(Pose, U32.is_eq(from, 0), s, Bool.pick(Pose, (from >= n : U32), e, Piece.pose(Pieces.get(ps, from))))
+  Track{Pieces.take(ps, from), False{}, [], s, e2, cfg, 0}
+
+# after any change the check runs again at once: a closed circuit whose dry
+# run passes goes straight onto a test run; anything else stays shut
+def Track.recheck(+t: Track) -> Track:
+  Bool.pick(Track, Track.closed(t) && U32.is_eq(Dry.fail(Dry.run(Track.pieces(t), Track.cfg(t))), 255), Track.test(t), t)
+
+# a piece costs its price; taking one off gives half of its price back, and
+# so does each piece a cut takes off
+def TrackOp.ledger(ok: Bool, +op: U32, +last: U32, +refund: U32) -> +List<Txn>:
   match ok:
     case True{}:
       Bool.pick(+List<Txn>, Piece.adds(op), [Spend{3, Piece.cost(op)}],
-        Bool.pick(+List<Txn>, U32.is_eq(op, 7), [Gain{4, (Piece.cost(last) >> 1n : U32)}], []))
+        Bool.pick(+List<Txn>, U32.is_eq(op, 7), [Gain{4, (Piece.cost(last) >> 1n : U32)}],
+        Bool.pick(+List<Txn>, U32.is_eq(op, 26) || U32.is_eq(op, 27), [Gain{4, refund}], [])))
     case False{}:
       []
 
@@ -3342,7 +3411,7 @@ def Piece.code(p: Piece) -> U32:
   Piece{x, y, z, kind, dir} = p
   (kind + dir * 16 : U32)
 
-def TrackOp.map(ok: Bool, +q: Q, +trk: Track, +op: U32, +k: U32) -> Q:
+def TrackOp.map(ok: Bool, +q: Q, +trk: Track, +op: U32, +k: U32, +ix: U32) -> Q:
   match ok:
     case True{}:
       +e = Track.end(trk)
@@ -3352,7 +3421,8 @@ def TrackOp.map(ok: Bool, +q: Q, +trk: Track, +op: U32, +k: U32) -> Q:
       Bool.pick(Q, Piece.adds(op),
         Land.put(q, Pose.x(e), Pose.y(e), 6, (Piece.code(pc) .|. (k << 8n) : U32), Pose.z(e)),
         Bool.pick(Q, U32.is_eq(op, 7), Land.put(q, Pose.x(lp), Pose.y(lp), 0, 0, 0),
-          q))
+        Bool.pick(Q, U32.is_eq(op, 26) || U32.is_eq(op, 27), Land.clear_pieces(Pieces.drop(Track.pieces(trk), TrackOp.from(op, ix)), q),
+          q)))
     case False{}:
       q
 
@@ -3379,6 +3449,15 @@ def Track.setcfg(t: Track, +op: U32) -> Track:
   Track{ps, False{}, [], s, e, Cfg.set(cfg, op, Track.most(len32(Piece, ps))), 0}
 
 # every coaster's type, two bits each (coaster k at bits 2k), for drawing
+# every coaster's type, in order, for drawing
+def Tracks.tylist(+ts: +List<Track>) -> +List<U32>:
+  match ts:
+    case []:
+      []
+    case t <> rest:
+      +t2 = t
+      Cfg.type(Track.cfg(t2)) <> Tracks.tylist(rest)
+
 def Tracks.types(+ts: +List<Track>, +k: U32) -> U32:
   match ts:
     case []:
@@ -3394,35 +3473,42 @@ def Track.edit(t: Track, +op: U32) -> Track:
     Track{List.append(&2, Piece, ps, [pc]), False{}, [], s, Piece.exit(pc), cfg, 0},
     Track{Pieces.init(ps), False{}, [], s, Piece.pose(Pieces.last(ps)), cfg, 0})
 
-def Track.op(+t: Track, +op: U32, ok: Bool) -> Track:
+def Track.op(+t: Track, +op: U32, +ix: U32, ok: Bool) -> Track:
   match ok:
     case True{}:
       Bool.pick(Track, U32.is_eq(op, 8), Track.toggle(t),
         Bool.pick(Track, U32.is_eq(op, 24), Track.test(t),
         Bool.pick(Track, U32.is_eq(op, 25), Track.pretest(t),
-        Bool.pick(Track, (op >= 16 : U32), Track.setcfg(t, op), Track.edit(t, op)))))
+        Bool.pick(Track, U32.is_eq(op, 26) || U32.is_eq(op, 27), Track.recheck(Track.cut(t, TrackOp.from(op, ix))),
+        Bool.pick(Track, (op >= 16 : U32), Track.recheck(Track.setcfg(t, op)), Track.recheck(Track.edit(t, op)))))))
     case False{}:
       t
 
+# coaster k's ride opens (1) or closes (0), or goes with its demolished
+# track (2)
 def Rides.coaster(+rs: +List<Ride>, +k: U32, +open: U32) -> +List<Ride>:
   match rs:
     case []:
       []
     case r <> rest:
-      Ride{+kind, x, y, w, +h, price, op, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate, wear} = r
-      Ride{kind, x, y, w, h, price, sel(U32.is_eq(kind, 5) && U32.is_eq(h, k), open, op), ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate, wear}
+      Ride{+kind, x, y, w, +h, price, op, +ph, +tm, +ent, +ex, +qlen, wmin, wmax, total, earned, born, +rate, +wear} = r
+      +hit = U32.is_eq(kind, 5) && U32.is_eq(h, k)
+      +gone = hit && U32.is_eq(open, 2)
+      Ride{sel(gone, 0, kind), x, y, w, h, price, sel(hit, sel(gone, 0, open), op), sel(gone, 0, ph), sel(gone, 0, tm),
+        sel(gone, NONE(), ent), sel(gone, NONE(), ex), sel(gone, 0, qlen), wmin, wmax, total, earned, born, sel(gone, 0, rate), sel(gone, 255, wear)}
         <> Rides.coaster(rest, k, open)
 
 def Park.track_op(p: Park, +op: U32) -> Out:
   Park{+map, guests, +rides, +track, +cash, time, nid, fin, mess, staff} = p
-  +k = (op >> 5n : U32)
+  +k = TrackOp.k(op)
   +code = (op .&. 31 : U32)
+  +ix = TrackOp.idx(op)
   +trk = Tracks.get(track, k)
   +ok = TrackOp.ok(map, trk, cash, code) && (k < len32(Track, track) : U32)
-  +led = TrackOp.ledger(ok, code, Piece.kind(Pieces.last(Track.pieces(trk))))
-  +trk2 = Track.op(trk, code, ok)
-  Out{Park{Land.fix(TrackOp.map(ok, map, trk, code, k)), guests,
-    Rides.coaster(rides, k, sel(Track.open(trk2) && Test.passed(Track.stats(trk2)), 1, 0)), Tracks.set(track, k, trk2),
+  +led = TrackOp.ledger(ok, code, Piece.kind(Pieces.last(Track.pieces(trk))), TrackOp.refund(trk, code, ix))
+  +trk2 = Track.op(trk, code, ix, ok)
+  Out{Park{Land.fix(TrackOp.map(ok, map, trk, code, k, ix)), guests,
+    Rides.coaster(rides, k, sel(ok && U32.is_eq(code, 27), 2, sel(Track.open(trk2) && Test.passed(Track.stats(trk2)), 1, 0))), Tracks.set(track, k, trk2),
     Ledger.apply(led, cash), time, nid, fin, mess, staff}, led, [], [], [], []}
 
 # Ride settings (the ride window)

@@ -185,8 +185,12 @@ length, height, drops, air time, G-forces) and the ratings; a failure says which
 climb and marks it on the map with a red sign. Any change to the track or its settings needs a new test.
 The window also sets the coaster's type (the wooden Wyrm; the Dwarven Minecart, slower and
 gentler; the Griffin Flyer, fastest, its cars hanging below the rails), how many trains run (up to one
-in every third block) and the lift hill's speed. A park holds up to 8 coasters; the Wyrm Coaster comes
-pre-built.
+in every third block) and the lift hill's speed. A park holds any number of coasters; the Wyrm Coaster comes
+pre-built. Steep climbs only head toward the camera and steep drops away from it, so every steep piece
+faces you. The demolish tool on coaster track removes that piece and every piece after it (a red ghost
+shows which, half their price back); a coaster's ride window has DEMOLISH (click twice) to remove the
+whole coaster. Any change to a track closes the ride and checks it again at once: a closed circuit that
+still passes the dry run goes straight onto a test run, anything else stays off.
 
 Follow cam: the FOLLOW button in a ride's window rides along with a coaster's lead car (or centres on
 any other ride); in a guest's window it trails that guest; in the staff window it trails a staff member

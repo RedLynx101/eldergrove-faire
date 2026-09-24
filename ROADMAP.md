@@ -236,6 +236,17 @@ Small design decisions made while working, listed here so they can be revisited.
 - **Stairs are walked in the drawing only:** within half a tile of an edge toward a path a level up or
   down, a guest or staff member is drawn blended toward that height (continuous across the edge). The
   simulation still moves them tile to tile.
+- **No coaster limit.** A track op now carries the coaster in 11 bits (up to 2048), types are drawn from a
+  per-coaster list, the draw code keeps only the piece bits of a tile, and rider tables are sized to the
+  park (64 trains a coaster). The coaster test builds 16 more stations (17 coasters).
+- **Cuts and demolition are track ops** (26: from a piece to the end, never the first station piece; 27:
+  the whole coaster, whose ride goes the way a demolished ride does). Both work while a coaster runs.
+  Every change (pieces, settings, cuts) ends in `Track.recheck`: a closed circuit whose dry run passes
+  starts a test run, anything else stays shut. Edits are allowed during a test run (they end it). Both
+  coaster laws kept their proofs with two small lemmas each (a cut closes the track; a re-check is either
+  the track or a test run); the wages proof took one more branch for the refund.
+- **DEMOLISH asks twice:** the first click arms it for that ride (UI opt bits 19-31), the second removes the
+  coaster; any other window click disarms it.
 
 ## Done: M1, the vertical slice
 Isometric fantasy map, paths, terrain editing, 4 enchanted tree kinds, Dragon Carousel, Arcane Spire, Potion
@@ -425,7 +436,7 @@ Spikes, in order:
 - Frame time and simulation cost measured against M7: within noise (about 1.4 ms a tick at 200 guests;
   16 ms a frame).
 
-## M9: Fixes, polish and the deferred items (in progress: spikes 1-2 done)
+## M9: Fixes, polish and the deferred items (in progress: spikes 1-3 done)
 Decisions from the owner (2026-09-24): bridges are my call (walkways for guests over paths and track);
 1 to 20 cars per train, never more than the track allows; steep pieces only in the two headings that face
 the camera; a coaster can be demolished, and removing track re-runs the check and closes the ride if it no
