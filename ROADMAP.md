@@ -1,6 +1,6 @@
 # Eldergrove Faire: Roadmap
 
-Last updated: 2026-09-23 · M1 (vertical slice) and M2 (60 fps) done; M3 in progress.
+Last updated: 2026-09-23 · M1 and M2 done; M3 riders and tree/mushroom art done, queues and polish next.
 
 ## Decisions
 
@@ -39,25 +39,30 @@ What it took:
 Measure it yourself: `PARK_PROF=1 ./park --live 700 1500` (add `PARK_NOPACE=1` for the uncapped rate).
 Still open: zoom levels and a larger window.
 
-## M3: Riders you can see, plus the art pass
-- **Ride cycles:** load, run, unload, with seat capacity. Seats remember which guest sits in them. Riders are
-  drawn seated with their own class, outfit and skin colours.
-  - Carousel: 8 dragons, each carrying its rider.
-  - Arcane Spire: riders on the ring as it rises and drops.
-  - Coaster: guests queue at the station, board a real train, ride the full circuit, and get off where they
-    started. Trains carry their riders' looks.
-  - Shops: guests stand at the counter while buying.
-- **Queue paths** land here with the ride entrances (see Decisions).
-- **Trees:** clustered foliage with 3-tone shading, rim light and dithering, visible branches, soft ground
-  shadows, gentle wind sway.
-- **Mushrooms:** gills, textured stem, shaded spots, faint bioluminescent glow.
-- **Crystals:** facets and glints.
-- **Paths, water, cliffs:** paths get edges that join their neighbours, water gets shoreline foam, cliffs get an
-  overhanging lip. Grass gets tufts, and flowers get less confetti-like.
-- **Guests:** 4-way facing, better walk cycle, carried items (potions, glowing wisps), occasional thought bubbles.
-- **Ride detail:** carousel poles, scalloped canopy and lights; animated Spire runes; shop signage.
-- New laws: **capacity_respected** (a ride never carries more riders than it has seats) and
-  **riders_conserved** (everyone who boards gets off).
+## M3: Riders you can see, plus the art pass (in progress)
+**Done:**
+- **Seats and boarding:** carousel and spire 8 seats, shops 4, each coaster train 6. Each tick one pass
+  (`Boards.plan`) seats whoever is ready, in order, so no seat is shared and no ride overfills. Guest updates,
+  ticket sales and drawing all read that one plan; a rider's seat lives in their `dir` field.
+- **Riders drawn in their own class, tunic and skin:**
+  - Carousel: 8 dragons, each carrying its rider; the back half passes behind the centre pole.
+  - Arcane Spire: riders around the ring as it rises and drops; the back ones behind the tower.
+  - Coaster: trains have ids. Guests board only the train loading in the station, ride the whole circuit,
+    and get off when that same train returns. Two riders per car.
+  - Shops: buyers stay visible at the counter.
+- **Trees:** elder oaks with clustered, five-tone shaded crowns, dithered edges, branches, bark, a wind sway
+  and soft shadows; moonpines with serrated, frosted tiers.
+- **Mushrooms:** domed glowcaps with highlights, dense pulsing spots, gills and a fibrous stem, sometimes
+  with a small one beside them. **Crystals:** facets, a rocky base, twinkling tips.
+- Performance kept: 60 fps live with 700 guests (11.0-11.5 ms frames uncapped).
+
+**Still open in M3:**
+- **Queue paths** with ride entrances (see Decisions). Guests currently wait at the ride's edge.
+- **Paths, water, cliffs:** joined path edges, shoreline foam, overhanging cliff lips, grass tufts.
+- **Guests:** 4-way facing, a better walk cycle, carried items, thought bubbles.
+- **Ride detail:** carousel poles and lights, scalloped canopy, shop signage.
+- New laws: **capacity_respected** and **riders_conserved**. The seat plan was built to make them provable
+  (one pass, one plan), but they need bit-mask reasoning that isn't written yet.
 
 ## M4: Economy and UI
 - **Ride window** (click a ride): open/close, price +/−, riders, income, upkeep, age, reliability, and
@@ -101,7 +106,7 @@ Still open: zoom levels and a larger window.
 ## Laws
 Proven: money_conserved, headcount_conserved, needs_bounded, coaster_on_circuit, no_collisions,
 save_load_roundtrip.
-Planned: capacity_respected, riders_conserved (M3); purchase_is_transfer, prices_bounded (M4).
+Planned: capacity_respected, riders_conserved (M3, open); purchase_is_transfer, prices_bounded (M4).
 Proof maintenance rule: keep the code field-wise (each park field updated by its own function) so
 existing proofs survive new features.
 

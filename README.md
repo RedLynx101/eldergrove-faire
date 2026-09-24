@@ -41,6 +41,10 @@ Dev modes:
 | F5 / F9 | Save / load `eldergrove.sav` |
 | Esc | Quit |
 
+Guests ride visibly: carousel and spire hold 8 riders, shops serve 4 at a
+time, and each coaster train seats 6. Coaster riders board the train loading
+in the station and stay aboard for the whole circuit.
+
 Coaster tool (0): `Enter` opens or closes the coaster; while closed, `W`
 ahead, `A`/`D` turn, `Q` up, `Z` down, `L` lift hill, `Backspace` removes the
 last piece. It opens only once the track closes back on its station. One
