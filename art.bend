@@ -904,6 +904,10 @@ def Art.item(+it: U32, +x: U32, +y: U32) -> U32:
       +shaft = U32.is_eq(x, 0) && between(y, (0 - 3 : U32), 8)
       +tip = U32.is_eq(x, 0) && between(y, 9, 10) || U32.is_eq(y, 9) && (sabs(x) <= 1 : U32)
       sel(tip, 14737632, sel(shaft, 7031339, TR()))
+    case 8:
+      # a pilgrim's staff
+      +staff = U32.is_eq(x, 0) && between(y, (0 - 4 : U32), 9)
+      sel(U32.is_eq(x, 0) && U32.is_eq(y, 10), 5914656, sel(staff, 9071162, TR()))
     case 7:
       # a Bard's lute
       +body = ell(x, y, 1, 1) || U32.is_eq(x, 1) && U32.is_eq(y, (0 - 1 : U32))
@@ -913,12 +917,31 @@ def Art.item(+it: U32, +x: U32, +y: U32) -> U32:
       TR()
 
 # a guest seen from the front (facing +x on screen: right, or mirrored) or
-# the back. look bits: 0-1 class, 4-6 tunic, 8-9 skin, 12-13 facing, 16-17
-# item, 20-22 thought, 24 stepping. Walking takes four frames: legs apart,
-# passing (body up a pixel), apart the other way, passing.
+# the back. look bits: 0-2 folk (0 wizard, 1 knight, 2 elf, 3 dwarf,
+# 4 halfling, 5 gnome, 6 orc, 7 commoner), 3 child, 4-6 tunic, 8-9 skin,
+# 10 bearded, 11 straw hat, 12-13 facing, 14-15 outfit (0 adventurer,
+# 1 noble with a cape, 2 merchant with a pack, 3 pilgrim with a cloak and
+# staff), 16-17 item, 20-23 thought, 24 stepping, 25 sitting, 26 staff
+# (27-28: which). Walking takes four frames: legs apart, passing (body up a
+# pixel), apart the other way, passing. Smaller folk and children are
+# shorter (sh rows), their hats and hair coming down with them.
+def Art.hair(+k: U32) -> U32:
+  match k:
+    case 0:
+      3811866
+    case 1:
+      6965290
+    case 2:
+      13146704
+    case _:
+      10107418
+
 def Art.guest(+dx: U32, +dy: U32, +look: U32, +t: U32) -> U32:
-  +cls = (look .&. 3 : U32)
-  +dw = U32.is_eq(cls, 3)
+  +folk = (look .&. 7 : U32)
+  +child = Bool.not(U32.is_eq((look .&. 8 : U32), 0))
+  +outfit = ((look >> 14n) .&. 3 : U32)
+  +gnome = U32.is_eq(folk, 5)
+  +orc = U32.is_eq(folk, 6)
   +face = ((look >> 12n) .&. 3 : U32)
   +left = U32.is_eq(face, 1) || U32.is_eq(face, 2)
   +backv = (face >= 2 : U32)
@@ -926,18 +949,23 @@ def Art.guest(+dx: U32, +dy: U32, +look: U32, +t: U32) -> U32:
   +walk = Bool.not(U32.is_eq((look .&. 16777216 : U32), 0)) && Bool.not(sit)
   +staff = Bool.not(U32.is_eq((look .&. 67108864 : U32), 0))
   +sk = ((look >> 27n) .&. 3 : U32)
-  +it = sel(staff, (4 + sk : U32), ((look >> 16n) .&. 3 : U32))
+  +pilgrim = U32.is_eq(outfit, 3) && Bool.not(staff)
+  +noble = U32.is_eq(outfit, 1) && Bool.not(staff)
+  +it0 = ((look >> 16n) .&. 3 : U32)
+  +it = sel(staff, (4 + sk : U32), sel(pilgrim && U32.is_eq(it0, 0), 8, it0))
   +fr = sel(walk, ((t >> 2n) .&. 3 : U32), 0)
   +bob = sel(U32.is_eq((fr .&. 1 : U32), 1), 1, 0)
   +h0 = (0 - dy + sel(sit, 2, 0) : U32)
   +h = (h0 - bob : U32)
   +x = sel(left, (0 - dx : U32), dx)
-  +sh = sel(dw, 2, 0)
+  +sh = U32.min((sel(U32.is_eq(folk, 3) || U32.is_eq(folk, 4), 2, sel(gnome, 3, 0)) + sel(child, 2, 0) : U32), 4)
   +uni = sel(U32.is_eq(sk, 0), 7031338, sel(U32.is_eq(sk, 1), 13660192, sel(U32.is_eq(sk, 2), 3166384, 11546704)))
-  +tun = sel(staff, uni, sel(U32.is_eq(cls, 0), 5913248, Art.tunic(((look >> 4n) .&. 7 : U32))))
-  +skin = Art.skin(((look >> 8n) .&. 3 : U32))
-  +hair = sel(dw, 11559978, 6965290)
-  # legs: apart (frames 0, 2) or together (1, 3); the near leg is lighter
+  +tun = sel(staff, uni, sel(pilgrim, 9075296, sel(U32.is_eq(folk, 0), 5913248, Art.tunic(((look >> 4n) .&. 7 : U32)))))
+  +skin = sel(orc, 7248448, Art.skin(((look >> 8n) .&. 3 : U32)))
+  +hairc = sel(U32.is_eq(folk, 3), 11559978, sel(U32.is_eq(folk, 4), 7948832, sel(orc, 2105376,
+    sel(U32.is_eq(folk, 7), Art.hair(((look >> 5n) .&. 3 : U32)), 6965290))))
+  # legs: apart (frames 0, 2) or together (1, 3); the near leg is lighter;
+  # halflings go barefoot
   +legtop = (2 - (sh >> 1n) + bob : U32)
   +apart = U32.is_eq((fr .&. 1 : U32), 0)
   +legs = between(h0, 0, legtop) && (apart && (U32.is_eq(x, (0 - 1 : U32)) || U32.is_eq(x, 1))
@@ -945,47 +973,71 @@ def Art.guest(+dx: U32, +dy: U32, +look: U32, +t: U32) -> U32:
   +knees = U32.is_eq(h0, 3) && between(x, (0 - 1 : U32), 2) || U32.is_eq(h0, 2) && U32.is_eq(x, 2)
   +legat = sit && knees || Bool.not(sit) && legs
   +near = U32.is_eq(fr, 2) && slt(x, 0) || Bool.not(U32.is_eq(fr, 2)) && Bool.not(slt(x, 0))
-  +legc = sel(near || Bool.not(walk), 3811866, 2628880)
+  +legc = sel(U32.is_eq(folk, 4) && U32.is_eq(h0, 0), skin, sel(near || Bool.not(walk), 3811866, 2628880))
   +foot = U32.is_eq(h0, 0) && Bool.not(apart) && U32.is_eq(x, 1) && Bool.not(sit)
-  +body = between(h, (3 - (sh >> 1n) : U32), (6 - sh : U32)) && between(x, (0 - 2 : U32), 2)
-  +belt = U32.is_eq(h, (4 - (sh >> 1n) : U32)) && between(x, (0 - 2 : U32), 2)
+  # orcs are broad
+  +bw = sel(orc && Bool.not(child), 3, 2)
+  +lo = (3 - (sh >> 1n) : U32)
+  +body = between(h, lo, (6 - sh : U32)) && (sabs(x) <= bw : U32)
+  +belt = U32.is_eq(h, (4 - (sh >> 1n) : U32)) && (sabs(x) <= bw : U32)
   # the leading hand swings with the stride (or holds the item still)
   +hy = (4 - (sh >> 1n) : U32)
-  +hx = sel(opaque(Art.item(it, 0, 0)), 3, sel(walk && U32.is_eq(fr, 0), 3, sel(walk && U32.is_eq(fr, 2), (0 - 3 : U32), 3)))
+  +hx0 = (bw + 1 : U32)
+  +hx = sel(opaque(Art.item(it, 0, 0)), hx0, sel(walk && U32.is_eq(fr, 2), (0 - hx0 : U32), hx0))
   +hand = U32.is_eq(x, hx) && U32.is_eq(h, hy) && (walk || Bool.not(U32.is_eq(it, 0)))
-  +held = Art.item(it, (x - 3 : U32), (h - hy - 1 : U32))
+  +held = Art.item(it, (x - hx0 : U32), (h - hy - 1 : U32))
   +head = between(h, (7 - sh : U32), (9 - sh : U32)) && between(x, (0 - 1 : U32), 1)
   +eye = U32.is_eq(h, (8 - sh : U32)) && U32.is_eq(x, 1) && Bool.not(backv)
-  +headc = sel(backv, hair, skin)
-  # hats
-  +wiz = U32.is_eq(cls, 0) && (between(h, 10, 10) && between(x, (0 - 2 : U32), 2)
-    || U32.is_eq(h, 11) && between(x, (0 - 1 : U32), 1)
-    || U32.is_eq(h, 12) && between(x, (0 - 1 : U32), 0)
-    || U32.is_eq(h, 13) && U32.is_eq(x, (0 - 1 : U32)))
-  +star = U32.is_eq(cls, 0) && U32.is_eq(h, 11) && U32.is_eq(x, 0) && Bool.not(backv)
-  +helm = U32.is_eq(cls, 1) && between(h, 8, 10) && between(x, (0 - 1 : U32), 1)
-  +visor = U32.is_eq(cls, 1) && U32.is_eq(h, 8) && between(x, 0, 1) && Bool.not(backv)
-  +plume = U32.is_eq(cls, 1) && between(h, 11, 12) && U32.is_eq(x, 0)
-  +hood = U32.is_eq(cls, 2) && (between(h, 9, 10) && between(x, (0 - 1 : U32), 1)
-    || U32.is_eq(x, (0 - 2 : U32)) && between(h, 7, 9) || backv && head)
-  +ear = U32.is_eq(cls, 2) && U32.is_eq(x, 2) && U32.is_eq(h, 8)
-  +beard = dw && between(h, 5, 6) && between(x, (0 - 1 : U32), 1) && Bool.not(backv)
-  +cap = dw && between(h, 8, 9) && between(x, (0 - 1 : U32), 1)
+  +headc = sel(backv, hairc, skin)
+  # hats and hair, on top of the head (row 10 - sh up)
+  +r = (h + sh : U32)
+  +pointy = (U32.is_eq(folk, 0) || gnome) && (U32.is_eq(r, 10) && between(x, (0 - 2 : U32), 2)
+    || U32.is_eq(r, 11) && between(x, (0 - 1 : U32), 1)
+    || U32.is_eq(r, 12) && between(x, (0 - 1 : U32), 0)
+    || U32.is_eq(r, 13) && U32.is_eq(x, (0 - 1 : U32)))
+  +star = U32.is_eq(folk, 0) && U32.is_eq(r, 11) && U32.is_eq(x, 0) && Bool.not(backv)
+  +helm = U32.is_eq(folk, 1) && between(r, 8, 10) && between(x, (0 - 1 : U32), 1)
+  +visor = U32.is_eq(folk, 1) && U32.is_eq(r, 8) && between(x, 0, 1) && Bool.not(backv)
+  +plume = U32.is_eq(folk, 1) && between(r, 11, 12) && U32.is_eq(x, 0)
+  +hooded = U32.is_eq(folk, 2) || pilgrim
+  +hood = hooded && (between(r, 9, 10) && between(x, (0 - 1 : U32), 1)
+    || U32.is_eq(x, (0 - 2 : U32)) && between(r, 7, 9) || backv && head)
+  +ear = (U32.is_eq(folk, 2) || orc) && U32.is_eq(x, 2) && U32.is_eq(r, 8) && Bool.not(pilgrim)
+  +cap = U32.is_eq(folk, 3) && between(r, 10, 11) && between(x, (0 - 1 : U32), 1)
+  +straw = U32.is_eq(folk, 7) && Bool.not(U32.is_eq((look .&. 2048 : U32), 0))
+    && (U32.is_eq(r, 10) && between(x, (0 - 2 : U32), 2) || U32.is_eq(r, 11) && between(x, (0 - 1 : U32), 1))
+  +tuft = U32.is_eq(r, 10) && between(x, (0 - 1 : U32), 1) || U32.is_eq(r, 9) && U32.is_eq(x, (0 - 1 : U32))
+  +hair = (U32.is_eq(folk, 4) || U32.is_eq(folk, 7)) && tuft
+    || orc && (U32.is_eq(r, 10) && between(x, (0 - 1 : U32), 0) || U32.is_eq(r, 11) && U32.is_eq(x, (0 - 1 : U32)))
+  +bearded = U32.is_eq(folk, 3) || gnome
+    || (U32.is_eq(folk, 0) || U32.is_eq(folk, 7)) && Bool.not(U32.is_eq((look .&. 1024 : U32), 0)) && Bool.not(child)
+  +beard = bearded && between(r, 7, 8) && between(x, (0 - 1 : U32), 1) && Bool.not(backv)
+  +beardc = sel(gnome, 15263968, sel(U32.is_eq(folk, 0), 12632256, sel(U32.is_eq(folk, 3), 11559978, hairc)))
+  +tusk = orc && U32.is_eq(r, 7) && U32.is_eq(x, 1) && Bool.not(backv)
+  # a noble's cape and a merchant's pack, behind (or over the back)
+  +behind = U32.is_eq(x, (0 - hx0 : U32))
+  +cape = noble && (behind && between(h, (lo - 1 : U32), (7 - sh : U32)) || backv && body)
+  +pack = U32.is_eq(outfit, 2) && Bool.not(staff) && between(h, (lo + 1 : U32), (6 - sh : U32))
+    && (behind || backv && between(x, (0 - 1 : U32), 1))
   +bub = Art.bubble.go(Bool.not(U32.is_eq(((look >> 20n) .&. 15 : U32), 0)) && (h0 >= 15 : U32),
     ((look >> 20n) .&. 15 : U32), dx, h0)
-  over(bub, over(held, sel(hand, skin, sel(star, 16766282, sel(wiz, 5913248, sel(visor, 3158064, sel(helm, 11581632,
-    sel(plume, 13643824, sel(hood, 3836474, sel(ear, skin, sel(cap, sel(staff, sel(U32.is_eq(sk, 0), 4880944, 9067056), 12595248),
-    sel(beard, 11559978, sel(eye, 2105376, sel(head, headc, sel(belt, 4861466,
-    sel(body, sel(backv && U32.is_eq(x, 0) && U32.is_eq(cls, 0), shade(tun, 200), tun),
-    sel(legat, legc, sel(foot, legc, TR()))))))))))))))))))
+  over(bub, over(held, sel(hand, skin, sel(star, 16766282, sel(pointy, sel(gnome, 13119536, 5913248),
+    sel(visor, 3158064, sel(helm, 11581632, sel(plume, 13643824, sel(straw, 14200928,
+    sel(hood, sel(pilgrim, 7039840, 3836474), sel(ear, skin,
+    sel(cap, sel(staff, sel(U32.is_eq(sk, 0), 4880944, 9067056), 12595248),
+    sel(hair, hairc, sel(tusk, 15263968, sel(eye, 2105376, sel(beard, beardc, sel(head, headc,
+    sel(cape, sel(U32.is_eq(h, (lo - 1 : U32)), 14725184, 6957706), sel(pack, 8016432,
+    sel(belt, sel(noble, 14725184, 4861466),
+    sel(body, sel(backv && U32.is_eq(x, 0) && U32.is_eq(folk, 0), shade(tun, 200), tun),
+    sel(legat, legc, sel(foot, legc, TR())))))))))))))))))))))))
 
 # Riders
 # ------
-# An 8-bit rider code (bit 7 occupied, bits 0-1 class, 2-4 tunic, 5-6 skin)
+# An 8-bit rider code (bit 7 occupied, bits 0-2 folk, 3-4 tunic, 5-6 skin)
 # turns back into the guest's look; a rider sits with its seat at (0, 0).
 
 def Art.look_of(+code: U32) -> U32:
-  ((code .&. 3) .|. (((code >> 2n) .&. 7) << 4n) .|. (((code >> 5n) .&. 3) << 8n) : U32)
+  ((code .&. 7) .|. (((code >> 3n) .&. 3) << 4n) .|. (((code >> 5n) .&. 3) << 8n) : U32)
 
 def Art.rider.go(on: Bool, +dx: U32, +dy: U32, +code: U32) -> U32:
   match on:

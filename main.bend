@@ -388,7 +388,7 @@ def scr_y(+i: U32, +j: U32, +h: U32, +camy: U32) -> U32:
 # tunic, 5-6 skin -- the same person, in the same outfit, as on the paths.
 
 def rider_code(+lk: U32) -> U32:
-  (128 .|. (lk .&. 3) .|. (((lk >> 4n) .&. 7) << 2n) .|. (((lk >> 8n) .&. 3) << 5n) : U32)
+  (128 .|. (lk .&. 7) .|. (((lk >> 4n) .&. 3) << 3n) .|. (((lk >> 8n) .&. 3) << 5n) : U32)
 
 def byte_at(+n: U32) -> U32:
   match n:
@@ -707,7 +707,7 @@ def guest_dyn(+g: C.Guest, +q: C.Q, +rs: +List<C.Ride>, +camx: U32, +camy: U32,
   +code = C.Mind.code(mind)
   +fresh = Bool.not(U32.is_eq(code, 0)) && ((((t >> 4n) - C.Mind.when(mind)) .&. 65535) < 12 : U32)
   +evicon = sel(U32.is_eq(code, 1), 7, sel(U32.is_eq(code, 2), 8, sel(U32.is_eq(code, 3), 6, sel(U32.is_eq(code, 9), 9, sel(U32.is_eq(code, 6), 5, 3)))))
-  +keep = sel(U32.is_eq(st, 1), 197631, 16974847)
+  +keep = sel(U32.is_eq(st, 1), 249855, 17027071)
   +look = ((lk .&. keep) .|. (sel(sit, 0, (dir .&. 3 : U32)) << 12n) .|. (sel(fresh, evicon, sel(think, mood, 0)) << 20n)
     .|. sel(sit, 33554432, 0) : U32)
   Bool.pick(+List<Dyn>, vis, Dyn{(i + j : U32), DGuest{sx, sy, look, (t + id : U32)}} <> acc, acc)
@@ -1447,20 +1447,113 @@ def name_clan(+n: U32) -> String:
     case _:
       "FLINTBROW"
 
-def guest_name.go(+cls: U32, +h: U32, first: String) -> String:
-  match cls:
+# halflings, gnomes and commoners go by family names, orcs by epithets
+def name_halfling(+n: U32) -> String:
+  match n:
+    case 0:
+      "BRAMBLEFOOT"
+    case 1:
+      "HOLLOWAY"
+    case 2:
+      "PUDDLEBY"
+    case 3:
+      "MOSSBANK"
+    case 4:
+      "APPLEDORE"
+    case 5:
+      "FERNWICK"
+    case 6:
+      "HONEYCOMB"
+    case _:
+      "TUMBLEDOWN"
+
+def name_gnome(+n: U32) -> String:
+  match n:
+    case 0:
+      "TINKERTOP"
+    case 1:
+      "WHISTLEPIPE"
+    case 2:
+      "SPROCKETT"
+    case 3:
+      "BUTTONBRIGHT"
+    case 4:
+      "GLIMMERWICK"
+    case 5:
+      "FIZZLEPOP"
+    case 6:
+      "COPPERKNOB"
+    case _:
+      "DAPPLEGLEAM"
+
+def name_orc(+n: U32) -> String:
+  match n:
+    case 0:
+      "BOLD"
+    case 1:
+      "LOUD"
+    case 2:
+      "HUNGRY"
+    case 3:
+      "GENTLE"
+    case 4:
+      "TUSKED"
+    case 5:
+      "GRUMBLER"
+    case 6:
+      "UNBOWED"
+    case _:
+      "MIGHTY"
+
+def name_trade(+n: U32) -> String:
+  match n:
+    case 0:
+      "MILLER"
+    case 1:
+      "COOPER"
+    case 2:
+      "THATCHER"
+    case 3:
+      "FLETCHER"
+    case 4:
+      "TANNER"
+    case 5:
+      "WEAVER"
+    case 6:
+      "CHANDLER"
+    case _:
+      "BREWER"
+
+def guest_name.go(+folk: U32, +h: U32, first: String) -> String:
+  match folk:
     case 0:
       first ++ " THE " ++ name_epithet(((h >> 8n) .&. 7 : U32))
     case 1:
       Bool.pick(String, U32.is_eq((h .&. 32 : U32), 0), "SIR ", "DAME ") ++ first ++ " OF " ++ name_place(((h >> 12n) .&. 15 : U32))
     case 2:
       first ++ " OF " ++ name_place(((h >> 16n) .&. 15 : U32))
-    case _:
+    case 3:
       first ++ " " ++ name_clan(((h >> 20n) .&. 7 : U32))
+    case 4:
+      first ++ " " ++ name_halfling(((h >> 20n) .&. 7 : U32))
+    case 5:
+      first ++ " " ++ name_gnome(((h >> 20n) .&. 7 : U32))
+    case 6:
+      first ++ " THE " ++ name_orc(((h >> 20n) .&. 7 : U32))
+    case _:
+      first ++ " " ++ name_trade(((h >> 20n) .&. 7 : U32))
+
+# nobles, pilgrims and children say so first
+def name_title(+lk: U32, +h: U32) -> String:
+  +outfit = ((lk >> 14n) .&. 3 : U32)
+  Bool.pick(String, Bool.not(U32.is_eq((lk .&. 8 : U32), 0)), "YOUNG ",
+    Bool.pick(String, U32.is_eq(outfit, 1) && Bool.not(U32.is_eq((lk .&. 7 : U32), 1)),
+      Bool.pick(String, U32.is_eq((h .&. 32 : U32), 0), "LORD ", "LADY "),
+    Bool.pick(String, U32.is_eq(outfit, 3), "PILGRIM ", "")))
 
 def guest_name(+id: U32, +lk: U32) -> String:
   +h = C.hash(id, 91)
-  guest_name.go((lk .&. 3 : U32), h, name_first((h % 24 : U32)))
+  name_title(lk, h) ++ guest_name.go((lk .&. 7 : U32), h, name_first((h % 24 : U32)))
 
 # the guest with this id (a nobody with id NONE when they have left)
 def Guests.find(+gs: +List<C.Guest>, +id: U32) -> C.Guest:
@@ -2984,13 +3077,31 @@ def ui.run(+n: Nat, +k: U32, +g: Game) -> IO(Unit):
 def ui.test() -> IO(Unit):
   ui.run(9n, 1, ui.s1(Game.new()))
 
+# --people out.ppm: every folk (columns) as adults facing front and back,
+# as children, and in the three outfits, at close zoom, to check the art
+def people.dr(+n: Nat, +k: U32, +acc: +List<Dr>) -> +List<Dr>:
+  match n:
+    case 0n:
+      acc
+    case 1n+m:
+      +c = (k .&. 7 : U32)
+      +rw = (k >> 3n : U32)
+      +look = (c .|. (((c + rw) .&. 7) << 4n) .|. (((c + rw) .&. 3) << 8n) .|. 3072
+        .|. sel(U32.is_eq(rw, 1), 12288, 0) .|. sel(U32.is_eq(rw, 2), 8, 0)
+        .|. sel(U32.is_eq(rw, 3), ((((c % 3) + 1) << 14n) : U32), 0) : U32)
+      people.dr(m, (k + 1 : U32), DGuest{(B() + 14 + c * 30 : U32), (B() + 34 + rw * 36 : U32), look, 0} <> acc)
+
+def people_shot(path: String) -> IO(Unit):
+  shot.write(path, bytes(163840n, R.frame(people.dr(32n, 0, [DRect{B(), B(), 512, 320, 5214768}]), 1073741824), 163839, []))
+
 def start.go(bench: Bool, +args: +List<String>) -> IO(Unit):
   match bench:
     case True{}:
       bench.go(warm(crowd(Game.new(), arg_or(nth(args, 4), 0)), arg_nat(nth(args, 2))),
         arg_nat(nth(args, 1)), arg_or(nth(args, 3), 0))
     case False{}:
-      Bool.pick(IO(Unit), is_arg(args, "--uitest"), ui.test(), start.test(is_arg(args, "--savetest"), args))
+      Bool.pick(IO(Unit), is_arg(args, "--uitest"), ui.test(),
+        Bool.pick(IO(Unit), is_arg(args, "--people"), people_shot(nth(args, 1)), start.test(is_arg(args, "--savetest"), args)))
 
 def start(+args: +List<String>) -> IO(Unit):
   start.go(is_bench(args), args)

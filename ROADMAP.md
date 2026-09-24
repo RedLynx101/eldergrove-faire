@@ -83,6 +83,14 @@ Small design decisions made while working, listed here so they can be revisited.
 - **wages_booked is stated over lists.** Proofs can't normalise arithmetic on symbolic numbers, so the law
   says: the wage entries a step books are exactly one entry of the staff's monthly total when a tick turns
   the month (none with no staff), and none otherwise. With money_conserved, that pins wages to the ledger.
+- **People.** Eight folk now, equally common: wizard, knight, elf, dwarf, halfling (barefoot, curly hair),
+  gnome (red pointed cap, white beard), orc (green, tusked, broad, topknot) and commoner (hair, sometimes a
+  straw hat or a beard). One guest in four is a child: two rows shorter, and they take far less intensity
+  (60-187 against 220-731), so they stick to the carousel and gentler rides. An outfit on top: adventurer,
+  noble (a purple cape with gold trim and a gold belt; "Lord" or "Lady"), merchant (a pack) or pilgrim (a
+  grey hooded cloak and a staff; "Pilgrim"). Names follow the folk: halfling and gnome family names, orc
+  epithets, commoners' trades. Riders on rides keep their folk and colours but not outfits or childhood
+  (a rider code has 7 bits). `./park --people out.ppm` draws the whole cast for review.
 
 ## Done: M1, the vertical slice
 Isometric fantasy map, paths, terrain editing, 4 enchanted tree kinds, Dragon Carousel, Arcane Spire, Potion
@@ -195,7 +203,7 @@ machine: `PARK_PROF=1 ./park --live 700 1500`.
 - Guests may pick a ride whose queue is on the far side of the park.
 - There is no music volume control besides on/off.
 
-## M5: Controls, problems, staff and people (in progress: spikes 1-6 and the laws done)
+## M5: Controls, problems, staff and people (in progress: spikes 1-7 and the laws done)
 Spikes, in order:
 
 1. (Done) **Controls and camera.** WASD (and the arrows) move the camera. Zoom in and out, in three steps (close,
@@ -217,7 +225,7 @@ Spikes, in order:
    - Dwarven Tinkers (mechanics) inspect and repair rides.
    - Watch Knights (security) deter vandals, who smash benches and lamps.
    - Bards (entertainers) cheer guests up.
-7. **More people.** More guest variants:
+7. (Done) **More people.** More guest variants:
    - new folk: halflings, gnomes, orcs;
    - more outfits: nobles, merchants, pilgrims;
    - hats, hair, beards and cloaks;

@@ -28,6 +28,7 @@ Dev modes:
 - `./park --live CROWD WARMUP` plays with CROWD extra guests after WARMUP ticks.
 - `./park --savetest TICKS` saves a busy park to disk, loads it and compares.
 - `./park --uitest` clicks through a ride window headlessly and reports what changed.
+- `./park --people out.ppm` draws every folk and outfit on one sheet.
 - `./park --wav out.wav SECONDS` records the music with every effect in turn;
   `python3 tools/wavcheck.py out.wav out.png` prints its levels and draws it. `PARK_MUTE=1` plays nothing.
 - `--shot` takes an optional 6th argument, a window to show (kind * 256 + ride; 256 is the carousel's), and a 7th, the zoom (0 normal, 1 close, 2 far).
@@ -140,6 +141,10 @@ patrol, and miserable guests won't smash benches, bins or lanterns while one
 is near; Bards play, cheering up the guests around them. Each has a post
 (one of the rides) to patrol near. Staff wear their own uniforms and carry
 their tools: broom, hammer, spear, lute.
+
+The crowd: wizards, knights, elves, dwarves, halflings, gnomes, orcs and
+commoners, some bearded or in straw hats; nobles in capes, merchants with
+packs, pilgrims with staffs; and children, who keep to the gentler rides.
 
 Coaster tool (key 4, third tool): `Enter` opens or closes the coaster; while closed, `T`
 ahead, `G`/`H` turn, `Y` up, `B` down, `L` lift hill, `Backspace` removes the

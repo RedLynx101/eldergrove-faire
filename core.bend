@@ -652,11 +652,17 @@ def Guest.gone(g: Guest) -> Bool:
 
 # a new adventurer, their gold already less the entry fee (at most 40, and
 # everyone brings at least 40)
+# a new guest's look (see Art.guest): folk, tunic, skin from r's low bits;
+# a child 1 in 4; beard and straw hat bits; the outfit
+def Guest.look0(+r: U32) -> U32:
+  +r2 = hash(r, 7)
+  ((r .&. 1015) .|. sel(((r2 .&. 3) < 1 : U32), 8, 0) .|. (r2 .&. 3072) .|. (((r2 >> 12n) .&. 3) << 14n) : U32)
+
 def Guest.raw(+id: U32, +t: U32, +fee: U32) -> Guest:
   +r = hash(id, t)
   Guest{id, (GATE_X() * 16 + 8 : U32), (GATE_Y() * 16 + 8 : U32),
     3, 0, NONE(), 0, (40 + (r .&. 127) - U32.min(fee, 40) : U32), (r >> 7n .&. 63 : U32),
-    (r >> 13n .&. 63 : U32), (190 + (r >> 19n .&. 63) : U32), 0, 200, (r .&. 1023 : U32), 0, (r >> 26n : U32)}
+    (r >> 13n .&. 63 : U32), (190 + (r >> 19n .&. 63) : U32), 0, 200, Guest.look0(r), 0, (r >> 26n : U32)}
 
 def Guest.new(+id: U32, +t: U32, +fee: U32) -> Guest:
   Guest.clamp(Guest.raw(id, t, fee))
@@ -778,8 +784,10 @@ def Ride.seats(+k: U32) -> U32:
     case _:
       4
 
+# how much intensity a guest takes: children much less
 def Guest.tol(+lk: U32) -> U32:
-  (220 + (((lk * 37) + (lk >> 4n)) .&. 511) : U32)
+  +v = (((lk * 37) + (lk >> 4n)) : U32)
+  sel(U32.is_eq((lk .&. 8 : U32), 0), (220 + (v .&. 511) : U32), (60 + (v .&. 127) : U32))
 
 # a ride's effect on a rider's happiness: its excitement, less a penalty when
 # it is wilder than they like
