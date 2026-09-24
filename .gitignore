@@ -1,0 +1,10 @@
+# build outputs
+/park
+/park.c
+/park.gpu
+/exp_*
+/spike/*
+!/spike/*.bend
+# runtime files
+*.sav
+shots/*.ppm
