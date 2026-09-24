@@ -1645,6 +1645,7 @@ type Act is Data:
   Tick{}
   Build{tool: U32, x: U32, y: U32, v: U32}
   TrackOp{op: U32}
+  RideOp{ride: U32, op: U32}
 
 type Out is Data:
   Out{park: Park, ledger: List<&2, Txn>, arrived: List<&2, Guest>,
@@ -1996,6 +1997,36 @@ def Park.track_op(p: Park, +op: U32) -> Out:
     Rides.coaster(rides, sel(Track.open(trk2), 1, 0)), trk2,
     Ledger.apply(led, cash), time, nid}, led, [], []}
 
+# Ride settings (the ride window)
+# -------------------------------
+# op 0: open or close (the coaster opens through its track instead); 1, 2:
+# price up, down; 3, 4: minimum wait up, down; 5, 6: maximum wait up, down
+
+def MAX_PRICE() -> U32:
+  20
+
+def Ride.set(r: Ride, +op: U32) -> Ride:
+  Ride{+kind, x, y, w, h, +price, +open, ph, tm, ent, ex, qlen, +wmin, +wmax, total, earned, born} = r
+  +flip = U32.is_eq(op, 0) && Bool.not(U32.is_eq(kind, 5))
+  +price2 = sel(U32.is_eq(op, 1), U32.min((price + 1 : U32), MAX_PRICE()),
+    sel(U32.is_eq(op, 2), sub0(price, 1), price))
+  +wmin2 = sel(U32.is_eq(op, 3), U32.min((wmin + 30 : U32), wmax),
+    sel(U32.is_eq(op, 4), sub0(wmin, 30), wmin))
+  +wmax2 = sel(U32.is_eq(op, 5), U32.min((wmax + 60 : U32), 3600),
+    sel(U32.is_eq(op, 6), U32.max(sub0(wmax, 60), wmin), wmax))
+  Ride{kind, x, y, w, h, price2, sel(flip, sel(U32.is_eq(open, 1), 0, 1), open), ph, tm, ent, ex, qlen, wmin2, wmax2, total, earned, born}
+
+def Rides.set(+rs: +List<Ride>, +i: U32, +op: U32) -> +List<Ride>:
+  match rs:
+    case []:
+      []
+    case r <> rest:
+      Bool.pick(Ride, U32.is_eq(i, 0), Ride.set(r, op), r) <> Rides.set(rest, (i - 1 : U32), op)
+
+def Park.ride_op(p: Park, +ride: U32, +op: U32) -> Out:
+  Park{map, guests, +rides, track, cash, time, nid} = p
+  Out{Park{map, guests, Rides.set(rides, ride, op), track, cash, time, nid}, [], [], []}
+
 # the one door every change comes through
 def Park.step(p: Park, a: Act) -> Out:
   match a:
@@ -2005,6 +2036,8 @@ def Park.step(p: Park, a: Act) -> Out:
       Park.build(p, tool, x, y, v)
     case TrackOp{op}:
       Park.track_op(p, op)
+    case RideOp{ride, op}:
+      Park.ride_op(p, ride, op)
 
 def Park.new() -> Park:
   Park{Q.build(6n, 0, 0), [], [], Track.empty(), 30000, 0, 1}

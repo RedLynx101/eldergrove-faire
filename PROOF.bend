@@ -155,6 +155,8 @@ def Laws.money_conserved(p, a):
           {==}
         case C.TrackOp{op}:
           {==}
+        case C.RideOp{ride, op}:
+          {==}
 
 # Headcount
 # ---------
@@ -236,6 +238,8 @@ def Laws.headcount_conserved(p, a):
         case C.Build{tool, x, y, v}:
           {==}
         case C.TrackOp{op}:
+          {==}
+        case C.RideOp{ride, op}:
           {==}
 
 # Needs
@@ -369,6 +373,8 @@ def Laws.needs_bounded(p, a, h):
           h
         case C.TrackOp{op}:
           h
+        case C.RideOp{ride, op}:
+          h
 
 # The coaster runs only on a closed circuit
 # ----------------------------------------
@@ -441,6 +447,8 @@ def Laws.coaster_on_circuit(p, a, h):
           circ_build(C.Build.ok(map, track, cash, tool, x, y), map, track, tool, x, y, v, h)
         case C.TrackOp{op}:
           circ_op(track, op, C.TrackOp.ok(map, track, cash, op), h)
+        case C.RideOp{ride, op}:
+          h
 
 def Laws.no_collisions(blocks, pieces):
   match blocks:

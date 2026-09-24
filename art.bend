@@ -1108,6 +1108,13 @@ def Art.icon_pic(+tool: U32, +cx: U32, +cy: U32, +t: U32) -> U32:
       +posts = (U32.is_eq(sabs(cx), 6) && between(cy, (0 - 5 : U32), 4))
       +rope = between(cx, (0 - 6 : U32), 6) && U32.is_eq(cy, (0 - 2 + (sabs(cx) >> 2n) : U32))
       sel(posts, 7031339, sel(rope, 8011680, sel(Art.dia(cx, (cy - 4 : U32)), 10125936, TR())))
+    case 12:
+      # a looking glass
+      +rim = ell((cx + 2 : U32), (cy + 2 : U32), 5, 5) && Bool.not(ell((cx + 2 : U32), (cy + 2 : U32), 3, 3))
+      +lens = ell((cx + 2 : U32), (cy + 2 : U32), 3, 3)
+      +handle = between(cx, 2, 7) && (sabs((cx - cy : U32)) <= 1 : U32)
+      +glint = U32.is_eq(cx, (0 - 3 : U32)) && U32.is_eq(cy, (0 - 3 : U32))
+      sel(glint, 16777215, sel(rim, 14725184, sel(lens, 10538751, sel(handle, 9127187, TR()))))
     case _:
       TR()
 def Art.icon(+tool: U32, +on: U32, +dx: U32, +dy: U32, +t: U32) -> U32:

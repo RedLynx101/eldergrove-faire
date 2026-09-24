@@ -26,6 +26,8 @@ Dev modes:
 - `./park --bench FRAMES WARMUP [MODE] [CROWD]` times frames (mode 0 full, 1 sim, 2 scene).
 - `./park --live CROWD WARMUP` plays with CROWD extra guests after WARMUP ticks.
 - `./park --savetest TICKS` saves a busy park to disk, loads it and compares.
+- `./park --uitest` clicks through a ride window headlessly and reports what changed.
+- `--shot` takes an optional 6th argument, a window to show (kind * 256 + ride; 256 is the carousel's).
 - Environment: `PARK_PROF=1` prints frame timings, `PARK_NOPACE=1` removes the 60 Hz cap,
   `PARK_DUMP=out.ppm` writes the 300th shown frame. `tools/prof.sh ./park ...` profiles with perf.
 
@@ -35,12 +37,14 @@ Dev modes:
 |---|---|
 | Arrow keys | Scroll |
 | Click / drag | Use the tool on a tile (or pick a tool in the bar) |
+| I | Inspect tool (the default): click a ride to open its window |
+| Right-click | Open a ride's window, whatever the tool |
 | 1 - 9, 0 | Path, raise land, lower land (to water), enchanted tree, Dragon Carousel, Arcane Spire, Potion Stall, Troll Tavern, demolish, Wyrm Coaster |
 | U | Queue line (12 gold a tile) |
 | R | Next tree kind (oak, moonpine, glowcap, crystal) / coaster direction |
 | Space | Pause; `+` / `-` speed (up to 3x) |
 | F5 / F9 | Save / load `eldergrove.sav` |
-| Esc | Quit |
+| Esc | Close the front window (with none open: quit) |
 
 Guests ride visibly: carousel and spire hold 8 riders, shops serve 4 at a
 time, and each coaster train seats 6. Coaster riders board the train loading
@@ -61,6 +65,10 @@ The carousel and spire run in cycles: they load until full (or until the
 first rider has waited long enough), run start to finish with no one getting
 on or off, unload everyone, then load again. The coaster's station unloads a
 returning train before loading it. Hover over a ride to see its state.
+
+A ride's window: open or close it, set its price, see riders and queue, set
+its minimum and maximum loading waits, and read its customers, income and
+age. Drag windows by their title bar; up to four stay open.
 
 Coaster tool (0): `Enter` opens or closes the coaster; while closed, `W`
 ahead, `A`/`D` turn, `Q` up, `Z` down, `L` lift hill, `Backspace` removes the
