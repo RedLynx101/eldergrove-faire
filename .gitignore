@@ -10,3 +10,5 @@
 shots/*.ppm
 tools/_*.py
 shots/*.wav
+tools/_*.sh
+shots/z-*.png
