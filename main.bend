@@ -72,8 +72,8 @@ def Dr.hits.go(d: Dr, +bx0: U32, +by0: U32, +s0: U32, +bx: U32, +by: U32, +s: U3
     case DTrack{+x, +y, code, +zr}:
       ov((x - 16 : U32), (y - zr * 8 - 12 : U32), (x + 17 : U32), (y + 17 : U32), bx, by, s)
     case DGuest{+x, +y, +look, ph}:
-      +top = sel(U32.is_eq(((look >> 20n) .&. 15 : U32), 0), 15, 27)
-      ov((x - 5 : U32), (y - top : U32), (x + 7 : U32), (y + 1 : U32), bx, by, s)
+      +top = sel(U32.is_eq(((look >> 20n) .&. 15 : U32), 0), 15, 29)
+      ov((x - 7 : U32), (y - top : U32), (x + 8 : U32), (y + 1 : U32), bx, by, s)
     case DCar{+x, +y, d, lead, rd}:
       ov((x - 10 : U32), (y - 19 : U32), (x + 11 : U32), (y + 6 : U32), bx, by, s)
     case DGhost{+x, +y, k}:

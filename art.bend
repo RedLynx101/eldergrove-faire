@@ -551,62 +551,205 @@ def Art.skin(+k: U32) -> U32:
     case _:
       15781004
 
-# a thought bubble's picture (inner 7 x 5, x in -3..3, y in 0..4 upward)
-def Art.thought(+m: U32, +x: U32, +y: U32) -> U32:
-  match m:
-    case 1:
-      # hungry: a drumstick
-      +meat = ell((x + 1 : U32), (y - 3 : U32), 2, 1)
-      +bone = U32.is_eq(x, 1) && U32.is_eq(y, 1) || U32.is_eq(x, 2) && (y < 2 : U32) || U32.is_eq(x, 3) && U32.is_eq(y, 0)
-      sel(meat, 11037752, sel(bone, 15790304, TR()))
-    case 2:
-      # thirsty: a water drop
-      +drop = U32.is_eq(y, 4) && U32.is_eq(x, 0) || between(y, 1, 3) && (sabs(x) <= 1 : U32)
-        || U32.is_eq(y, 0) && U32.is_eq(x, 0)
-      sel(drop, sel(U32.is_eq(x, (0 - 1 : U32)) && U32.is_eq(y, 2), 12644607, 3712480), TR())
-    case 3:
-      # queasy: a green swirl
-      +ring = ell(x, (y - 2 : U32), 3, 2) && Bool.not(ell(x, (y - 2 : U32), 1, 1))
-      sel(ring && Bool.not(U32.is_eq(x, 3) && U32.is_eq(y, 2)), 5613632, sel(U32.is_eq(x, 0) && U32.is_eq(y, 2), 5613632, TR()))
-    case 4:
-      # tired: z z
-      +big = (U32.is_eq(y, 4) || U32.is_eq(y, 1)) && between(x, (0 - 3 : U32), 0)
-        || U32.is_eq(y, 3) && U32.is_eq(x, (0 - 1 : U32)) || U32.is_eq(y, 2) && U32.is_eq(x, (0 - 2 : U32))
-      +small = (U32.is_eq(y, 3) || U32.is_eq(y, 1)) && between(x, 2, 3) || U32.is_eq(y, 2) && U32.is_eq(x, 2)
-      sel(big || small, 4214960, TR())
-    case 5:
-      # cross: a storm cloud with a bolt
-      +cloud = ell((x + 1 : U32), (y - 3 : U32), 2, 1) || ell((x - 1 : U32), (y - 3 : U32), 2, 1)
-      +bolt = U32.is_eq(x, 0) && U32.is_eq(y, 1) || U32.is_eq(x, 1) && U32.is_eq(y, 0)
-      sel(bolt, 16766282, sel(cloud, 7368816, TR()))
-    case 7:
-      # too dear: a gold coin, struck through
-      +coin = ell(x, (y - 2 : U32), 3, 2)
-      +slash = U32.is_eq(x, (y - 2 : U32)) && (sabs(x) <= 3 : U32)
-      sel(slash, 14163020, sel(coin, sel(U32.is_eq(y, 3) && U32.is_eq(x, (0 - 1 : U32)), 16775360, 14725184), TR()))
+# a thought's picture (k: thought * 8 + row, top first): nine 3-bit palette indices
+def Art.trow(+k: U32) -> U32:
+  match k:
     case 8:
-      # waited too long: an hourglass
-      +glass = (U32.is_eq(y, 0) || U32.is_eq(y, 4)) && (sabs(x) <= 2 : U32)
-        || between(y, 1, 3) && U32.is_le(sabs(x), sabs((y - 2 : U32)))
-      +sand = U32.is_eq(y, 1) && (sabs(x) <= 1 : U32) || U32.is_eq(y, 2) && U32.is_eq(x, 0)
-      sel(sand, 14725184, sel(glass, 7031339, TR()))
+      299520
+    case 9:
+      2991168
+    case 10:
+      23929992
+    case 11:
+      21570696
+    case 12:
+      2696289
+    case 13:
+      299780
+    case 14:
+      289
+    case 16:
+      4096
+    case 17:
+      41472
+    case 18:
+      336960
+    case 19:
+      2729096
+    case 20:
+      2696328
+    case 21:
+      2696328
+    case 22:
+      299584
+    case 24:
+      299584
+    case 25:
+      2696328
+    case 26:
+      21832913
+    case 27:
+      21570705
+    case 28:
+      21603985
+    case 29:
+      2729608
+    case 30:
+      299584
+    case 32:
+      38346752
+    case 33:
+      65536
+    case 34:
+      524288
+    case 35:
+      4195472
+    case 36:
+      38346768
+    case 37:
+      128
+    case 38:
+      1168
+    case 40:
+      299584
+    case 41:
+      2958536
+    case 42:
+      21603537
+    case 43:
+      21570705
+    case 44:
+      21608081
+    case 45:
+      2958536
+    case 46:
+      299584
+    case 48:
+      2359368
+    case 49:
+      23888529
+    case 50:
+      23663761
+    case 51:
+      21570705
+    case 52:
+      2696328
+    case 53:
+      336960
+    case 54:
+      41472
+    case 56:
+      299556
+    case 57:
+      2995296
+    case 58:
+      23667969
+    case 59:
+      23668881
+    case 60:
+      21577873
+    case 61:
+      3220616
+    case 62:
+      75797064
+    case 64:
+      19173961
+    case 65:
+      2995912
+    case 66:
+      341568
+    case 67:
+      41472
+    case 68:
+      370240
+    case 69:
+      2696328
+    case 70:
+      19173961
     case _:
-      # delighted: a heart
-      +heart = U32.is_eq(y, 4) && (sabs(x) >= 1 : U32) && (sabs(x) <= 2 : U32)
-        || U32.is_eq(y, 3) && (sabs(x) <= 2 : U32) || U32.is_eq(y, 2) && (sabs(x) <= 1 : U32)
-        || between(y, 0, 1) && U32.is_eq(x, 0)
-      sel(heart, sel(U32.is_eq(x, (0 - 1 : U32)) && U32.is_eq(y, 3), 16758725, 14163020), TR())
+      0
 
+# a thought's colours (k: thought * 8 + index): 1 the outline, then its own
+def Art.tpal(+k: U32) -> U32:
+  match k:
+    case 10:
+      10508332
+    case 11:
+      14192720
+    case 12:
+      15788248
+    case 13:
+      12103320
+    case 18:
+      3833824
+    case 19:
+      13165823
+    case 26:
+      8177744
+    case 27:
+      3037728
+    case 34:
+      4214960
+    case 42:
+      15229008
+    case 43:
+      5904400
+    case 50:
+      15219804
+    case 51:
+      16758984
+    case 58:
+      15251504
+    case 59:
+      16771216
+    case 60:
+      14690344
+    case 66:
+      14725184
+    case 67:
+      14216436
+    case _:
+      3158080
+
+# one pixel of a picture row (xi: 0..8, left first)
+def Art.tcol(+row: U32, +xi: U32) -> U32:
+  match xi:
+    case 0:
+      ((row >> 24n) .&. 7 : U32)
+    case 1:
+      ((row >> 21n) .&. 7 : U32)
+    case 2:
+      ((row >> 18n) .&. 7 : U32)
+    case 3:
+      ((row >> 15n) .&. 7 : U32)
+    case 4:
+      ((row >> 12n) .&. 7 : U32)
+    case 5:
+      ((row >> 9n) .&. 7 : U32)
+    case 6:
+      ((row >> 6n) .&. 7 : U32)
+    case 7:
+      ((row >> 3n) .&. 7 : U32)
+    case _:
+      (row .&. 7 : U32)
+
+# a thought's picture (drawn by tools/genthoughts.py): x -4..4, r 0..6 from the top
+def Art.thought(+m: U32, +x: U32, +r: U32) -> U32:
+  +i = Art.tcol(Art.trow((m * 8 + r : U32)), (x + 4 : U32))
+  sel(U32.is_eq(i, 0), TR(), Art.tpal((m * 8 + i : U32)))
+
+# a thought bubble above the guest: 13 x 11, the picture in its middle
 def Art.bubble.go(on: Bool, +m: U32, +dx: U32, +h: U32) -> U32:
   match on:
     case True{}:
       +ax = sabs(dx)
-      +box = (ax <= 5 : U32) && between(h, 17, 25) && Bool.not(U32.is_eq(ax, 5) && (U32.is_eq(h, 17) || U32.is_eq(h, 25)))
-      +rim = box && (U32.is_eq(ax, 5) || U32.is_eq(h, 17) || U32.is_eq(h, 25)
-        || U32.is_eq(ax, 4) && (U32.is_eq(h, 18) || U32.is_eq(h, 24)))
+      +box = (ax <= 6 : U32) && between(h, 17, 27) && Bool.not(U32.is_eq(ax, 6) && (U32.is_eq(h, 17) || U32.is_eq(h, 27)))
+      +rim = box && (U32.is_eq(ax, 6) || U32.is_eq(h, 17) || U32.is_eq(h, 27)
+        || U32.is_eq(ax, 5) && (U32.is_eq(h, 18) || U32.is_eq(h, 26)))
       +tail = U32.is_eq(dx, 0) && U32.is_eq(h, 15) || U32.is_eq(dx, 1) && U32.is_eq(h, 16)
-      +pic = Art.thought(m, dx, (h - 19 : U32))
-      sel(rim || tail, 5263440, sel(box, over(sel((ax <= 3 : U32) && between(h, 19, 23), pic, TR()), 16316664), TR()))
+      +inpic = (ax <= 4 : U32) && between(h, 19, 25)
+      +pic = sel(inpic, Art.thought(m, dx, (25 - h : U32)), TR())
+      sel(rim || tail, 5263440, sel(box, over(pic, 16316664), TR()))
     case False{}:
       TR()
 
