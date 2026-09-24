@@ -67,8 +67,12 @@ on or off, unload everyone, then load again. The coaster's station unloads a
 returning train before loading it. Hover over a ride to see its state.
 
 A ride's window: open or close it, set its price, see riders and queue, set
-its minimum and maximum loading waits, and read its customers, income and
-age. Drag windows by their title bar; up to four stay open.
+its minimum and maximum loading waits, and read its customers, income, age
+and ratings. Excitement, intensity and nausea are fixed for the carousel and
+spire and worked out from the track for the coaster (turns, drops, height,
+length). Guests prefer exciting rides, skip rides wilder than they like
+(each adventurer has their own taste), enjoy a ride by its excitement, and
+come off queasy by its nausea. Drag windows by their title bar; up to four stay open.
 
 Coaster tool (0): `Enter` opens or closes the coaster; while closed, `W`
 ahead, `A`/`D` turn, `Q` up, `Z` down, `L` lift hill, `Backspace` removes the

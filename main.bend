@@ -848,7 +848,7 @@ def Win.w(+k: U32) -> U32:
 def Win.h(+k: U32) -> U32:
   match k:
     case 1:
-      116
+      154
     case _:
       100
 
@@ -947,6 +947,27 @@ def ride_waits(+wmin: U32, +wmax: U32, +x: U32, +y: U32, +acc: +List<Dr>) -> +Li
   T("MIN WAIT " ++ secs(wmin), (x + 6 : U32), (y + 52 : U32), 15261888, pm((x + 96 : U32), (y + 50 : U32),
   T("MAX WAIT " ++ secs(wmax), (x + 6 : U32), (y + 64 : U32), 15261888, pm((x + 96 : U32), (y + 62 : U32), acc))))
 
+# hundredths as "4.19"
+def cents(+v: U32) -> String:
+  +c = (v % 100 : U32)
+  U32.show((v / 100 : U32)) ++ Bool.pick(String, (c < 10 : U32), ".0", ".") ++ U32.show(c)
+
+def rate_word(+v: U32) -> String:
+  Bool.pick(String, (v < 200 : U32), "LOW", Bool.pick(String, (v < 400 : U32), "MEDIUM",
+    Bool.pick(String, (v < 600 : U32), "HIGH", Bool.pick(String, (v < 750 : U32), "VERY HIGH", "EXTREME"))))
+
+def rate_line(label: String, +v: U32, +x: U32, +y: U32, +col: U32, +acc: +List<Dr>) -> +List<Dr>:
+  T(label, (x + 6 : U32), y, 15261888, T(cents(v) ++ "  " ++ rate_word(v), (x + 70 : U32), y, col, acc))
+
+# excitement, intensity and nausea (shops have none; an unfinished coaster
+# has none yet)
+def ride_rates(+k: U32, +r: U32, +x: U32, +y: U32, +acc: +List<Dr>) -> +List<Dr>:
+  Bool.pick(+List<Dr>, C.Ride.shop(k), acc,
+    Bool.pick(+List<Dr>, U32.is_eq(r, 0), T("RATINGS: NOT A CIRCUIT YET", (x + 6 : U32), (y + 118 : U32), 15261888, acc),
+      rate_line("EXCITEMENT", C.Rate.e(r), x, (y + 116 : U32), 16766282,
+      rate_line("INTENSITY", C.Rate.i(r), x, (y + 128 : U32), 16750480,
+      rate_line("NAUSEA", C.Rate.n(r), x, (y + 140 : U32), 9498256, acc)))))
+
 def Rides.kind_at(+rs: +List<C.Ride>, +k: U32, +i: U32) -> U32:
   match rs:
     case []:
@@ -962,14 +983,15 @@ def ride_win(+p: C.Park, +x: U32, +y: U32, +idx: U32, +acc: +List<Dr>) -> +List<
   +k = C.Ride.kind(rd)
   +open = U32.is_eq(C.Ride.open_flag(rd), 1)
   +age = ((time - C.Ride.born(rd)) / 3600 : U32)
-  +frame = window_box(ride_name(k), x, y, 196, 116, acc)
+  +frame = ride_rates(k, C.Ride.rate(rd), x, y, window_box(ride_name(k), x, y, 196, 154, acc))
   +waits = Bool.pick(+List<Dr>, C.Ride.cycles(k), ride_waits(C.Ride.wmin(rd), C.Ride.wmax(rd), x, y, frame), frame)
   button(Bool.pick(String, open, "OPEN", "CLOSED"), (x + 6 : U32), (y + 14 : U32), 44,
     sel(open, 3831360, 10498096),
   T(ride_state(rd), (x + 50 : U32), (y + 16 : U32), 12648447,
   T("PRICE *" ++ U32.show(C.Ride.price(rd)), (x + 6 : U32), (y + 28 : U32), 16766282,
   pm((x + 96 : U32), (y + 26 : U32),
-  T("RIDERS " ++ U32.show(riders(guests, idx)) ++ "/" ++ U32.show(C.Ride.seats(k))
+  T("RIDERS " ++ U32.show(riders(guests, idx))
+    ++ Bool.pick(String, U32.is_eq(k, 5), " (6 A TRAIN)", "/" ++ U32.show(C.Ride.seats(k)))
     ++ "   IN QUEUE " ++ U32.show(C.Ride.qlen(rd)), (x + 6 : U32), (y + 40 : U32), 15261888,
   T("CUSTOMERS " ++ U32.show(C.Ride.total(rd)), (x + 6 : U32), (y + 78 : U32), 15261888,
   T("INCOME *" ++ U32.show(C.Ride.earned(rd)), (x + 6 : U32), (y + 90 : U32), 11468718,
@@ -1155,7 +1177,7 @@ def Wins.drag(+ws: +List<Win>, +x: U32, +y: U32) -> +List<Win>:
       []
     case w <> rest:
       +k = Win.kind(w)
-      Win.moved(w, U32.min(x, (510 - Win.w(k) : U32)), U32.min(U32.max(y, 12), 280)) <> rest
+      Win.moved(w, U32.min(x, (510 - Win.w(k) : U32)), U32.min(U32.max(y, 12), (290 - Win.h(k) : U32))) <> rest
 
 def on_move(+x: U32, +y: U32, +ui: UI, +wm: WM, +q: C.Q) -> EV:
   UI{cx, cy, keys, mx, my, +md, +tool, var, sp, msg, fr, inc, +last, io, fps, tl} = ui
@@ -1186,7 +1208,7 @@ def ride_at(+p: C.Park, +hov: U32) -> U32:
 def open_at(+ws: +List<Win>, +p: C.Park, +hov: U32, +lx: U32, +ly: U32) -> +List<Win>:
   +idx = ride_at(p, hov)
   Bool.pick(+List<Win>, U32.is_eq(idx, C.NONE()), ws,
-    Wins.open(ws, 1, idx, U32.min((lx + 12 : U32), 312), U32.min(U32.max(C.sub0(ly, 30), 14), 174)))
+    Wins.open(ws, 1, idx, U32.min((lx + 12 : U32), 312), U32.min(U32.max(C.sub0(ly, 30), 14), 136)))
 
 # a click on the map or the toolbar. The inspect tool (or the right button,
 # with any tool) opens a ride's window; other tools build.
