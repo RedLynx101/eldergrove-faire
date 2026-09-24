@@ -102,6 +102,12 @@ Small design decisions made while working, listed here so they can be revisited.
   windows stay sharp. Measured live: 1280x800 at 60 fps, 1600x1000 at 59 fps on the starter park.
 - **Windows** share one frame with a drop shadow; the bottom right holds STAFF / PARK / OPTIONS / FINANCES.
   `PARK_OPT=n ./park` starts with options n (a testing aid).
+- **Six toolbar tabs for M6**: paths and furniture, land, scenery, gentle rides, thrill rides, shops (keys
+  1-6). Tools for M6's rides and shops are numbered 30-40, building ride kinds 7-17.
+- **The new shops.** Healer's Tent: queasy guests (nausea over 80) head there first after the privy; a visit
+  takes 150 off their nausea. Wisp Seller: a glowing wisp on a string, bought on a whim by happy guests with
+  empty hands (+20 happiness); a finished wisp floats away, leaving no litter. Enchanted Ices: bought on a
+  whim too, eases hunger and thirst, and its wrapper is litter. Carried items now take three bits.
 
 ## Done: M1, the vertical slice
 Isometric fantasy map, paths, terrain editing, 4 enchanted tree kinds, Dragon Carousel, Arcane Spire, Potion
@@ -252,7 +258,7 @@ Spikes, in order:
 9. (Done) Laws: **litter_accounted** (litter appears only when a guest drops it or is sick, and disappears only when
    a Brownie sweeps it or a bin takes it) and **wages_booked** (every wage goes through the ledger).
 
-## M6: More to build
+## M6: More to build (in progress: tabs and shops done)
 - **Rides:** Griffin Swing (swinging ship), Wheel of Stars (Ferris wheel), Lich's Crypt (haunted dark ride),
   Golem Bumpers (dodgems), Hedge Labyrinth (maze), Dragon's Eyrie (observation tower), Wizard's Whirl
   (top spin), Mermaid Flume (log flume).

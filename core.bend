@@ -371,8 +371,10 @@ type Ride is Data:
     ph: U32, tm: U32, ent: U32, ex: U32, qlen: U32, wmin: U32, wmax: U32,
     total: U32, earned: U32, born: U32, rate: U32, wear: U32}
 
+# rides two tiles square: the carousel, swing, wheel, crypt, bumpers,
+# labyrinth and flume; the rest take one tile
 def Ride.size(+k: U32) -> U32:
-  sel(U32.is_eq(k, 1), 2, 1)
+  sel(U32.is_eq(k, 1) || (k >= 10 : U32) && (k <= 14 : U32) || U32.is_eq(k, 17), 2, 1)
 
 def Ride.cost(+k: U32) -> U32:
   match k:
@@ -386,6 +388,28 @@ def Ride.cost(+k: U32) -> U32:
       400
     case 6:
       150
+    case 7:
+      350
+    case 8:
+      250
+    case 9:
+      300
+    case 10:
+      1400
+    case 11:
+      1100
+    case 12:
+      1500
+    case 13:
+      1000
+    case 14:
+      700
+    case 15:
+      1000
+    case 16:
+      1600
+    case 17:
+      1900
     case _:
       0
 
@@ -400,6 +424,28 @@ def Ride.fee(+k: U32) -> U32:
     case 4:
       4
     case 5:
+      6
+    case 7:
+      2
+    case 8:
+      3
+    case 9:
+      2
+    case 10:
+      5
+    case 11:
+      3
+    case 12:
+      5
+    case 13:
+      4
+    case 14:
+      2
+    case 15:
+      3
+    case 16:
+      6
+    case 17:
       6
     case _:
       0
@@ -418,6 +464,28 @@ def Ride.upkeep(+k: U32) -> U32:
       60
     case 6:
       5
+    case 7:
+      10
+    case 8:
+      8
+    case 9:
+      10
+    case 10:
+      35
+    case 11:
+      30
+    case 12:
+      40
+    case 13:
+      30
+    case 14:
+      15
+    case 15:
+      25
+    case 16:
+      45
+    case 17:
+      50
     case _:
       0
 
@@ -436,6 +504,28 @@ def Ride.duration(+k: U32) -> U32:
       360
     case 6:
       40
+    case 7:
+      60
+    case 8:
+      20
+    case 9:
+      25
+    case 10:
+      480
+    case 11:
+      640
+    case 12:
+      560
+    case 13:
+      480
+    case 14:
+      720
+    case 15:
+      600
+    case 16:
+      420
+    case 17:
+      560
     case _:
       10
 
@@ -460,11 +550,27 @@ def Ride.rate0(+k: U32) -> U32:
       Rate.pack(160, 60, 30)
     case 2:
       Rate.pack(260, 210, 130)
+    case 10:
+      Rate.pack(320, 380, 250)
+    case 11:
+      Rate.pack(190, 40, 20)
+    case 12:
+      Rate.pack(270, 120, 60)
+    case 13:
+      Rate.pack(230, 150, 50)
+    case 14:
+      Rate.pack(160, 20, 10)
+    case 15:
+      Rate.pack(180, 30, 30)
+    case 16:
+      Rate.pack(390, 460, 380)
+    case 17:
+      Rate.pack(310, 200, 90)
     case _:
       0
 
 def Ride.shop(+k: U32) -> Bool:
-  U32.is_eq(k, 3) || U32.is_eq(k, 4) || U32.is_eq(k, 6)
+  U32.is_eq(k, 3) || U32.is_eq(k, 4) || U32.is_eq(k, 6) || U32.is_eq(k, 7) || U32.is_eq(k, 8) || U32.is_eq(k, 9)
 
 # which ride a building tool puts down (0: none): 5-8 the first four kinds,
 # 16 the Privy (kind 6)
@@ -480,12 +586,34 @@ def Tool.kind(+tool: U32) -> U32:
       4
     case 16:
       6
+    case 30:
+      7
+    case 31:
+      8
+    case 32:
+      9
+    case 33:
+      10
+    case 34:
+      11
+    case 35:
+      12
+    case 36:
+      13
+    case 37:
+      14
+    case 38:
+      15
+    case 39:
+      16
+    case 40:
+      17
     case _:
       0
 
 # the rides that run in cycles
 def Ride.cycles(+k: U32) -> Bool:
-  U32.is_eq(k, 1) || U32.is_eq(k, 2)
+  U32.is_eq(k, 1) || U32.is_eq(k, 2) || (k >= 10 : U32) && (k <= 17 : U32)
 
 # prices: 0..20 gold; the entry fee: 0..40
 def Price.cap(+v: U32) -> U32:
@@ -769,20 +897,12 @@ def Guest.can_step(+q: Q, +i: U32, +j: U32, +h: U32, +d: U32, +qok: Bool, +fq: B
 def Guest.want_ok(+want: U32, +k: U32) -> Bool:
   match want:
     case 0:
-      U32.is_eq(k, 1) || U32.is_eq(k, 2) || U32.is_eq(k, 5)
+      U32.is_eq(k, 1) || U32.is_eq(k, 2) || U32.is_eq(k, 5) || (k >= 10 : U32) && (k <= 17 : U32)
     case _:
       U32.is_eq(k, want)
 
 def Ride.seats(+k: U32) -> U32:
-  match k:
-    case 1:
-      8
-    case 2:
-      8
-    case 5:
-      6
-    case _:
-      4
+  sel(U32.is_eq(k, 5), 6, sel(Ride.cycles(k), 8, 4))
 
 # how much intensity a guest takes: children much less
 def Guest.tol(+lk: U32) -> U32:
@@ -801,6 +921,12 @@ def Guest.worth(+k: U32, +rate: U32, +hu: U32, +th: U32) -> U32:
       (3 + hu / 64 : U32)
     case 6:
       2
+    case 7:
+      3
+    case 8:
+      4
+    case 9:
+      (2 + th / 80 : U32)
     case _:
       (1 + Rate.e(rate) * 2 / 100 : U32)
 
@@ -1338,12 +1464,14 @@ def Guest.board(g: Guest, +rs: +List<Ride>, +seat: U32, +stn: Stn) -> Guest:
   +k = Ride.kind(rd)
   +rate = Ride.rate(rd)
   +coaster = U32.is_eq(k, 5)
-  +item = sel(U32.is_eq(k, 3), 65536, sel(U32.is_eq(k, 4), 131072, 0))
+  +item = sel(U32.is_eq(k, 3), 65536, sel(U32.is_eq(k, 4), 131072, sel(U32.is_eq(k, 8), 196608,
+    sel(U32.is_eq(k, 9), 262144, 0))))
   Guest{id, x, y, sel(coaster, (Stn.id(stn) * 8 + seat : U32), seat), 1, tgt,
     sel(coaster, 3000, Ride.duration(k)), Guest.pay(cash, Ride.price(rd)),
-    sel(U32.is_eq(k, 4), sub0(hu, 160), hu),
-    sel(U32.is_eq(k, 3), sub0(th, 160), th), en,
-    na, (ha + Ride.joy(rate, lk) : U32), ((lk .&. 4294770687) .|. item : U32), mind,
+    sel(U32.is_eq(k, 4), sub0(hu, 160), sel(U32.is_eq(k, 9), sub0(hu, 60), hu)),
+    sel(U32.is_eq(k, 3), sub0(th, 160), sel(U32.is_eq(k, 9), sub0(th, 80), th)), en,
+    sel(U32.is_eq(k, 7), sub0(na, 150), na), (ha + Ride.joy(rate, lk) + sel(U32.is_eq(k, 8), 20, 0) : U32),
+    ((lk .&. 4294508543) .|. item : U32), mind,
     sel(U32.is_eq(k, 6), 0, (bl + sel(U32.is_eq(k, 3), 40, sel(U32.is_eq(k, 4), 15, 0)) : U32))}
 
 # a ride is over for this rider (see Ride.unloading)
@@ -1447,7 +1575,9 @@ def Guest.walk(g: Guest, +q: Q, +rs: +List<Ride>, +t: U32, +qs: +List<U32>) -> G
   +athome = ctr && home && U32.is_eq(i, GATE_X()) && U32.is_eq(j, GATE_Y())
   +st3 = sel(athome, 3, st2)
   # targets: food, drink, or any attraction; patience runs out
-  +want = sel((bl > 170 : U32), 6, sel((hu > 150 : U32), 4, sel((th > 150 : U32), 3, 0)))
+  +whim = U32.is_eq(((lk >> 16n) .&. 7 : U32), 0) && (ha > 140 : U32) && U32.is_eq(((r >> 20n) .&. 15 : U32), 0)
+  +want = sel((bl > 170 : U32), 6, sel((na > 80 : U32), 7, sel((hu > 150 : U32), 4, sel((th > 150 : U32), 3,
+    sel(whim, sel(U32.is_eq(((r >> 24n) .&. 1 : U32), 0), 8, 9), 0)))))
   +needt = ctr && U32.is_eq(st2, 0) && U32.is_eq(tgt, NONE())
     && U32.is_eq((r .&. 3 : U32), 0)
   +avoid = sel(U32.is_eq(Mind.code(mind), 1), Mind.ride(mind), NONE())
@@ -1487,7 +1617,7 @@ def Guest.walk(g: Guest, +q: Q, +rs: +List<Ride>, +t: U32, +qs: +List<U32>) -> G
   +x2 = sel(go, (x + dx_of(dir2) : U32), x)
   +y2 = sel(go, (y + dy_of(dir2) : U32), y)
   +finish = U32.is_eq(((r >> 8n) .&. 1023 : U32), 0)
-  +lk2 = (sel(finish, (lk .&. 4277993471 : U32), (lk .&. 4278190079 : U32)) .|. sel(go, 16777216, 0) : U32)
+  +lk2 = (sel(finish, (lk .&. 4277731327 : U32), (lk .&. 4278190079 : U32)) .|. sel(go, 16777216, 0) : U32)
   # a Bard playing nearby cheers them up
   +cheer = Stamp.recent(((Tile.b(here) >> 24n) .&. 255 : U32), t) && U32.is_eq(((t + id) .&. 31 : U32), 0)
   +ha2 = (sub0(sub0(ha, sel(dear || fed_up, 6, 0)), sel(sick, 10, sel(grim, sel((dirt >= 6 : U32), 2, 1), 0)))
@@ -1707,7 +1837,7 @@ def Mess.y(+m: U32) -> U32:
 
 # a guest being sick this tick (the same test Guest.walk uses)
 def Guest.finish(+id: U32, +t: U32, +x: U32, +lk: U32) -> Bool:
-  Bool.not(U32.is_eq(((lk >> 16n) .&. 3 : U32), 0)) && U32.is_eq(((hash3(id, t, x) >> 8n) .&. 1023 : U32), 0)
+  Bool.not(U32.is_eq(((lk >> 16n) .&. 7 : U32), 0)) && U32.is_eq(((hash3(id, t, x) >> 8n) .&. 1023 : U32), 0)
 
 # a bin with room on or beside tile (i, j): its tile, or NONE
 def Bin.room(+q: Q, +i: U32, +j: U32) -> U32:
@@ -1748,7 +1878,8 @@ def Mess.event(g: Guest, +plan: +List<Board>, +q: Q, +t: U32) -> U32:
   +jx = ((hash(id, t) .&. 7) - 3 : U32)
   +jy = (((hash(id, t) >> 3n) .&. 7) - 3 : U32)
   sel(walking && Guest.sick(st, na, id, t), Mess.at(1, (x + jx : U32), (y + jy : U32)),
-    sel(finish, sel(U32.is_eq(bin, NONE()), Mess.at(0, (x + jx : U32), (y + jy : U32)), (2147483648 .|. bin : U32)),
+    sel(finish, sel(U32.is_eq(((lk >> 16n) .&. 7 : U32), 3), NONE(),
+      sel(U32.is_eq(bin, NONE()), Mess.at(0, (x + jx : U32), (y + jy : U32)), (2147483648 .|. bin : U32))),
       sel(walking && Vandal.smash(q, x, y, ha, id, t), (3221225472 .|. pk((x >> 4n : U32), (y >> 4n : U32)) : U32),
       NONE())))
 
@@ -1929,6 +2060,8 @@ def Ride.cat(+k: U32) -> U32:
     case 3:
       6
     case 4:
+      5
+    case 9:
       5
     case _:
       1

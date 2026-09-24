@@ -889,26 +889,36 @@ def Art.item(+it: U32, +x: U32, +y: U32) -> U32:
       +foam = between(x, 0, 1) && U32.is_eq(y, 2)
       +grip = U32.is_eq(x, 2) && U32.is_eq(y, 1)
       sel(foam, 16316656, sel(mug, 14721072, sel(grip, 9127187, TR())))
+    case 3:
+      # a wisp on a string, glowing and bobbing
+      +string = U32.is_eq(x, 0) && between(y, 0, 5)
+      +orb = ell(x, (y - 7 : U32), 1, 1)
+      sel(orb, sel(U32.is_eq(x, 0) && U32.is_eq(y, 7), 16777215, 6352127), sel(string, 12632256, TR()))
     case 4:
+      # an enchanted ice: a wafer cone, a pink scoop
+      +cone = U32.is_eq(x, 0) && between(y, 0, 1)
+      +scoop = between(x, (0 - 1 : U32), 1) && between(y, 2, 3) && Bool.not(U32.is_eq(sabs(x), 1) && U32.is_eq(y, 3))
+      sel(scoop, sel(U32.is_eq(y, 3), 10085546, 16758488), sel(cone, 14200928, TR()))
+    case 9:
       # a Brownie's broom, bristles down
       +stick = U32.is_eq(x, 0) && between(y, (0 - 2 : U32), 4)
       +straw = between(x, (0 - 1 : U32), 1) && between(y, (0 - 4 : U32), (0 - 3 : U32))
       sel(straw, 14207064, sel(stick, 9127187, TR()))
-    case 5:
+    case 10:
       # a Tinker's hammer
       +haft = U32.is_eq(x, 0) && between(y, 0, 2)
       +head = between(x, (0 - 1 : U32), 1) && between(y, 3, 4)
       sel(head, 11053224, sel(haft, 9127187, TR()))
-    case 6:
+    case 11:
       # a Watch Knight's spear
       +shaft = U32.is_eq(x, 0) && between(y, (0 - 3 : U32), 8)
       +tip = U32.is_eq(x, 0) && between(y, 9, 10) || U32.is_eq(y, 9) && (sabs(x) <= 1 : U32)
       sel(tip, 14737632, sel(shaft, 7031339, TR()))
-    case 8:
+    case 13:
       # a pilgrim's staff
       +staff = U32.is_eq(x, 0) && between(y, (0 - 4 : U32), 9)
       sel(U32.is_eq(x, 0) && U32.is_eq(y, 10), 5914656, sel(staff, 9071162, TR()))
-    case 7:
+    case 12:
       # a Bard's lute
       +body = ell(x, y, 1, 1) || U32.is_eq(x, 1) && U32.is_eq(y, (0 - 1 : U32))
       +neck = U32.is_eq(x, 1) && between(y, 2, 4)
@@ -951,8 +961,8 @@ def Art.guest(+dx: U32, +dy: U32, +look: U32, +t: U32) -> U32:
   +sk = ((look >> 27n) .&. 3 : U32)
   +pilgrim = U32.is_eq(outfit, 3) && Bool.not(staff)
   +noble = U32.is_eq(outfit, 1) && Bool.not(staff)
-  +it0 = ((look >> 16n) .&. 3 : U32)
-  +it = sel(staff, (4 + sk : U32), sel(pilgrim && U32.is_eq(it0, 0), 8, it0))
+  +it0 = ((look >> 16n) .&. 7 : U32)
+  +it = sel(staff, (9 + sk : U32), sel(pilgrim && U32.is_eq(it0, 0), 13, it0))
   +fr = sel(walk, ((t >> 2n) .&. 3 : U32), 0)
   +bob = sel(U32.is_eq((fr .&. 1 : U32), 1), 1, 0)
   +h0 = (0 - dy + sel(sit, 2, 0) : U32)
@@ -1264,6 +1274,55 @@ def Art.privy(+dx: U32, +dy: U32, +t: U32) -> U32:
     over(sel(moon, 16767056, sel(knob, 14725184, sel(door, 4860948, TR()))),
     over(wallc, sel(hoop, 3158064, barrel))))
 
+# The Healer's Tent: a round white tent under a green-striped roof, its flap
+# open, a herb-leaf pennant on the pole
+def Art.healer(+dx: U32, +dy: U32, +t: U32) -> U32:
+  +walls = Art.cyl(dx, dy, 0, 9, 8, 15263960)
+  +roof = Art.cone(dx, dy, (0 - 8 : U32), 11, 12, 15790312, 4889178)
+  +door = between(dx, (0 - 4 : U32), 0) && between(dy, (0 - 7 : U32), 2) && sle(sabs((dx + 2 : U32)), (8 + dy : U32))
+  +pole = U32.is_eq(dx, 0) && between(dy, (0 - 27 : U32), (0 - 19 : U32))
+  +wave = (((t >> 3n) + dx) .&. 1 : U32)
+  +leaf = between(dx, 1, 6) && (U32.is_eq(dy, (0 - 26 + wave : U32)) && between(dx, 2, 5)
+    || U32.is_eq(dy, (0 - 25 + wave : U32)) || U32.is_eq(dy, (0 - 24 + wave : U32)) && between(dx, 2, 4))
+  +vein = U32.is_eq(dy, (0 - 25 + wave : U32)) && between(dx, 2, 5)
+  over(sel(vein, 3830352, sel(leaf, 6340682, sel(pole, 7031339, TR()))),
+    over(roof, sel(door, 3825200, walls)))
+
+# The Wisp Seller: a little cart, its wisps bobbing on strings above it
+def Art.wisp1(+dx: U32, +dy: U32, +ox: U32, +top: U32, +c: U32, +t: U32, +ph: U32) -> U32:
+  +bob = ((((t >> 4n) + ph) .&. 3) >> 1n : U32)
+  +oy = (top - bob : U32)
+  +orb = ell((dx - ox : U32), (dy - oy : U32), 2, 2)
+  +core = U32.is_eq(dx, ox) && U32.is_eq(dy, oy)
+  +string = U32.is_eq(dx, ox) && sle((oy + 2 : U32), dy) && sle(dy, (0 - 8 : U32))
+  sel(core, 16777215, sel(orb, c, sel(string, 12632256, TR())))
+
+def Art.wisps(+dx: U32, +dy: U32, +t: U32) -> U32:
+  +cart = Art.box(dx, dy, (0 - 2 : U32), 8, 6, 11567184, 9067056, 7031338)
+  +wheel = ell((dx + 5 : U32), (dy - 1 : U32), 2, 2) || ell((dx - 5 : U32), (dy - 1 : U32), 2, 2)
+  +hub = U32.is_eq(dx, (0 - 5 : U32)) && U32.is_eq(dy, 1) || U32.is_eq(dx, 5) && U32.is_eq(dy, 1)
+  +w1 = Art.wisp1(dx, dy, (0 - 5 : U32), (0 - 20 : U32), 6352127, t, 0)
+  +w2 = Art.wisp1(dx, dy, (0 - 1 : U32), (0 - 25 : U32), 16748760, t, 1)
+  +w3 = Art.wisp1(dx, dy, 3, (0 - 21 : U32), 16766282, t, 2)
+  +w4 = Art.wisp1(dx, dy, 6, (0 - 26 : U32), 12623103, t, 3)
+  over(w1, over(w2, over(w3, over(w4, sel(hub, 14725184, sel(wheel, 3811866, cart))))))
+
+# Enchanted Ices: a stall under a frosty striped awning, a great cone on its
+# roof, sparkles of frost
+def Art.ices(+dx: U32, +dy: U32, +t: U32) -> U32:
+  +booth = Art.box(dx, dy, 0, 9, 9, 14737632, 11591910, 8434880)
+  +awn = Art.box(dx, dy, (0 - 14 : U32), 11, 2, 12640255, 10534135, 8428530)
+  +stripe = U32.is_eq(((((dx + dy * 2) + 256) >> 2n) .&. 1 : U32), 0)
+  +awning = sel(opaque(awn), sel(stripe, awn, 16316664), TR())
+  +cone = sle((0 - 26 : U32), dy) && sle(dy, (0 - 19 : U32)) && (sabs(dx) * 2 <= ((0 - 19) - dy : U32) : U32)
+  +scoop = ell(dx, (dy + 28 : U32), 4, 3)
+  +mint = ell((dx + 1 : U32), (dy + 31 : U32), 3, 2)
+  +spark = U32.is_eq((hash((dx + 64 : U32), ((dy + 64) + (t >> 4n) : U32)) .&. 63 : U32), 0)
+    && between(dx, (0 - 9 : U32), 9) && between(dy, (0 - 34 : U32), (0 - 16 : U32))
+  +post = (U32.is_eq(dx, (0 - 9 : U32)) || U32.is_eq(dx, 9)) && between(dy, (0 - 14 : U32), (0 - 4 : U32))
+  over(sel(spark, 16777215, TR()), over(sel(mint, 10085546, sel(scoop, 16758488, sel(cone, 14200928, TR()))),
+    over(awning, over(sel(post, 7031338, TR()), booth))))
+
 def Art.ride.go(+k: U32, +dx: U32, +dy: U32, +t: U32, +ra: U32, +rb: U32, +st: U32) -> U32:
   match k:
     case 1:
@@ -1276,6 +1335,12 @@ def Art.ride.go(+k: U32, +dx: U32, +dy: U32, +t: U32, +ra: U32, +rb: U32, +st: U
       Art.tavern(dx, dy, t)
     case 6:
       Art.privy(dx, dy, t)
+    case 7:
+      Art.healer(dx, dy, t)
+    case 8:
+      Art.wisps(dx, dy, t)
+    case 9:
+      Art.ices(dx, dy, t)
     case _:
       TR()
 
@@ -1330,9 +1395,8 @@ def Art.ride(+k: U32, +dx: U32, +dy: U32, +t: U32, +ra: U32, +rb: U32, +st: U32)
 def Art.ghost(+k: U32, +px: U32, +py: U32, +x: U32, +y: U32, +t: U32) -> U32:
   +tool = (k .&. 255 : U32)
   +ok = Bool.not(U32.is_eq(((k >> 8n) .&. 1 : U32), 0))
-  +dk = ((k >> 16n) .&. 15 : U32)
-  +size = sel(Bool.not(U32.is_eq(dk, 0)), sel(U32.is_eq(dk, 1), 2, 1), ((k >> 9n) .&. 3 : U32))
-  +rk = ((k >> 12n) .&. 15 : U32)
+  +size = ((k >> 9n) .&. 7 : U32)
+  +rk = ((k >> 12n) .&. 31 : U32)
   +X = (px - x : U32)
   +Y = ((py - y) * 2 : U32)
   +u = iso_u(X, Y)
@@ -1552,6 +1616,12 @@ def Art.icon_pic(+tool: U32, +cx: U32, +cy: U32, +t: U32) -> U32:
     case 16:
       # the privy at half size
       Art.privy((cx * 2 : U32), (cy * 2 - 12 : U32), t)
+    case 30:
+      Art.healer((cx * 2 : U32), (cy * 2 - 8 : U32), t)
+    case 31:
+      Art.wisps((cx * 2 : U32), (cy * 2 - 6 : U32), t)
+    case 32:
+      Art.ices((cx * 2 : U32), (cy * 2 - 8 : U32), t)
     case 15:
       # a lantern hung from its hook
       +hook = U32.is_eq(cx, 0) && between(cy, (0 - 9 : U32), (0 - 8 : U32))
@@ -1576,12 +1646,14 @@ def Art.cat_pic(+c: U32) -> U32:
     case 23:
       5
     case 24:
+      6
+    case 25:
       7
     case _:
       c
 def Art.icon(+tool: U32, +on: U32, +dx: U32, +dy: U32, +t: U32) -> U32:
   +edge = U32.is_eq(dx, 0) || U32.is_eq(dy, 0) || U32.is_eq(dx, 21) || U32.is_eq(dy, 21)
-  +cat = (tool >= 20 : U32)
+  +cat = (tool >= 20 : U32) && (tool <= 25 : U32)
   +frame = sel(U32.is_eq(on, 1), 16766282, sel(cat, 9476272, 5917290))
   +fill = sel(U32.is_eq(on, 1), sel(cat, 4610170, 5917216), sel(cat, 3029592, 3025984))
   +cx = (dx - 11 : U32)

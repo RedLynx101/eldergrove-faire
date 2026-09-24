@@ -48,7 +48,7 @@ Dev modes:
 | P / F / K | The park, finances and staff windows (or the PARK, FINANCES and STAFF buttons) |
 | M / N | Music on or off / sound effects on or off |
 | O | Options: window size, stretched or whole pixels, dynamic resolution, music and effects volume |
-| 1 - 5 | Open a toolbar tab: paths and furniture, land, scenery, rides, shops. Press again for its next tool |
+| 1 - 6 | Open a toolbar tab: paths and furniture, land, scenery, gentle rides, thrill rides, shops. Press again for its next tool |
 | X | Demolish |
 | U | Queue line (12 gold a tile) |
 | R | Next tree kind (oak, moonpine, glowcap, crystal) / coaster direction |
@@ -115,7 +115,8 @@ green where it can go, red where it can't, with its cost beside the mouse.
 The toolbar: inspect and demolish on the left, then five tabs, then the open
 tab's tools. Paths and furniture: path, queue line, litter bin, bench,
 lantern. Land: raise, lower. Scenery: enchanted trees. Rides: Dragon
-Carousel, Arcane Spire, Wyrm Coaster. Shops: Potion Stall, Troll Tavern, Privy.
+Carousel (gentle); Arcane Spire, Wyrm Coaster (thrill). Shops: Potion Stall, Troll Tavern, Privy,
+Healer's Tent (for queasy guests), Wisp Seller, Enchanted Ices.
 Hover a button to see its name on the strip above the bar.
 
 Mess: guests drop wrappers when they finish what they carry, and very queasy

@@ -714,7 +714,7 @@ def diags(+n: Nat, +k: U32, +q: C.Q, +rs: +List<C.Ride>, +gs: RT, +ar: +List<U32
 # guests on screen, keyed by their diagonal
 def shopping(+st: U32, +tgt: U32, +rs: +List<C.Ride>) -> Bool:
   +k = C.Ride.kind(C.Rides.get(rs, tgt))
-  U32.is_eq(st, 1) && (U32.is_eq(k, 3) || U32.is_eq(k, 4))
+  U32.is_eq(st, 1) && (U32.is_eq(k, 3) || U32.is_eq(k, 4) || U32.is_eq(k, 8) || U32.is_eq(k, 9))
 
 def guest_dyn(+g: C.Guest, +q: C.Q, +rs: +List<C.Ride>, +camx: U32, +camy: U32,
   +vw: U32, +vh: U32, +t: U32, +acc: +List<Dyn>) -> +List<Dyn>:
@@ -738,7 +738,7 @@ def guest_dyn(+g: C.Guest, +q: C.Q, +rs: +List<C.Ride>, +camx: U32, +camy: U32,
   +code = C.Mind.code(mind)
   +fresh = Bool.not(U32.is_eq(code, 0)) && ((((t >> 4n) - C.Mind.when(mind)) .&. 65535) < 12 : U32)
   +evicon = sel(U32.is_eq(code, 1), 7, sel(U32.is_eq(code, 2), 8, sel(U32.is_eq(code, 3), 6, sel(U32.is_eq(code, 9), 9, sel(U32.is_eq(code, 6), 5, 3)))))
-  +keep = sel(U32.is_eq(st, 1), 249855, 17027071)
+  +keep = sel(U32.is_eq(st, 1), 511999, 17288191)
   +look = ((lk .&. keep) .|. (sel(sit, 0, (dir .&. 3 : U32)) << 12n) .|. (sel(fresh, evicon, sel(think, mood, 0)) << 20n)
     .|. sel(sit, 33554432, 0) : U32)
   Bool.pick(+List<Dyn>, vis, Dyn{(i + j : U32), DGuest{sx, sy, look, (t + id : U32)}} <> acc, acc)
@@ -838,9 +838,11 @@ def Cat.name(+c: U32) -> String:
     case 2:
       "SCENERY  (3)"
     case 3:
-      "RIDES  (4)"
+      "GENTLE RIDES  (4)"
+    case 4:
+      "THRILL RIDES  (5)"
     case _:
-      "SHOPS AND STALLS  (5)"
+      "SHOPS AND STALLS  (6)"
 
 def tool_name(+t: U32) -> String:
   match t:
@@ -884,6 +886,14 @@ def tool_name(+t: U32) -> String:
       Cat.name(3)
     case 24:
       Cat.name(4)
+    case 25:
+      Cat.name(5)
+    case 30:
+      "HEALER'S TENT  350*  CURES QUEASY GUESTS"
+    case 31:
+      "WISP SELLER  250*"
+    case 32:
+      "ENCHANTED ICES  300*"
     case _:
       "INSPECT (I): CLICK A RIDE OR A GUEST"
 
@@ -901,6 +911,28 @@ def ride_name(+k: U32) -> String:
       "WYRM COASTER"
     case 6:
       "PRIVY"
+    case 7:
+      "HEALER'S TENT"
+    case 8:
+      "WISP SELLER"
+    case 9:
+      "ENCHANTED ICES"
+    case 10:
+      "GRIFFIN SWING"
+    case 11:
+      "WHEEL OF STARS"
+    case 12:
+      "LICH'S CRYPT"
+    case 13:
+      "GOLEM BUMPERS"
+    case 14:
+      "HEDGE LABYRINTH"
+    case 15:
+      "DRAGON'S EYRIE"
+    case 16:
+      "WIZARD'S WHIRL"
+    case 17:
+      "MERMAID FLUME"
     case _:
       "RUINS"
 
@@ -958,16 +990,22 @@ def Cat.tool.go(+code: U32) -> U32:
       4
     case 24:
       5
-    case 25:
-      6
-    case 26:
-      10
     case 32:
-      7
+      6
     case 33:
+      10
+    case 40:
+      7
+    case 41:
       8
-    case 34:
+    case 42:
       16
+    case 43:
+      30
+    case 44:
+      31
+    case 45:
+      32
     case _:
       0
 
@@ -983,13 +1021,14 @@ def Cat.len(+c: U32) -> U32:
     case 2:
       1
     case 3:
-      3
+      1
     case 4:
-      3
+      2
+    case 5:
+      6
     case _:
       0
 
-# a tool's category (99: none) and its place in it
 def Cat.of(+t: U32) -> U32:
   match t:
     case 1:
@@ -1011,15 +1050,21 @@ def Cat.of(+t: U32) -> U32:
     case 5:
       3
     case 6:
-      3
+      4
     case 10:
-      3
+      4
     case 7:
-      4
+      5
     case 8:
-      4
+      5
     case 16:
-      4
+      5
+    case 30:
+      5
+    case 31:
+      5
+    case 32:
+      5
     case _:
       99
 
@@ -1035,14 +1080,18 @@ def Cat.pos(+t: U32) -> U32:
       4
     case 3:
       1
-    case 6:
-      1
     case 10:
-      2
+      1
     case 8:
       1
     case 16:
       2
+    case 30:
+      3
+    case 31:
+      4
+    case 32:
+      5
     case _:
       0
 
@@ -1063,9 +1112,9 @@ def Cat.key(+c: U32, +cur: U32, +tool: U32) -> U32:
 def bar_item(+lx: U32, +ly: U32, +c: U32) -> U32:
   +row = (ly >= 294 : U32) && (ly < 316 : U32)
   +ci = ((lx - 60) / 24 : U32)
-  +ti = ((lx - 196) / 24 : U32)
-  +incat = (ci < 5 : U32) && (((lx - 60) % 24) < 22 : U32)
-  +intool = (ti < Cat.len(c) : U32) && (((lx - 196) % 24) < 22 : U32)
+  +ti = ((lx - 212) / 24 : U32)
+  +incat = (ci < 6 : U32) && (((lx - 60) % 24) < 22 : U32)
+  +intool = (ti < Cat.len(c) : U32) && (((lx - 212) % 24) < 22 : U32)
   sel(Bool.not(row), 0, sel((lx >= 4 : U32) && (lx < 26 : U32), 12,
     sel((lx >= 28 : U32) && (lx < 50 : U32), 9, sel(incat, (20 + ci : U32),
     sel(intool, Cat.tool(c, ti), 0)))))
@@ -1085,14 +1134,14 @@ def tool_icons(+n: Nat, +k: U32, +c: U32, +tool: U32, +acc: +List<Dr>) -> +List<
     case 1n+p:
       +tk = Cat.tool(c, k)
       tool_icons(p, (k + 1 : U32), c, tool,
-        DIcon{(B() + 196 + k * 24 : U32), (B() + 294 : U32), tk, sel(U32.is_eq(tk, tool), 1, 0)} <> acc)
+        DIcon{(B() + 212 + k * 24 : U32), (B() + 294 : U32), tk, sel(U32.is_eq(tk, tool), 1, 0)} <> acc)
 
 def toolbar(+tool: U32, +c: U32, +acc: +List<Dr>) -> +List<Dr>:
   DIcon{(B() + 4 : U32), (B() + 294 : U32), 12, sel(U32.is_eq(tool, 12), 1, 0)}
     <> DIcon{(B() + 28 : U32), (B() + 294 : U32), 9, sel(U32.is_eq(tool, 9), 1, 0)}
     <> DRect{(B() + 54 : U32), (B() + 295 : U32), 1, 20, 5917290}
-    <> DRect{(B() + 190 : U32), (B() + 295 : U32), 1, 20, 5917290}
-    <> cat_icons(5n, 0, c, tool_icons(U32.to_nat(Cat.len(c)), 0, c, tool, acc))
+    <> DRect{(B() + 206 : U32), (B() + 295 : U32), 1, 20, 5917290}
+    <> cat_icons(6n, 0, c, tool_icons(U32.to_nat(Cat.len(c)), 0, c, tool, acc))
 
 def happy_avg(+gs: +List<C.Guest>, +sum: U32, +n: U32) -> U32:
   match gs:
@@ -1651,8 +1700,9 @@ def need_bar(label: String, +v: U32, +col: U32, +x: U32, +y: U32, +acc: +List<Dr
   R((x + 70 : U32), y, 100, 5, 4210752, acc)))
 
 def carrying(+lk: U32) -> String:
-  +it = ((lk >> 16n) .&. 3 : U32)
-  Bool.pick(String, U32.is_eq(it, 1), "A POTION", Bool.pick(String, U32.is_eq(it, 2), "A TANKARD OF ALE", "NOTHING"))
+  +it = ((lk >> 16n) .&. 7 : U32)
+  Bool.pick(String, U32.is_eq(it, 1), "A POTION", Bool.pick(String, U32.is_eq(it, 2), "A TANKARD OF ALE",
+    Bool.pick(String, U32.is_eq(it, 3), "A WISP", Bool.pick(String, U32.is_eq(it, 4), "AN ENCHANTED ICE", "NOTHING"))))
 
 def guest_win.go(g: C.Guest, +p: C.Park, +x: U32, +y: U32, +acc: +List<Dr>) -> +List<Dr>:
   C.Guest{+id, +gx, +gy, dir, +st, +tgt, tmr, +cash, +hu, +th, +en, +na, +ha, +lk, +mind, +bl} = g
@@ -1974,8 +2024,8 @@ def ghost_k(+tool: U32, +ok: Bool, +q: C.Q, +rs: +List<C.Ride>, +i: U32, +j: U32
   +rk = C.Tool.kind(tool)
   # demolishing a ride shows its whole footprint
   +dk = sel(U32.is_eq(tool, 9) && U32.is_eq(C.Tile.obj(t), 3), C.Ride.kind(C.Rides.get(rs, C.Tile.a(t))), 0)
-  +size = sel(Bool.not(U32.is_eq(rk, 0)), C.Ride.size(rk), 1)
-  (tool .|. (sel(ok, 1, 0) << 8n) .|. (size << 9n) .|. (rk << 12n) .|. (dk << 16n) : U32)
+  +size = sel(Bool.not(U32.is_eq(rk, 0)), C.Ride.size(rk), sel(Bool.not(U32.is_eq(dk, 0)), C.Ride.size(dk), 1))
+  (tool .|. (sel(ok, 1, 0) << 8n) .|. (size << 9n) .|. (rk << 12n) .|. (dk << 17n) : U32)
 
 def ghost_on(+tool: U32, +hov: U32, +overwin: Bool) -> Bool:
   (tool >= 1 : U32) && (tool <= 16 : U32) && Bool.not(U32.is_eq(tool, 12)) && (hov < 99999 : U32) && Bool.not(overwin)
@@ -2117,7 +2167,7 @@ def on_key(+c: U32, +down: Bool, +ui: UI, +wm: WM, +q: C.Q) -> EV:
   +haswin = Bool.not(U32.is_eq(C.len32(Win, ws), 0))
   +kb = key_bit(c)
   +keys2 = sel(down, (keys .|. kb : U32), (keys .&. (4294967295 - kb) : U32))
-  +digit = (c >= 49 : U32) && (c <= 53 : U32) && down
+  +digit = (c >= 49 : U32) && (c <= 54 : U32) && down
   +dc = (c - 49 : U32)
   +tool2 = sel(digit, Cat.key(dc, UI.cat(var), tool), sel(down && U32.is_eq(c, 117), 11,
     sel(down && U32.is_eq(c, 105), 12, sel(down && U32.is_eq(c, 120), 9, tool))))
@@ -2510,7 +2560,7 @@ def start_acts() -> List<C.Act>:
    C.Build{14, 32, 53, 0}, C.Build{13, 32, 52, 0}, C.Build{15, 32, 50, 0},
    C.Build{15, 32, 34, 0}, C.Build{14, 24, 36, 0}, C.Build{13, 26, 36, 0},
    C.Build{15, 28, 36, 0}, C.Build{14, 30, 46, 0}, C.Build{13, 34, 46, 0},
-   C.Build{16, 33, 50, 0}, C.Build{16, 13, 31, 0},
+   C.Build{16, 33, 50, 0}, C.Build{16, 13, 31, 0}, C.Build{30, 33, 47, 0}, C.Build{32, 31, 37, 0}, C.Build{31, 35, 37, 0},
    C.ParkOp{21}, C.ParkOp{21}, C.ParkOp{22}, C.ParkOp{23}, C.ParkOp{24}]
 
 def Game.new() -> Game:
@@ -3214,9 +3264,9 @@ def ui.s7(g: Game) -> Game:
   +pos = ui.guest_at(C.Park.guests(Game.park(g2)), C.Park.map(Game.park(g2)), 930, 880)
   ui.step(g2, ui.click((pos >> 16n : U32), (pos .&. 65535 : U32), 0))
 
-# the RIDES tab, then its third tool (the coaster)
+# the THRILL RIDES tab, then its second tool (the coaster)
 def ui.s8(g: Game) -> Game:
-  ui.step(ui.step(g, ui.click(143, 305, 0)), ui.click(255, 305, 0))
+  ui.step(ui.step(g, ui.click(167, 305, 0)), ui.click(247, 305, 0))
 
 # key 1 twice: the paths tab's path, then its queue line
 def ui.s9(g: Game) -> Game:
