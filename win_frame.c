@@ -112,6 +112,11 @@ static void pkwindow_pump(BendWin* win) {
       pkwindow_push(win, 0, pkwindow_key(&ev.xkey), ev.type == KeyPress, 0, 0);
     } else if (ev.type == ButtonPress || ev.type == ButtonRelease) {
       u32 b = ev.xbutton.button;
+      // the wheel: 4 up, 5 down, reported as buttons 5 and 6 when pressed
+      if ((b == 4 || b == 5) && ev.type == ButtonPress) {
+        pkwindow_push(win, 1, pkwindow_clip(ev.xbutton.x, w),
+          pkwindow_clip(ev.xbutton.y, h), b + 1, 1);
+      }
       if (b >= 1 && b <= 3) {
         pkwindow_push(win, 1, pkwindow_clip(ev.xbutton.x, w),
           pkwindow_clip(ev.xbutton.y, h), b == 1 ? 0 : 4 - b,

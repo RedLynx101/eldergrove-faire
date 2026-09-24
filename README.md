@@ -30,7 +30,7 @@ Dev modes:
 - `./park --uitest` clicks through a ride window headlessly and reports what changed.
 - `./park --wav out.wav SECONDS` records the music with every effect in turn;
   `python3 tools/wavcheck.py out.wav out.png` prints its levels and draws it. `PARK_MUTE=1` plays nothing.
-- `--shot` takes an optional 6th argument, a window to show (kind * 256 + ride; 256 is the carousel's).
+- `--shot` takes an optional 6th argument, a window to show (kind * 256 + ride; 256 is the carousel's), and a 7th, the zoom (0 normal, 1 close, 2 far).
 - Environment: `PARK_PROF=1` prints frame timings, `PARK_NOPACE=1` removes the 60 Hz cap,
   `PARK_DUMP=out.ppm` writes the 300th shown frame. `tools/prof.sh ./park ...` profiles with perf.
 
@@ -38,7 +38,8 @@ Dev modes:
 
 | Key | Action |
 |---|---|
-| Arrow keys | Scroll |
+| Arrow keys / W A S D | Move the camera |
+| Mouse wheel / Page Up, Page Down | Zoom in and out (close, normal, far) |
 | Click / drag | Use the tool on a tile (or pick a tool in the bar) |
 | I | Inspect tool (the default): click a guest or a ride to open its window |
 | Right-click | Open a ride's window, whatever the tool |
@@ -103,9 +104,12 @@ a chime each month, and clicks, thumps and buzzes for building. It is all
 made in `sound.bend` a sample at a time; `snd.c` plays it through PulseAudio
 (`pacat`, which WSLg provides), or stays silent if there is no pacat.
 
-Coaster tool (0): `Enter` opens or closes the coaster; while closed, `W`
-ahead, `A`/`D` turn, `Q` up, `Z` down, `L` lift hill, `Backspace` removes the
-last piece. It opens only once the track closes back on its station. One
+Every building tool shows a ghost of what it would place under the mouse:
+green where it can go, red where it can't, with its cost beside the mouse.
+
+Coaster tool (0): `Enter` opens or closes the coaster; while closed, `T`
+ahead, `G`/`H` turn, `Y` up, `B` down, `L` lift hill, `Backspace` removes the
+last piece (WASD always moves the camera). It opens only once the track closes back on its station. One
 coaster per park for now (the Wyrm Coaster comes pre-built).
 
 ## Files

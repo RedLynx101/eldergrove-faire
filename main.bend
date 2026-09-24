@@ -38,12 +38,27 @@ type Dr is Data:
   DGlyph{x: U32, y: U32, bits: U32, col: U32}
   DRect{x: U32, y: U32, w: U32, h: U32, col: U32}
   DIcon{x: U32, y: U32, tool: U32, on: U32}
+  DGhost{x: U32, y: U32, k: U32}
 
 def ov(+x0: U32, +y0: U32, +x1: U32, +y1: U32, +bx: U32, +by: U32, +s: U32)
   -> Bool:
   ((x1 > bx) && (x0 < bx + s) && (y1 > by) && (y0 < by + s) : U32)
 
-def Dr.hits(d: Dr, +bx: U32, +by: U32, +s: U32) -> Bool:
+# Zoom: 0 normal, 1 close (twice as big), 2 far (half as big). World
+# drawables live in world-screen pixels; a screen square or pixel is mapped
+# into that space (the art itself never changes). The zoom rides in the top
+# two bits of the frame's t.
+def Zm.w(+p: U32, +z: U32) -> U32:
+  +o = (p - B() : U32)
+  (B() + sel(U32.is_eq(z, 1), (o >> 1n : U32), sel(U32.is_eq(z, 2), (o << 1n : U32), o)) : U32)
+
+def Zm.s(+s: U32, +z: U32) -> U32:
+  sel(U32.is_eq(z, 1), U32.max((s >> 1n : U32), 1), sel(U32.is_eq(z, 2), (s << 1n : U32), s))
+
+def Zm.z(+t: U32) -> U32:
+  (t >> 30n : U32)
+
+def Dr.hits.go(d: Dr, +bx0: U32, +by0: U32, +s0: U32, +bx: U32, +by: U32, +s: U32) -> Bool:
   match d:
     case DBlock{+x, +y, +dl, +dr, ter, obj, hov, wx, wy, +nb}:
       +top = sel(U32.is_eq((nb >> 6n : U32), 0), 7, 30)
@@ -61,14 +76,20 @@ def Dr.hits(d: Dr, +bx: U32, +by: U32, +s: U32) -> Bool:
       ov((x - 5 : U32), (y - top : U32), (x + 7 : U32), (y + 1 : U32), bx, by, s)
     case DCar{+x, +y, d, lead, rd}:
       ov((x - 10 : U32), (y - 19 : U32), (x + 11 : U32), (y + 6 : U32), bx, by, s)
+    case DGhost{+x, +y, k}:
+      ov((x - 40 : U32), (y - 96 : U32), (x + 41 : U32), (y + 40 : U32), bx, by, s)
     case DGlyph{+x, +y, bits, col}:
-      ov(x, y, (x + 4 : U32), (y + 6 : U32), bx, by, s)
+      ov(x, y, (x + 4 : U32), (y + 6 : U32), bx0, by0, s0)
     case DRect{+x, +y, +w, +h, col}:
-      ov(x, y, (x + w : U32), (y + h : U32), bx, by, s)
+      ov(x, y, (x + w : U32), (y + h : U32), bx0, by0, s0)
     case DIcon{+x, +y, tool, on}:
-      ov(x, y, (x + 22 : U32), (y + 22 : U32), bx, by, s)
+      ov(x, y, (x + 22 : U32), (y + 22 : U32), bx0, by0, s0)
 
-def Dr.shade(d: Dr, +px: U32, +py: U32, +t: U32) -> U32:
+def Dr.hits(d: Dr, +bx: U32, +by: U32, +s: U32, +t: U32) -> Bool:
+  +z = Zm.z(t)
+  Dr.hits.go(d, bx, by, s, Zm.w(bx, z), Zm.w(by, z), Zm.s(s, z))
+
+def Dr.shade.go(d: Dr, +sx: U32, +sy: U32, +px: U32, +py: U32, +t: U32) -> U32:
   match d:
     case DBlock{x, y, dl, dr, ter, obj, hov, wx, wy, nb}:
       A.Art.block(x, y, dl, dr, ter, obj, hov, wx, wy, t, px, py, nb)
@@ -84,12 +105,14 @@ def Dr.shade(d: Dr, +px: U32, +py: U32, +t: U32) -> U32:
       A.Art.guest((px - x : U32), (py - y : U32), look, ph)
     case DCar{x, y, d, lead, rd}:
       A.Art.car((px - x : U32), (py - y : U32), d, lead, rd)
+    case DGhost{x, y, k}:
+      A.Art.ghost(k, px, py, x, y, t)
     case DGlyph{x, y, bits, col}:
-      A.Art.glyph(bits, (px - x : U32), (py - y : U32), col)
+      A.Art.glyph(bits, (sx - x : U32), (sy - y : U32), col)
     case DRect{x, y, w, h, col}:
       col
     case DIcon{x, y, tool, on}:
-      A.Art.icon(tool, on, (px - x : U32), (py - y : U32), t)
+      A.Art.icon(tool, on, (sx - x : U32), (sy - y : U32), t)
 
 # The rasterizer
 # --------------
@@ -103,6 +126,10 @@ def Dr.shade(d: Dr, +px: U32, +py: U32, +t: U32) -> U32:
 # is only ever matched, so every read is a borrow, not a reference count;
 # a kept entry is copied from its fields, so no entry is shared between
 # cores; and each list has one last consumer (R.fin) that frees it.
+
+def Dr.shade(d: Dr, +px: U32, +py: U32, +tz: U32) -> U32:
+  +z = Zm.z(tz)
+  Dr.shade.go(d, px, py, Zm.w(px, z), Zm.w(py, z), (tz .&. 1073741823 : U32))
 
 def SKY() -> U32:
   1714237
@@ -123,7 +150,7 @@ def first(+xs: +List<Dr>, done: Bool, +c: U32, +px: U32, +py: U32, +t: U32)
     case Nil{} False{}:
       SKY()
     case Con{+d, rest} False{}:
-      +c2 = Dr.shade_if(Dr.hits(d, px, py, 1), d, px, py, t)
+      +c2 = Dr.shade_if(Dr.hits(d, px, py, 1, t), d, px, py, t)
       first(rest, A.opaque(c2), c2, px, py, t)
 
 # a fresh copy from the fields, so no drawable is shared between lists
@@ -149,6 +176,8 @@ def Dr.cp(d: Dr) -> Dr:
       DRect{x, y, w, h, col}
     case DIcon{x, y, tool, on}:
       DIcon{x, y, tool, on}
+    case DGhost{x, y, k}:
+      DGhost{x, y, k}
 
 def cut.put(keep: Bool, d: Dr, xs: +List<Dr>) -> +List<Dr>:
   match keep:
@@ -158,12 +187,12 @@ def cut.put(keep: Bool, d: Dr, xs: +List<Dr>) -> +List<Dr>:
       xs
 
 # the entries that reach the square (bx, by, s), in order
-def cut(xs: +List<Dr>, +bx: U32, +by: U32, +s: U32) -> +List<Dr>:
+def cut(xs: +List<Dr>, +bx: U32, +by: U32, +s: U32, +t: U32) -> +List<Dr>:
   match xs:
     case []:
       []
     case +d <> rest:
-      cut.put(Dr.hits(d, bx, by, s), d, cut(rest, bx, by, s))
+      cut.put(Dr.hits(d, bx, by, s, t), d, cut(rest, bx, by, s, t))
 
 def empty(+xs: +List<Dr>) -> Bool:
   match xs:
@@ -233,7 +262,7 @@ def R.tile.go(skip: Bool, +fc: U32, +xs: +List<Dr>, +x: U32, +y: U32, +t: U32)
       R.fin(R.b16(xs, x, y, t), xs)
 
 def R.tile(+cl: +List<Dr>, +x: U32, +y: U32, +t: U32) -> Image:
-  +xs = cut(cl, x, y, 16)
+  +xs = cut(cl, x, y, 16, t)
   +fc = solid(xs, x, y, 16)
   R.tile.go(A.opaque(fc), fc, xs, x, y, t)
 
@@ -267,7 +296,7 @@ def R.root(+d: Nat, off: Bool, +g: +List<Dr>, +x: U32, +y: U32, +t: U32)
     case _ True{}:
       Pix{SKY()}
     case 0n False{}:
-      +cl = cut(g, x, y, 64)
+      +cl = cut(g, x, y, 64, t)
       R.cell(empty(cl), cl, x, y, t)
     case 1n+p False{}:
       +s = U32.shln(64, p)
@@ -306,9 +335,38 @@ type UI is Data:
     tool: U32, var: U32, speed: U32, msg: U32, frame: U32, income: U32,
     last: U32, io: U32, fps: U32, tl: Nat}
 
+# The view at a zoom: the world-screen rectangle it shows (it stays centred on
+# the normal view's centre)
+def View.z(+var: U32) -> U32:
+  ((var >> 18n) .&. 3 : U32)
+
+def View.w(+z: U32) -> U32:
+  sel(U32.is_eq(z, 1), 256, sel(U32.is_eq(z, 2), 1024, 512))
+
+def View.h(+z: U32) -> U32:
+  sel(U32.is_eq(z, 1), 160, sel(U32.is_eq(z, 2), 640, 320))
+
+def View.x(+camx: U32, +z: U32) -> U32:
+  sel(U32.is_eq(z, 1), (camx + 128 : U32), sel(U32.is_eq(z, 2), (camx - 256 : U32), camx))
+
+def View.y(+camy: U32, +z: U32) -> U32:
+  sel(U32.is_eq(z, 1), (camy + 80 : U32), sel(U32.is_eq(z, 2), (camy - 160 : U32), camy))
+
+# a screen position (0..511) in world-screen pixels from the view's corner
+def View.m(+m: U32, +z: U32) -> U32:
+  sel(U32.is_eq(z, 1), (m >> 1n : U32), sel(U32.is_eq(z, 2), (m << 1n : U32), m))
+
+# zooming in and out, one step: far, normal, close
+def View.zoom(+var: U32, +inw: Bool) -> U32:
+  +z = View.z(var)
+  +z2 = sel(inw, sel(U32.is_eq(z, 2), 0, 1), sel(U32.is_eq(z, 1), 0, 2))
+  ((var .&. 4294180863) .|. (z2 << 18n) : U32)
+
 def pick(+q: C.Q, +ui: UI) -> U32:
-  UI{camx, camy, keys, mx, my, md, tool, var, sp, msg, fr, inc, last, io, fps, tl} = ui
-  sel((my < 290 : U32) && (my > 12 : U32), pick.go(8n, q, mx, my, camx, camy, 7, 99999), 99999)
+  UI{camx, camy, keys, mx, my, md, tool, +var, sp, msg, fr, inc, last, io, fps, tl} = ui
+  +z = View.z(var)
+  sel((my < 290 : U32) && (my > 12 : U32),
+    pick.go(8n, q, View.m(mx, z), View.m(my, z), View.x(camx, z), View.y(camy, z), 7, 99999), 99999)
 
 type Dyn is Data:
   Dyn{k: U32, d: Dr}
@@ -579,26 +637,26 @@ def DP.acc(p: DP) -> +List<Dr>:
   DP{ds, acc} = p
   acc
 
-def diag_rows(+k: U32, +camx: U32, +camy: U32) -> U32:
+def diag_rows(+k: U32, +camx: U32, +camy: U32, +vw: U32, +vh: U32) -> U32:
   +sy0 = ((B() + 512 + 8 * k) - camy : U32)
-  +vis = (sy0 + 80 > B() : U32) && (sy0 < B() + 470 : U32)
+  +vis = (sy0 + 80 > B() : U32) && (sy0 < B() + vh + 150 : U32)
   +lo0 = C.sub0(((camx + 16 * k + 2048 - 1320) >> 5n : U32), 64)
-  +hi0 = C.sub0(((camx + 16 * k + 2048 - 728) >> 5n : U32), 64)
+  +hi0 = C.sub0(((camx + 16 * k + 2048 + vw + 40 - 1280) >> 5n : U32), 64)
   +lo = U32.max(lo0, C.sub0(k, 63))
   +hi = U32.min(U32.min(hi0, k), 63)
   sel(vis && (hi >= lo : U32), ((hi - lo + 1) * 256 + lo : U32), 0)
 
 def diags(+n: Nat, +k: U32, +q: C.Q, +rs: +List<C.Ride>, +gs: RT, +ar: +List<U32>,
-  +camx: U32, +camy: U32, +hov: U32, +ds: +List<Dyn>, +acc: +List<Dr>) -> +List<Dr>:
+  +camx: U32, +camy: U32, +vw: U32, +vh: U32, +hov: U32, +ds: +List<Dyn>, +acc: +List<Dr>) -> +List<Dr>:
   match n:
     case 0n:
       acc
     case 1n+p:
-      +r = diag_rows(k, camx, camy)
+      +r = diag_rows(k, camx, camy, vw, vh)
       +acc2 = row(U32.to_nat((r >> 8n : U32)), (r .&. 255 : U32), k, q, rs, gs, ar,
         camx, camy, hov, acc)
       +dp = take(ds, heads(ds, k), k, acc2)
-      diags(p, (k + 1 : U32), q, rs, gs, ar, camx, camy, hov, DP.ds(dp), DP.acc(dp))
+      diags(p, (k + 1 : U32), q, rs, gs, ar, camx, camy, vw, vh, hov, DP.ds(dp), DP.acc(dp))
 
 # guests on screen, keyed by their diagonal
 def shopping(+st: U32, +tgt: U32, +rs: +List<C.Ride>) -> Bool:
@@ -606,7 +664,7 @@ def shopping(+st: U32, +tgt: U32, +rs: +List<C.Ride>) -> Bool:
   U32.is_eq(st, 1) && (U32.is_eq(k, 3) || U32.is_eq(k, 4))
 
 def guest_dyn(+g: C.Guest, +q: C.Q, +rs: +List<C.Ride>, +camx: U32, +camy: U32,
-  +t: U32, +acc: +List<Dyn>) -> +List<Dyn>:
+  +vw: U32, +vh: U32, +t: U32, +acc: +List<Dyn>) -> +List<Dyn>:
   C.Guest{+id, +x, +y, +dir, +st, +tgt, tmr, cash, +hu, +th, +en, +na, +ha, +lk, +mind} = g
   +i = (x >> 4n : U32)
   +j = (y >> 4n : U32)
@@ -614,8 +672,8 @@ def guest_dyn(+g: C.Guest, +q: C.Q, +rs: +List<C.Ride>, +camx: U32, +camy: U32,
   +sx = ((B() + 1280 + x) - (y + camx) : U32)
   +sy = ((B() + 512 + ((x + y) >> 1n)) - (8 * h + camy) : U32)
   +walker = U32.is_eq(st, 0) || U32.is_eq(st, 2) || shopping(st, tgt, rs)
-  +vis = (sx + 8 > B() : U32) && (sx < B() + 520 : U32) && (sy + 4 > B() : U32)
-    && (sy < B() + 340 : U32) && walker
+  +vis = (sx + 8 > B() : U32) && (sx < B() + vw + 8 : U32) && (sy + 4 > B() : U32)
+    && (sy < B() + vh + 28 : U32) && walker
   # the drawn look: outfit, carried item, stepping (bits 0-9, 16-17, 24),
   # facing (12-13), and now and then a thought (20-22)
   +mood = sel((na > 120 : U32), 3, sel((hu > 170 : U32), 1, sel((th > 170 : U32), 2,
@@ -630,12 +688,12 @@ def guest_dyn(+g: C.Guest, +q: C.Q, +rs: +List<C.Ride>, +camx: U32, +camy: U32,
   Bool.pick(+List<Dyn>, vis, Dyn{(i + j : U32), DGuest{sx, sy, look, (t + id : U32)}} <> acc, acc)
 
 def guests_dyn(+gs: +List<C.Guest>, +q: C.Q, +rs: +List<C.Ride>, +camx: U32,
-  +camy: U32, +t: U32, +acc: +List<Dyn>) -> +List<Dyn>:
+  +camy: U32, +vw: U32, +vh: U32, +t: U32, +acc: +List<Dyn>) -> +List<Dyn>:
   match gs:
     case []:
       acc
     case g <> rest:
-      guests_dyn(rest, q, rs, camx, camy, t, guest_dyn(g, q, rs, camx, camy, t, acc))
+      guests_dyn(rest, q, rs, camx, camy, vw, vh, t, guest_dyn(g, q, rs, camx, camy, vw, vh, t, acc))
 
 # a point along the coaster: world position (1/16 tile) and height (px)
 def ash8(+v: U32) -> U32:
@@ -841,7 +899,7 @@ def hover_info(+p: C.Park, +hov: U32, +acc: +List<Dr>) -> +List<Dr>:
 
 def coaster_help(+tool: U32, +acc: +List<Dr>) -> +List<Dr>:
   Bool.pick(+List<Dr>, U32.is_eq(tool, 10),
-    text("CLICK: STATION  W:AHEAD A/D:TURN Q:UP Z:DOWN L:LIFT BKSP:UNDO ENTER:OPEN",
+    text("CLICK: STATION  T:AHEAD G/H:TURN Y:UP B:DOWN L:LIFT BKSP:UNDO ENTER:OPEN",
       (B() + 4 : U32), (B() + 284 : U32), 12648447, acc), acc)
 
 def T(s: String, +x: U32, +y: U32, +col: U32, +acc: +List<Dr>) -> +List<Dr>:
@@ -1421,29 +1479,82 @@ def dyn_from(+ds: +List<Dyn>, +k: U32) -> +List<Dyn>:
     case d <> rest:
       dyn_put(Bool.not(Dyn.is_below(d, k)), d, dyn_from(rest, k))
 
+def ghost_k(+tool: U32, +ok: Bool, +q: C.Q, +rs: +List<C.Ride>, +i: U32, +j: U32) -> U32:
+  +t = C.Land.get(q, i, j)
+  +rk = sel((tool >= 5 : U32) && (tool <= 8 : U32), (tool - 4 : U32), 0)
+  # demolishing a ride shows its whole footprint
+  +dk = sel(U32.is_eq(tool, 9) && U32.is_eq(C.Tile.obj(t), 3), C.Ride.kind(C.Rides.get(rs, C.Tile.a(t))), 0)
+  +size = sel(Bool.not(U32.is_eq(rk, 0)), C.Ride.size(rk), 1)
+  (tool .|. (sel(ok, 1, 0) << 8n) .|. (size << 9n) .|. (rk << 12n) .|. (dk << 16n) : U32)
+
+def ghost_on(+tool: U32, +hov: U32, +overwin: Bool) -> Bool:
+  (tool >= 1 : U32) && (tool <= 11 : U32) && (hov < 99999 : U32) && Bool.not(overwin)
+
+def ghost_dr(+p: C.Park, +tool: U32, +hov: U32, +vx: U32, +vy: U32, +overwin: Bool) -> +List<Dr>:
+  C.Park{+map, guests, +rides, +track, +cash, time, nid, fin} = p
+  +i = (hov >> 6n : U32)
+  +j = (hov .&. 63 : U32)
+  +h = C.Land.h(map, i, j)
+  +ok = C.Build.ok(map, track, cash, tool, i, j)
+  Bool.pick(+List<Dr>, ghost_on(tool, hov, overwin),
+    [DGhost{scr_x(i, j, vx), scr_y(i, j, h, vy), ghost_k(tool, ok, map, rides, i, j)}], [])
+
+def str_bytes(s: String) -> +List<U32>:
+  match s:
+    case SNil{}:
+      []
+    case SCon{Chr{c}, rest}:
+      c <> str_bytes(rest)
+
+def ghost_cost(+p: C.Park, +tool: U32, +hov: U32, +mx: U32, +my: U32, +overwin: Bool,
+  +acc: +List<Dr>) -> +List<Dr>:
+  C.Park{+map, guests, rides, +track, +cash, time, nid, fin} = p
+  +ok = C.Build.ok(map, track, cash, tool, (hov >> 6n : U32), (hov .&. 63 : U32))
+  +cost = C.Build.cost(tool)
+  +label = Bool.pick(String, U32.is_eq(tool, 9), "DEMOLISH", "*" ++ U32.show(cost))
+  Bool.pick(+List<Dr>, ghost_on(tool, hov, overwin) && Bool.not(U32.is_eq(tool, 10)),
+    T(label, (mx + 9 : U32), C.sub0(my, 10), sel(ok, 12648384, 16748688),
+      R((mx + 7 : U32), C.sub0(my, 12), (C.len32(U32, str_bytes(label)) * 4 + 4 : U32), 9, 1973802, acc)), acc)
+
 def scene(+g: Game) -> +List<Dr>:
   Game{+p, +ui, +wm, snd} = g
   C.Park{+map, +guests, +rides, +track, cash, +time, nid, fin} = p
   C.Track{+ps, open, +bs, st, en} = track
-  UI{+camx, +camy, keys, mx, my, md, tool, var, sp, msg, fr, inc, last, io, fps, tl} = ui
+  UI{+camx, +camy, keys, +mx, +my, md, +tool, +var, sp, msg, fr, inc, last, io, fps, tl} = ui
   +hov = pick(map, ui)
+  +z = View.z(var)
+  +vx = View.x(camx, z)
+  +vy = View.y(camy, z)
+  +vw = View.w(z)
+  +vh = View.h(z)
   +total = (C.len32(C.Piece, ps) * 256 : U32)
   +rt = RT.of(guests, rides)
-  +dyn = trains_dyn(bs, ps, U32.max(total, 1), camx, camy, rt,
-    guests_dyn(guests, map, rides, camx, camy, time, []))
+  +dyn = trains_dyn(bs, ps, U32.max(total, 1), vx, vy, rt,
+    guests_dyn(guests, map, rides, vx, vy, vw, vh, time, []))
   +sorted = List.sort(~Dyn, ~Dyn.le, dyn)
   +ar = Arches.of(rides, ps)
   # the back and front halves of the map are built in parallel
-  hi lo = diags(63n, 64, map, rides, rt, ar, camx, camy, hov, dyn_from(sorted, 64), [])
-    diags(64n, 0, map, rides, rt, ar, camx, camy, hov, dyn_below(sorted, 64), [])
-  List.append(&2, Dr, wins_dr(WM.wins(wm), p, hud(p, ui, hov)), List.append(&2, Dr, hi, lo))
+  hi lo = diags(63n, 64, map, rides, rt, ar, vx, vy, vw, vh, hov, dyn_from(sorted, 64), [])
+    diags(64n, 0, map, rides, rt, ar, vx, vy, vw, vh, hov, dyn_below(sorted, 64), [])
+  +overwin = Bool.not(U32.is_eq(Wins.at(WM.wins(wm), mx, my, 0), C.NONE()))
+  +ghost = ghost_dr(p, tool, hov, vx, vy, overwin)
+  +front = ghost_cost(p, tool, hov, mx, my, overwin, wins_dr(WM.wins(wm), p, hud(p, ui, hov)))
+  List.append(&2, Dr, front, List.append(&2, Dr, ghost, List.append(&2, Dr, hi, lo)))
 
 def Game.park(g: Game) -> C.Park:
   Game{p, ui, wm, snd} = g
   p
 
+# Placing things: a ghost of what the tool would build under the mouse, green
+# where it can go and red where it can't (k: tool | ok << 8 | size << 9 |
+# ride kind << 12), and its cost beside the mouse
+def Game.zoom(g: Game) -> U32:
+  Game{p, ui, wm, snd} = g
+  UI{cx, cy, keys, mx, my, md, tool, var, sp, msg, fr, inc, last, io, fps, tl} = ui
+  View.z(var)
+
 def frame(+g: Game) -> Image:
-  R.frame(scene(g), C.Park.time(Game.park(g)))
+  R.frame(scene(g), ((C.Park.time(Game.park(g)) .&. 1073741823) .|. (Game.zoom(g) << 30n) : U32))
 
 def UI.new() -> UI:
   UI{930, 880, 0, 0, 0, 0, 12, 0, 1, 0, 0, 0, 99999, 0, 0, 0n}
@@ -1454,6 +1565,7 @@ def u32s(+n: U32) -> String:
 type EV is Data:
   EV{ui: UI, wm: WM, acts: List<&2, C.Act>, quit: Bool}
 
+# the camera: the arrows, or W A S D
 def key_bit(+c: U32) -> U32:
   match c:
     case 63232:
@@ -1464,20 +1576,30 @@ def key_bit(+c: U32) -> U32:
       4
     case 63235:
       8
+    case 119:
+      1
+    case 115:
+      2
+    case 97:
+      4
+    case 100:
+      8
     case _:
       0
 
+# the coaster tool's keys (WASD is the camera): T ahead, Y up, B down, G left,
+# H right, L lift hill
 def track_op(+c: U32) -> U32:
   match c:
-    case 119:
+    case 116:
       0
-    case 113:
+    case 121:
       1
-    case 122:
+    case 98:
       2
-    case 97:
+    case 103:
       3
-    case 100:
+    case 104:
       4
     case 108:
       6
@@ -1510,9 +1632,12 @@ def on_key(+c: U32, +down: Bool, +ui: UI, +wm: WM, +q: C.Q) -> EV:
   +digit = (c >= 48 : U32) && (c <= 57 : U32) && down
   +tool2 = sel(digit, sel(U32.is_eq(c, 48), 10, (c - 48 : U32)), sel(down && U32.is_eq(c, 117), 11,
     sel(down && U32.is_eq(c, 105), 12, tool)))
-  # M: music on or off (var bit 16); N: effects on or off (bit 17)
-  +var2 = (sel(down && U32.is_eq(c, 114), (var + 1 : U32), var)
+  # M: music on or off (var bit 16); N: effects on or off (bit 17); Page Up
+  # / Page Down: zoom (bits 18-19)
+  +var1 = (sel(down && U32.is_eq(c, 114), (var + 1 : U32), var)
     .^. sel(down && U32.is_eq(c, 109), 65536, 0) .^. sel(down && U32.is_eq(c, 110), 131072, 0) : U32)
+  +var2 = sel(down && U32.is_eq(c, 63276), View.zoom(var1, True{}),
+    sel(down && U32.is_eq(c, 63277), View.zoom(var1, False{}), var1))
   +sp2 = sel(down && U32.is_eq(c, 32), sel(U32.is_eq(sp, 0), 1, 0),
     sel(down && (U32.is_eq(c, 61) || U32.is_eq(c, 43)), U32.min((sp + 1 : U32), 3),
       sel(down && U32.is_eq(c, 45), U32.max(C.sub0(sp, 1), 1), sp)))
@@ -1594,21 +1719,24 @@ def Guests.near(+gs: +List<C.Guest>, +q: C.Q, +camx: U32, +camy: U32, +lx: U32, 
       Guests.near(rest, q, camx, camy, lx, ly, sel(take, id, best), sel(take, d, bd))
 
 # inspecting: a guest under the mouse opens their window, else a ride's
-def inspect_at(+ws: +List<Win>, +p: C.Park, +hov: U32, +lx: U32, +ly: U32, +cx: U32, +cy: U32) -> +List<Win>:
-  +gid = Guests.near(C.Park.guests(p), C.Park.map(p), cx, cy, lx, ly, C.NONE(), 7)
+def inspect_at(+ws: +List<Win>, +p: C.Park, +hov: U32, +lx: U32, +ly: U32, +cx: U32, +cy: U32, +z: U32) -> +List<Win>:
+  +gid = Guests.near(C.Park.guests(p), C.Park.map(p), View.x(cx, z), View.y(cy, z), View.m(lx, z), View.m(ly, z),
+    C.NONE(), sel(U32.is_eq(z, 2), 12, 7))
   Bool.pick(+List<Win>, U32.is_eq(gid, C.NONE()), open_at(ws, p, hov, lx, ly),
     Wins.open(ws, 4, gid, U32.min((lx + 12 : U32), 300), U32.min(U32.max(C.sub0(ly, 30), 14), 156)))
 
 def on_map(+lx: U32, +ly: U32, +button: U32, +down: Bool, +ui: UI, +wm: WM, +p: C.Park) -> EV:
-  UI{+cx, +cy, keys, mx, my, md, +tool, var, sp, msg, fr, inc, last, io, fps, tl} = ui
+  UI{+cx, +cy, keys, mx, my, md, +tool, +var, sp, msg, fr, inc, last, io, fps, tl} = ui
   +q = C.Park.map(p)
-  +ui2 = {UI{cx, cy, keys, lx, ly, sel(down && U32.is_eq(button, 0), 1, 0), tool, var, sp, msg, fr, inc, 99999, io, fps, tl} : UI}
+  +var2 = sel(down && U32.is_eq(button, 5), View.zoom(var, True{}), sel(down && U32.is_eq(button, 6), View.zoom(var, False{}), var))
+  +ui2 = {UI{cx, cy, keys, lx, ly, sel(down && U32.is_eq(button, 0), 1, 0), tool, var2, sp, msg, fr, inc, 99999, io, fps, tl} : UI}
   +bar = (ly >= 292 : U32)
   +slot = ((lx - 4) / 24 + 1 : U32)
   +pickt = down && bar && (slot >= 1 : U32) && (slot <= 12 : U32)
   +click = down && Bool.not(bar)
-  +inspect = click && (U32.is_eq(tool, 12) || Bool.not(U32.is_eq(button, 0)))
-  +build = click && Bool.not(inspect)
+  +wheel = U32.is_eq(button, 5) || U32.is_eq(button, 6)
+  +inspect = click && Bool.not(wheel) && (U32.is_eq(tool, 12) || Bool.not(U32.is_eq(button, 0)))
+  +build = click && Bool.not(inspect) && Bool.not(wheel)
   +hov = pick(q, ui2)
   +ui3 = UI.with_tool(UI.with_last(ui2, sel(build, hov, 99999)), sel(pickt, slot, tool))
   +ws = WM.wins(wm)
@@ -1616,7 +1744,7 @@ def on_map(+lx: U32, +ly: U32, +button: U32, +down: Bool, +ui: UI, +wm: WM, +p: 
   +finb = down && in_box(lx, ly, 462, 305, 46, 9)
   +ws2 = Bool.pick(+List<Win>, parkb, Wins.open(ws, 2, 0, 150, 40),
     Bool.pick(+List<Win>, finb, Wins.open(ws, 3, 0, 140, 30), ws))
-  EV{ui3, WM{Bool.pick(+List<Win>, inspect, inspect_at(ws2, p, hov, lx, ly, cx, cy), ws2), 0, 0, 0},
+  EV{ui3, WM{Bool.pick(+List<Win>, inspect, inspect_at(ws2, p, hov, lx, ly, cx, cy, View.z(var)), ws2), 0, 0, 0},
     Bool.pick(+List<C.Act>, build, build_act(q, ui2), []), False{}}
 
 def Win.x(w: Win) -> U32:
@@ -1765,10 +1893,10 @@ def ticks(+n: Nat, +p: C.Park, +inc: U32) -> Res:
       +o = C.Park.step(p, C.Tick{})
       ticks(k, C.Out.park(o), (inc + gains(C.Out.ledger(o)) : U32))
 
-def cam(+keys: U32, +v: U32, +minus: U32, +plus: U32) -> U32:
+def cam(+keys: U32, +v: U32, +minus: U32, +plus: U32, +step: U32, +lo: U32, +hi: U32) -> U32:
   +m = Bool.not(U32.is_eq((keys .&. minus : U32), 0))
   +pl = Bool.not(U32.is_eq((keys .&. plus : U32), 0))
-  U32.min(U32.max(sel(m, (v - 8 : U32), sel(pl, (v + 8 : U32), v)), 200), 1900)
+  U32.min(U32.max(sel(m, (v - step : U32), sel(pl, (v + step : U32), v)), lo), hi)
 
 # Sound events: what changed this frame, for the synthesizer (see Z.Snd.cue)
 def Rides.started(+a: +List<C.Ride>, +b: +List<C.Ride>) -> U32:
@@ -1826,7 +1954,8 @@ def step_game.go(+p: C.Park, +ui: UI, +wm: WM, +acts: +List<C.Act>, quit: Bool,
   +time = C.Park.time(Res.park(r2))
   +newmonth = U32.is_eq((time % 3600 : U32), 0)
   +m2 = sel(U32.is_eq((fr .&. 255 : U32), 0), 0, Res.msg(r1))
-  +ui2 = {UI{cam(keys, cx, 4, 8), cam(keys, cy, 1, 2), keys, mx, my, md, tool,
+  +step = sel(U32.is_eq(View.z(var), 1), 4, sel(U32.is_eq(View.z(var), 2), 16, 8))
+  +ui2 = {UI{cam(keys, cx, 4, 8, step, 260, 2000), cam(keys, cy, 1, 2, step, 170, 1500), keys, mx, my, md, tool,
     var, sp, sel(U32.is_eq(Res.msg(r1), msg), m2, Res.msg(r1)), (fr + 1 : U32),
     sel(newmonth, 0, Res.inc(r2)), last, io, fps, tl} : UI}
   +word = snd_word(p, Res.park(r2), inc, Res.inc(r2), msg, Res.msg(r1), clicked, var)
@@ -2056,13 +2185,6 @@ def bytes(+n: Nat, +img: Image, +i: U32, +acc: +List<U32>) -> +List<U32>:
       bytes(p, img, (i - 1 : U32),
         ((c >> 16n) .&. 255 : U32) <> ((c >> 8n) .&. 255 : U32) <> (c .&. 255 : U32) <> acc)
 
-def str_bytes(s: String) -> +List<U32>:
-  match s:
-    case SNil{}:
-      []
-    case SCon{Chr{c}, rest}:
-      c <> str_bytes(rest)
-
 def arg_nat(s: String) -> Nat:
   Maybe.default(&2, Nat, Nat.read(s), 600n)
 
@@ -2088,15 +2210,20 @@ def UI.cam(u: UI, +x: U32, +y: U32) -> UI:
   UI{x, y, keys, mx, my, md, tool, var, sp, msg, fr, inc, last, io, fps, tl}
 
 # win: a window to show (kind * 256 + arg; 0 for none)
-def shot.go(g: Game, path: String, n: Nat, +tool: U32, +cx: U32, +cy: U32, +win: U32) -> IO(Unit):
+def UI.zoomed(u: UI, +z: U32) -> UI:
+  UI{cx, cy, keys, mx, my, md, tool, +var, sp, msg, fr, inc, last, io, fps, tl} = u
+  UI{cx, cy, keys, mx, my, md, tool, ((var .&. 4294180863) .|. ((z .&. 3) << 18n) : U32), sp, msg, fr, inc, last, io, fps, tl}
+
+# win: a window to show (kind * 256 + arg; 0 for none); z: the zoom
+def shot.go(g: Game, path: String, n: Nat, +tool: U32, +cx: U32, +cy: U32, +win: U32, +z: U32) -> IO(Unit):
   Game{+p, ui, wm, snd} = g
   +p2 = Res.park(ticks(n, p, 0))
   +ws = Bool.pick(+List<Win>, U32.is_eq(win, 0), [], [Win{(win >> 8n : U32), 300, 40, (win .&. 255 : U32)}])
-  +g2 = {Game{p2, UI.cam(UI.with_tool(UI.at(ui, 256, 150), tool), cx, cy), WM{ws, 0, 0, 0}, snd} : Game}
+  +g2 = {Game{p2, UI.zoomed(UI.cam(UI.with_tool(UI.at(ui, 256, 150), tool), cx, cy), z), WM{ws, 0, 0, 0}, snd} : Game}
   shot.write(path, bytes(163840n, frame(g2), 163839, []))
 
-def shot(path: String, n: Nat, +tool: U32, +cx: U32, +cy: U32, +win: U32) -> IO(Unit):
-  shot.go(Game.new(), path, n, tool, cx, cy, win)
+def shot(path: String, n: Nat, +tool: U32, +cx: U32, +cy: U32, +win: U32, +z: U32) -> IO(Unit):
+  shot.go(Game.new(), path, n, tool, cx, cy, win, z)
 
 def is_shot(+args: +List<String>) -> Bool:
   match args:
@@ -2293,7 +2420,7 @@ def run(go: Bool, +args: +List<String>) -> IO(Unit):
   match go:
     case True{}:
       shot(nth(args, 1), arg_nat(nth(args, 2)), arg_u32(nth(args, 3)),
-        arg_or(nth(args, 4), 930), arg_or(nth(args, 5), 880), arg_or(nth(args, 6), 0))
+        arg_or(nth(args, 4), 930), arg_or(nth(args, 5), 880), arg_or(nth(args, 6), 0), arg_or(nth(args, 7), 0))
     case False{}:
       run.live(is_arg(args, "--wav"), args)
 

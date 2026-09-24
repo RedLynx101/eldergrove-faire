@@ -923,6 +923,13 @@ def Art.warn(on: Bool, +dx: U32, +dy: U32, +t: U32) -> U32:
       TR()
 
 # st: phase << 16 | ticks into it, bit 30 when the ride lacks a door
+# A placement ghost (k: tool | ok << 8 | size << 9 | ride kind << 12 |
+# demolished ride's kind << 16): the footprint tinted green (it can go) or red
+# (it can't), and a ride's or tree's shape stippled in the same tint
+def Art.tint(+c: U32, +ok: Bool) -> U32:
+  +g = sel(ok, 6154320, 14163020)
+  (((c .&. 16711422) >> 1n) + ((g .&. 16711422) >> 1n) : U32)
+
 def Art.ride(+k: U32, +dx: U32, +dy: U32, +t: U32, +ra: U32, +rb: U32, +st: U32) -> U32:
   over(Art.warn(Bool.not(U32.is_eq((st .&. 1073741824 : U32), 0)), dx, dy, t),
     Art.ride.go(k, dx, dy, t, ra, rb, st))
@@ -930,6 +937,28 @@ def Art.ride(+k: U32, +dx: U32, +dy: U32, +t: U32, +ra: U32, +rb: U32, +st: U32)
 # Coaster track
 # -------------
 # X, Y0 locate the pixel against the track plane; rails run along u (or v)
+
+def Art.ghost(+k: U32, +px: U32, +py: U32, +x: U32, +y: U32, +t: U32) -> U32:
+  +tool = (k .&. 255 : U32)
+  +ok = Bool.not(U32.is_eq(((k >> 8n) .&. 1 : U32), 0))
+  +dk = ((k >> 16n) .&. 15 : U32)
+  +size = sel(Bool.not(U32.is_eq(dk, 0)), sel(U32.is_eq(dk, 1), 2, 1), ((k >> 9n) .&. 3 : U32))
+  +rk = ((k >> 12n) .&. 15 : U32)
+  +X = (px - x : U32)
+  +Y = ((py - y) * 2 : U32)
+  +u = iso_u(X, Y)
+  +v = iso_v(X, Y)
+  +w = (size * 16 : U32)
+  +inside = (u < w : U32) && (v < w : U32)
+  +edge = inside && ((u < 1 : U32) || (v < 1 : U32) || (u + 1 >= w : U32) || (v + 1 >= w : U32))
+  +stip = U32.is_eq(((px + py + (t >> 3n)) .&. 1 : U32), 0)
+  +col = sel(ok, 7324480, 14163020)
+  +foot = sel(edge, sel(ok, 11534220, 16748688), sel(inside && stip, col, TR()))
+  +dy = (size * 8 : U32)
+  +shape = sel(Bool.not(U32.is_eq(rk, 0)), Art.ride(rk, (px - x : U32), (py - y - dy : U32), t, 0, 0, 0),
+    sel(U32.is_eq(tool, 4), Art.tree(0, (px - x : U32), (py - y - 8 : U32), 1, t), TR()))
+  +shown = sel(opaque(shape) && stip, Art.tint(shape, ok), TR())
+  over(shown, foot)
 
 def Art.rails(+u: U32, +v: U32, +along_u: Bool, +kind: U32, +t: U32) -> U32:
   +a = sel(along_u, u, v)
