@@ -8,3 +8,5 @@
 # runtime files
 *.sav
 shots/*.ppm
+tools/_*.py
+shots/*.wav
