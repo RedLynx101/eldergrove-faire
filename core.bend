@@ -263,7 +263,26 @@ def Land.fix(+q: Q) -> Q:
 # 0: blocked, 1: path, 2: queue, 3: a queue's free end (a queue tile's `a`
 # says so; see Land.fix), with the tile's height << 4 when it can be
 # stepped on. Paths a level apart join by stairs; the rest must be level.
-def Land.step(+q: Q, +x: U32, +y: U32, +h: U32, +qok: Bool, +fq: Bool, +fe: Bool) -> U32:
+# a tile's walkway deck: its level, or 0
+def Deck.of(+t: Tile) -> U32:
+  ((Tile.a(t) >> 24n) .&. 15 : U32)
+
+# the level a new deck on (x, y) takes: the level of a neighbouring deck or
+# path that clears what is below (2 over a path, 3 over track), else just
+# that clearance
+def Deck.near(+q: Q, +x: U32, +y: U32, +base: U32) -> U32:
+  +t = Land.get(q, x, y)
+  +l = sel(Bool.not(U32.is_eq(Deck.of(t), 0)), Deck.of(t), sel(U32.is_eq(Tile.obj(t), 1), Tile.h(t), 0))
+  sel((l >= base : U32) && inmap(x, y), l, 0)
+
+def Deck.level(+q: Q, +x: U32, +y: U32) -> U32:
+  +t = Land.get(q, x, y)
+  +base = sel(U32.is_eq(Tile.obj(t), 6), (Tile.b(t) + 3 : U32), (Tile.h(t) + 2 : U32))
+  +n = U32.max(U32.max(Deck.near(q, (x + 1 : U32), y, base), Deck.near(q, (x - 1 : U32), y, base)),
+    U32.max(Deck.near(q, x, (y + 1 : U32), base), Deck.near(q, x, (y - 1 : U32), base)))
+  sel((n > 0 : U32), n, base)
+
+def Land.step.ground(+q: Q, +x: U32, +y: U32, +h: U32, +qok: Bool, +fq: Bool, +fe: Bool) -> U32:
   +t = Land.get(q, x, y)
   +o = Tile.obj(t)
   +th = Tile.h(t)
@@ -279,6 +298,13 @@ def Land.step(+q: Q, +x: U32, +y: U32, +h: U32, +qok: Bool, +fq: Bool, +fe: Bool
 # Map generation: the starting land of Eldergrove
 # -----------------------------------------------
 
+def Land.step(+q: Q, +x: U32, +y: U32, +h: U32, +qok: Bool, +fq: Bool, +fe: Bool) -> U32:
+  +t0 = Land.get(q, x, y)
+  +dk = Deck.of(t0)
+  +ondk = inmap(x, y) && Bool.not(U32.is_eq(dk, 0)) && U32.is_eq(dk, h) && (Bool.not(fq) || fe)
+  sel(ondk, (9 .|. (dk << 4n) : U32), Land.step.ground(q, x, y, h, qok, fq, fe))
+
+# on the ground layer (code 9: 1 | 8 up on a deck)
 def in_rect(+x: U32, +y: U32, +x0: U32, +y0: U32, +x1: U32, +y1: U32) -> Bool:
   ((x >= x0) && (x <= x1) && (y >= y0) && (y <= y1) : U32)
 
@@ -1820,19 +1846,20 @@ def Guest.walk(g: Guest, +q: Q, +rs: +List<Ride>, +t: U32, +qs: +List<U32>) -> G
   +i = (x >> 4n : U32)
   +j = (y >> 4n : U32)
   +here = Land.get(q, i, j)
-  +h = Tile.h(here)
+  +ondeck = Bool.not(U32.is_eq((dir .&. 65536 : U32), 0)) && Bool.not(U32.is_eq(Deck.of(here), 0))
+  +h = sel(ondeck, Deck.of(here), Tile.h(here))
   +r = hash3(id, t, x)
   +ctr = Guest.at_center(x, y)
   +onq = U32.is_eq(Tile.obj(here), 7)
   +home = U32.is_eq(st, 2)
   # mess underfoot (litter | sick << 8), and being sick oneself
-  +dirt = sel(U32.is_eq(Tile.obj(here), 1) || U32.is_eq(Tile.obj(here), 7),
+  +dirt = sel(Bool.not(ondeck) && (U32.is_eq(Tile.obj(here), 1) || U32.is_eq(Tile.obj(here), 7)),
     ((Tile.b(here) .&. 255) + 3 * ((Tile.b(here) >> 8n) .&. 255) : U32), 0)
   +sick = Guest.sick(st, na, id, t)
   +grim = (dirt >= 2 : U32) && U32.is_eq(((t + id) .&. 63 : U32), 0)
   +filthy = (dirt >= 4 : U32) && U32.is_eq(((hash(id, t) >> 4n) .&. 255 : U32), 0)
   # a bench: a tired guest sits down; up again when rested
-  +sit = ctr && U32.is_eq(st, 0) && U32.is_eq((Tile.a(here) .&. 271 : U32), 2) && U32.is_eq(Tile.obj(here), 1)
+  +sit = ctr && Bool.not(ondeck) && U32.is_eq(st, 0) && U32.is_eq((Tile.a(here) .&. 271 : U32), 2) && U32.is_eq(Tile.obj(here), 1)
     && (en < 80 : U32)
   +sitting = U32.is_eq(st, 4)
   +rested = sitting && ((en >= 190 : U32) || U32.is_eq(tmr, 0))
@@ -1874,7 +1901,7 @@ def Guest.walk(g: Guest, +q: Q, +rs: +List<Ride>, +t: U32, +qs: +List<U32>) -> G
   +tick = U32.is_eq(((t + id) .&. 1 : U32), 0)
   # in a queue, a guest may step off only at its free end
   +fe = Bool.not(onq) || U32.is_eq(Tile.a(here), 1)
-  +dir2 = Guest.steer(ctr && tick && Bool.not(there), q, i, j, h, dir, tx, ty, r, qok, onq, fe, lim)
+  +dir2 = Guest.steer(ctr && tick && Bool.not(there), q, i, j, h, (dir .&. 65535 : U32), tx, ty, r, qok, onq, fe, lim)
   +ahead = U32.is_eq(Land.obj(q, ((x + dx_of(dir2) * 8) >> 4n : U32), ((y + dy_of(dir2) * 8) >> 4n : U32)), 7)
   +go = tick
     && (Bool.not(ctr) || Guest.can_step(q, i, j, h, dir2, qok, onq, fe))
@@ -1891,7 +1918,10 @@ def Guest.walk(g: Guest, +q: Q, +rs: +List<Ride>, +t: U32, +qs: +List<U32>) -> G
   +ha2 = (sub0(sub0(ha, sel(dear || fed_up, 6, 0)), sel(sick, 10, sel(grim, sel((dirt >= 6 : U32), 2, 1), 0)))
     + sel(cheer, 3, 0) + sel(pretty, 2, 0) : U32)
   +en2 = sel(sitting && U32.is_eq(((t + id) .&. 1 : U32), 0), (en + 1 : U32), en)
-  Guest{id, x2, y2, dir2, st3, tgt2, tmr2, cash, hu, th, en2, sel(sick, 60, na), ha2, lk2, mind2, bl}
+  +cross = Bool.not(U32.is_eq((x2 >> 4n : U32), i)) || Bool.not(U32.is_eq((y2 >> 4n : U32), j))
+  +nc = Land.step(q, (x2 >> 4n : U32), (y2 >> 4n : U32), h, qok, onq, fe)
+  +up = cross && Bool.not(U32.is_eq((nc .&. 8 : U32), 0)) || Bool.not(cross) && ondeck
+  Guest{id, x2, y2, (dir2 .|. sel(up, 65536, 0) : U32), st3, tgt2, tmr2, cash, hu, th, en2, sel(sick, 60, na), ha2, lk2, mind2, bl}
 
 def Guest.st(g: Guest) -> U32:
   Guest{id, x, y, dir, st, tgt, tmr, cash, hu, th, en, na, ha, lk, mind, bl} = g
@@ -3062,6 +3092,8 @@ def Build.cost(+tool: U32) -> U32:
       8
     case 46:
       60
+    case 48:
+      40
     case _:
       Ride.cost(Tool.kind(tool))
 
@@ -3081,15 +3113,15 @@ def Build.legal.go(+tool: U32, +q: Q, +trk: +List<Track>, +x: U32, +y: U32, +o: 
     case 4:
       empty && dry
     case 9:
-      U32.is_eq(o, 1) || U32.is_eq(o, 2) || U32.is_eq(o, 3) || U32.is_eq(o, 7)
+      U32.is_eq(o, 1) || U32.is_eq(o, 2) || U32.is_eq(o, 3) || U32.is_eq(o, 7) || Bool.not(U32.is_eq(((a >> 24n) .&. 15 : U32), 0))
     case 11:
       empty && dry
     case 13:
-      U32.is_eq(o, 1) && U32.is_eq((a .&. 15 : U32), 0)
+      U32.is_eq(o, 1) && U32.is_eq((a .&. 4278190095 : U32), 0)
     case 14:
-      U32.is_eq(o, 1) && U32.is_eq((a .&. 15 : U32), 0)
+      U32.is_eq(o, 1) && U32.is_eq((a .&. 4278190095 : U32), 0)
     case 15:
-      U32.is_eq(o, 1) && U32.is_eq((a .&. 15 : U32), 0)
+      U32.is_eq(o, 1) && U32.is_eq((a .&. 4278190095 : U32), 0)
     case 41:
       empty && dry
     case 42:
@@ -3102,6 +3134,8 @@ def Build.legal.go(+tool: U32, +q: Q, +trk: +List<Track>, +x: U32, +y: U32, +o: 
       empty && dry
     case 46:
       Land.buyable(q, x, y)
+    case 48:
+      (U32.is_eq(o, 1) || U32.is_eq(o, 6)) && U32.is_eq(((a >> 24n) .&. 15 : U32), 0) && (Deck.level(q, x, y) <= 15 : U32)
     case 10:
       empty && dry
     case _:
@@ -3176,7 +3210,13 @@ def Build.land.go(+tool: U32, +q: Q, +rs: +List<Ride>, +x: U32, +y: U32,
     case 4:
       Land.set(q, x, y, Tile{h, ter, 2, (v .&. 3 : U32), 0})
     case 9:
-      Build.demolish(q, rs, x, y)
+      # a deck comes off before what it stands over
+      +t = Land.get(q, x, y)
+      Bool.pick(Q, Bool.not(U32.is_eq(Deck.of(t), 0)), Land.set(q, x, y, Tile{h, ter, Tile.obj(t), (Tile.a(t) .&. 16777215 : U32), b}),
+        Build.demolish(q, rs, x, y))
+    case 48:
+      +t = Land.get(q, x, y)
+      Land.set(q, x, y, Tile{h, ter, Tile.obj(t), ((Tile.a(t) .&. 16777215) .|. (Deck.level(q, x, y) << 24n) : U32), b})
     case 10:
       Land.set(q, x, y, Tile{h, ter, 6, ((5 + (v .&. 3) * 16) .|. (nt << 8n) : U32), h})
     case 11:

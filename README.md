@@ -59,6 +59,7 @@ Dev modes:
 | 1 - 6 | Open a toolbar tab: paths and furniture, land, scenery, gentle rides, thrill rides, shops. Press again for its next tool |
 | X | Demolish |
 | U | Queue line (12 gold a tile) |
+| (paths tab) | Walkway bridge (40 gold): a deck over a path or coaster track, level with the raised paths or decks beside it (at least 2 levels over a path, 3 over track); drag to lay several; demolish takes the deck off first |
 | R | Next tree kind (oak, moonpine, glowcap, crystal) / coaster direction |
 | Space | Pause and resume; `+` / `-` speed: 1/4, 1/2 (the default), 1x, 2x, 3x |
 | F5 / F9 | Save / load `eldergrove.sav` |

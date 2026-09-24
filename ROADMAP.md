@@ -261,6 +261,14 @@ Small design decisions made while working, listed here so they can be revisited.
   kept (a new coaster runs as many as fit). The library is eight 256-value slots; every value fits a byte,
   so `designs.sav` is the list itself. Saving and building go through the loop's IO step (codes 3 and 5),
   which is where the library lives, so the input handlers didn't need it.
+- **Bridges without a new layer in the save.** A deck's level sits in bits 24-27 of its tile's `a` (paths use
+  bits 0-8, track 0-18), and a guest up on a deck carries bit 16 of `dir` (walking directions are 0-3,
+  rider seats under 64 * 8). Stepping onto a tile whose deck is at the walker's height puts them on the deck;
+  the layer only changes when a step crosses into the next tile, so the path search (which already carried
+  heights along) needed nothing new. Walkways connect only level with other decks or paths (no stairs up to
+  a deck); benches, dirt and litter underfoot belong to the ground. Cutting coaster track clears any deck
+  over the cut pieces; demolishing a deck over track takes only the deck. No proof touched the walking or
+  building code, so all laws held unchanged.
 
 ## Done: M1, the vertical slice
 Isometric fantasy map, paths, terrain editing, 4 enchanted tree kinds, Dragon Carousel, Arcane Spire, Potion
@@ -450,7 +458,7 @@ Spikes, in order:
 - Frame time and simulation cost measured against M7: within noise (about 1.4 ms a tick at 200 guests;
   16 ms a frame).
 
-## M9: Fixes, polish and the deferred items (in progress: spikes 1-5 done)
+## M9: Fixes, polish and the deferred items (in progress: spikes 1-6 done)
 Decisions from the owner (2026-09-24): bridges are my call (walkways for guests over paths and track);
 1 to 20 cars per train, never more than the track allows; steep pieces only in the two headings that face
 the camera; a coaster can be demolished, and removing track re-runs the check and closes the ride if it no

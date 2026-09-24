@@ -2122,6 +2122,30 @@ def Art.track_top(+kind: U32, +d: U32, +X: U32, +Y0: U32, +t: U32) -> U32:
   sel(steep, Art.steep(kind, d, X, Y0, t),
     sel(turn, Art.turn(fu, fv, cu, cv, (kind >= 10 : U32)), Art.rails(u, v, along_u, kind, t)))
 
+# a walkway deck zr levels above its tile's ground (top vertex at x, y):
+# planks, a rail on each side with no deck or path to join (nb bits: 1 i-1,
+# 2 i+1, 4 j-1, 8 j+1), and a post under its corners
+def Art.deck(+x: U32, +y: U32, +zr: U32, +nb: U32, +px: U32, +py: U32) -> U32:
+  +X = (px - x : U32)
+  +dy = (py - y : U32)
+  +Y0 = ((dy * 2) + zr * 16 : U32)
+  +u = iso_u(X, Y0)
+  +v = iso_v(X, Y0)
+  +on = (u < 16 : U32) && (v < 16 : U32)
+  +gap = U32.is_eq((u .&. 3 : U32), 3)
+  +plank = sel(gap, 5913890, sel(U32.is_eq(((u >> 2n) .&. 1 : U32), 0), 10119226, 9136940))
+  +Yr = (Y0 + 8 : U32)
+  +ur = iso_u(X, Yr)
+  +vr = iso_v(X, Yr)
+  +inr = (ur < 16 : U32) && (vr < 16 : U32)
+  +rail = inr && (U32.is_eq((nb .&. 1 : U32), 0) && U32.is_eq(ur, 0) || U32.is_eq((nb .&. 2 : U32), 0) && U32.is_eq(ur, 15)
+    || U32.is_eq((nb .&. 4 : U32), 0) && U32.is_eq(vr, 0) || U32.is_eq((nb .&. 8 : U32), 0) && U32.is_eq(vr, 15))
+  +drop = (zr * 8 : U32)
+  +postr = between(X, 14, 16) && between(dy, (8 - drop : U32), 8)
+  +postl = between(X, (0 - 16 : U32), (0 - 14 : U32)) && between(dy, (8 - drop : U32), 8)
+  +postf = between(X, (0 - 1 : U32), 1) && between(dy, (16 - drop : U32), 16)
+  sel(on, plank, sel(rail, 7031339, sel(postr || postl || postf, sel(U32.is_eq(X, 16) || U32.is_eq(X, 1) || U32.is_eq(X, (0 - 14 : U32)), 4209440, 5913890), TR())))
+
 # the track's colours by coaster type: the Wyrm's red rails on timber; the
 # Dwarven Minecart's iron rails on dark sleepers; the Griffin Flyer's blue
 # rails on steel
@@ -2398,6 +2422,12 @@ def Art.icon_pic(+tool: U32, +cx: U32, +cy: U32, +t: U32) -> U32:
       +foot = U32.is_eq(cy, 5) && (sabs(cx) <= 1 : U32)
       +flick = U32.is_eq((hash((t >> 3n : U32), 5) .&. 3 : U32), 0)
       sel(hook || cap || bar || foot, 2631720, sel(box, sel(flick, 16771216, sel(U32.is_eq(cy, (0 - 3 : U32)) && U32.is_eq(sabs(cx), 2), 16777184, 16767072)), TR()))
+    case 48:
+      # a small bridge: a deck on two posts
+      +deck = between(cy, (0 - 3 : U32), (0 - 1 : U32)) && (sabs(cx) <= 8 : U32)
+      +post = (U32.is_eq(sabs(cx), 6) || U32.is_eq(sabs(cx), 5)) && between(cy, 0, 6)
+      +rail = U32.is_eq(cy, (0 - 6 : U32)) && (sabs(cx) <= 8 : U32) || (U32.is_eq(sabs(cx), 8) && between(cy, (0 - 6 : U32), (0 - 3 : U32)))
+      sel(deck, sel(U32.is_eq((cx .&. 3 : U32), 0), 5913890, 10119226), sel(post, 5913890, sel(rail, 7031339, TR())))
     case 47:
       # a blueprint: a blue sheet, its grid, a white coaster curve
       +sheet = (sabs(cx) <= 7 : U32) && between(cy, (0 - 7 : U32), 6)

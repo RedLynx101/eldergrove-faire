@@ -39,6 +39,7 @@ type Dr is Data:
   DRect{x: U32, y: U32, w: U32, h: U32, col: U32}
   DIcon{x: U32, y: U32, tool: U32, on: U32}
   DGhost{x: U32, y: U32, k: U32}
+  DDeck{x: U32, y: U32, zr: U32, nb: U32}
 
 def ov(+x0: U32, +y0: U32, +x1: U32, +y1: U32, +bx: U32, +by: U32, +s: U32)
   -> Bool:
@@ -78,6 +79,8 @@ def Dr.hits.go(d: Dr, +bx0: U32, +by0: U32, +s0: U32, +bx: U32, +by: U32, +s: U3
       ov((x - 10 : U32), (y - 19 : U32), (x + 11 : U32), (y + 6 : U32), bx, by, s)
     case DGhost{+x, +y, k}:
       ov((x - 40 : U32), (y - 96 : U32), (x + 41 : U32), (y + 40 : U32), bx, by, s)
+    case DDeck{+x, +y, +zr, nb}:
+      ov((x - 17 : U32), (y - zr * 8 - 8 : U32), (x + 18 : U32), (y + 18 : U32), bx, by, s)
     case DGlyph{+x, +y, bits, col}:
       ov(x, y, (x + 4 : U32), (y + 6 : U32), bx0, by0, s0)
     case DRect{+x, +y, +w, +h, col}:
@@ -107,6 +110,8 @@ def Dr.shade.go(d: Dr, +sx: U32, +sy: U32, +px: U32, +py: U32, +t: U32) -> U32:
       A.Light.apply(A.Art.car((px - x : U32), (py - y : U32), d, lead, rd), t, sx, sy)
     case DGhost{x, y, k}:
       A.Art.ghost(k, px, py, x, y, t)
+    case DDeck{x, y, zr, nb}:
+      A.Light.apply(A.Art.deck(x, y, zr, nb, px, py), t, sx, sy)
     case DGlyph{x, y, bits, col}:
       A.Art.glyph(bits, (sx - x : U32), (sy - y : U32), col)
     case DRect{x, y, w, h, col}:
@@ -178,6 +183,8 @@ def Dr.cp(d: Dr) -> Dr:
       DIcon{x, y, tool, on}
     case DGhost{x, y, k}:
       DGhost{x, y, k}
+    case DDeck{x, y, zr, nb}:
+      DDeck{x, y, zr, nb}
 
 def cut.put(keep: Bool, d: Dr, xs: +List<Dr>) -> +List<Dr>:
   match keep:
@@ -562,16 +569,26 @@ def obj_dr.go(+obj: U32, +a: U32, +b: U32, +h: U32, +i: U32, +j: U32,
         [DRide{sx, sel(U32.is_eq(C.Ride.size(k), 2), sy, (sy + 8 : U32)), k,
           C.Tab.at(RT.ra(rt), a), C.Tab.at(RT.rb(rt), a), st, a}], [])
     case 6:
-      +ty = C.Tab.at(RT.tw(rt), (a >> 8n : U32))
+      +ty = C.Tab.at(RT.tw(rt), ((a >> 8n) .&. 2047 : U32))
       [DTrack{sx, sy, ((a .&. 255) .|. (ty << 12n) .|. sel(Coaster.down(rs, i, j), 65536, 0) : U32), (b - h : U32)}]
     case _:
       []
+
+def Deck.joins(+q: C.Q, +i: U32, +j: U32, +l: U32) -> Bool:
+  +t = C.Land.get(q, i, j)
+  U32.is_eq(C.Deck.of(t), l) || U32.is_eq(C.Tile.obj(t), 1) && U32.is_eq(C.Tile.h(t), l)
+
+def Deck.dr(+l: U32, +q: C.Q, +i: U32, +j: U32, +h: U32, +sx: U32, +sy: U32, +acc: +List<Dr>) -> +List<Dr>:
+  +nb = (sel(Deck.joins(q, (i - 1 : U32), j, l), 1, 0) .|. sel(Deck.joins(q, (i + 1 : U32), j, l), 2, 0)
+    .|. sel(Deck.joins(q, i, (j - 1 : U32), l), 4, 0) .|. sel(Deck.joins(q, i, (j + 1 : U32), l), 8, 0) : U32)
+  Bool.pick(+List<Dr>, U32.is_eq(l, 0), acc, DDeck{sx, sy, (l - h : U32), nb} <> acc)
 
 def obj_dr(+t: C.Tile, +i: U32, +j: U32, +sx: U32, +sy: U32,
   +rs: +List<C.Ride>, +rt: RT, +q: C.Q) -> +List<Dr>:
   C.Tile{+h, ter, +obj, +a, +b} = t
   +rd = C.Rides.get(rs, a)
-  obj_dr.go(obj, a, b, h, i, j, sx, sy, C.Ride.kind(rd), ride_st(rd), rt, rs, q)
+  +l = ((a >> 24n) .&. 15 : U32)
+  Deck.dr(l, q, i, j, h, sx, sy, obj_dr.go(obj, a, b, h, i, j, sx, sy, C.Ride.kind(rd), ride_st(rd), rt, rs, q))
 
 # which neighbours a path or queue joins (paths, queues, the gate, rides),
 # or which neighbours of water are water: bit 1 i-1, 2 i+1, 4 j-1, 8 j+1
@@ -792,11 +809,13 @@ def guest_dyn(+g: C.Guest, +q: C.Q, +rs: +List<C.Ride>, +camx: U32, +camy: U32,
   C.Guest{+id, +x, +y, +dir, +st, +tgt, tmr, cash, +hu, +th, +en, +na, +ha, +lk, +mind, bl} = g
   +i = (x >> 4n : U32)
   +j = (y >> 4n : U32)
-  +h = C.Land.h(q, i, j)
+  +tl = C.Land.get(q, i, j)
+  +up = Bool.not(U32.is_eq((dir .&. 65536 : U32), 0)) && Bool.not(U32.is_eq(C.Deck.of(tl), 0))
+  +h = sel(up, C.Deck.of(tl), C.Tile.h(tl))
   +sit = U32.is_eq(st, 4)
   +right = U32.is_eq((id .&. 1 : U32), 1)
   +sx = sel(sit, (scr_x(i, j, camx) - 7 + sel(right, 3, (0 - 3 : U32)) : U32), ((B() + 1280 + x) - (y + camx) : U32))
-  +sy = sel(sit, (scr_y(i, j, h, camy) + 6 - sel(right, 5, 2) : U32), ((B() + 512 + ((x + y) >> 1n)) - (8 * h + Stair.dz(q, x, y, h) + camy) : U32))
+  +sy = sel(sit, (scr_y(i, j, h, camy) + 6 - sel(right, 5, 2) : U32), ((B() + 512 + ((x + y) >> 1n)) - (8 * h + sel(up, 0, Stair.dz(q, x, y, h)) + camy) : U32))
   +walker = U32.is_eq(st, 0) || U32.is_eq(st, 2) || sit || shopping(st, tgt, rs)
   +vis = (sx + 8 > B() : U32) && (sx < B() + vw + 8 : U32) && (sy + 4 > B() : U32)
     && (sy < B() + vh + 28 : U32) && walker
@@ -1004,6 +1023,8 @@ def tool_name(+t: U32) -> String:
       "FENCE  8*"
     case 46:
       "BUY LAND  60*  AT THE PARK'S EDGE"
+    case 48:
+      "WALKWAY BRIDGE  40*  OVER A PATH OR TRACK, LEVEL WITH THE PATHS BESIDE IT"
     case 47:
       "TRACK DESIGNS: PICK ONE, THEN CLICK TO BUILD IT (R TURNS IT)"
     case _:
@@ -1132,6 +1153,8 @@ def Cat.tool.go(+code: U32) -> U32:
       14
     case 4:
       15
+    case 5:
+      48
     case 8:
       2
     case 9:
@@ -1195,7 +1218,7 @@ def Cat.tool(+c: U32, +k: U32) -> U32:
 def Cat.len(+c: U32) -> U32:
   match c:
     case 0:
-      5
+      6
     case 1:
       3
     case 2:
@@ -1472,7 +1495,7 @@ def hover_info(+p: C.Park, +hov: U32, +acc: +List<Dr>) -> +List<Dr>:
   +j = (hov .&. 63 : U32)
   +t = C.Land.get(map, i, j)
   +o = C.Tile.obj(t)
-  +idx = sel(U32.is_eq(o, 3), C.Tile.a(t), sel(U32.is_eq(o, 6), Coaster.ride(rides, (C.Tile.a(t) >> 8n : U32), 0), C.NONE()))
+  +idx = sel(U32.is_eq(o, 3), C.Tile.a(t), sel(U32.is_eq(o, 6), Coaster.ride(rides, ((C.Tile.a(t) >> 8n) .&. 2047 : U32), 0), C.NONE()))
   +isride = Bool.not(U32.is_eq(idx, C.NONE())) && (hov < 99999 : U32)
   +rd = C.Rides.get(rides, idx)
   +k = C.Ride.kind(rd)
@@ -3100,7 +3123,7 @@ def ghost_k(+tool: U32, +ok: Bool, +q: C.Q, +rs: +List<C.Ride>, +i: U32, +j: U32
   (tool .|. (sel(ok, 1, 0) << 8n) .|. (size << 9n) .|. (rk << 12n) .|. (dk << 17n) : U32)
 
 def ghost_on(+tool: U32, +hov: U32, +overwin: Bool) -> Bool:
-  ((tool >= 1 : U32) && (tool <= 16 : U32) || (tool >= 30 : U32) && (tool <= 46 : U32)) && Bool.not(U32.is_eq(tool, 12)) && (hov < 99999 : U32) && Bool.not(overwin)
+  ((tool >= 1 : U32) && (tool <= 16 : U32) || (tool >= 30 : U32) && (tool <= 46 : U32) || U32.is_eq(tool, 48)) && Bool.not(U32.is_eq(tool, 12)) && (hov < 99999 : U32) && Bool.not(overwin)
 
 def ghost_dr(+p: C.Park, +tool: U32, +hov: U32, +vx: U32, +vy: U32, +overwin: Bool) -> +List<Dr>:
   C.Park{+map, guests, +rides, +track, +cash, time, nid, fin, mess, staff} = p
@@ -3133,9 +3156,10 @@ def Pieces.at(+ps: +List<C.Piece>, +i: U32, +j: U32, +n: U32) -> U32:
 # after it (op 26 | coaster << 5 | piece << 16), or NONE off the track
 def Cut.op(+p: C.Park, +i: U32, +j: U32) -> U32:
   +t = C.Land.get(C.Park.map(p), i, j)
-  +k = (C.Tile.a(t) >> 8n : U32)
+  +k = ((C.Tile.a(t) >> 8n) .&. 2047 : U32)
   +ix = Pieces.at(C.Track.pieces(C.Tracks.get(C.Park.track(p), k)), i, j, 0)
-  sel(U32.is_eq(C.Tile.obj(t), 6) && Bool.not(U32.is_eq(ix, C.NONE())), (26 .|. (k << 5n) .|. (U32.max(ix, 1) << 16n) : U32), C.NONE())
+  +deck = Bool.not(U32.is_eq(((C.Tile.a(t) >> 24n) .&. 15 : U32), 0))
+  sel(U32.is_eq(C.Tile.obj(t), 6) && Bool.not(deck) && Bool.not(U32.is_eq(ix, C.NONE())), (26 .|. (k << 5n) .|. (U32.max(ix, 1) << 16n) : U32), C.NONE())
 
 def Cut.ghosts(+p: C.Park, +tool: U32, +hov: U32, +vx: U32, +vy: U32, +on: Bool, +acc: +List<Dr>) -> +List<Dr>:
   +op = sel(U32.is_eq(tool, 9) && on, Cut.op(p, (hov >> 6n : U32), (hov .&. 63 : U32)), C.NONE())
@@ -3349,7 +3373,7 @@ def track_op(+c: U32) -> U32:
       99
 
 def paint_tool(+t: U32) -> Bool:
-  (t < 5 : U32) || U32.is_eq(t, 9)
+  (t < 5 : U32) || U32.is_eq(t, 9) || U32.is_eq(t, 48)
 
 # the piece of a track standing on tile (i, j), or NONE
 def build_act(+p: C.Park, +ui: UI) -> +List<C.Act>:
@@ -3448,7 +3472,7 @@ def ride_at(+p: C.Park, +hov: U32) -> U32:
   +t = C.Land.get(C.Park.map(p), (hov >> 6n : U32), (hov .&. 63 : U32))
   +o = C.Tile.obj(t)
   sel((hov >= 99999 : U32), C.NONE(), sel(U32.is_eq(o, 3), C.Tile.a(t),
-    sel(U32.is_eq(o, 6), Coaster.ride(C.Park.rides(p), (C.Tile.a(t) >> 8n : U32), 0), C.NONE())))
+    sel(U32.is_eq(o, 6), Coaster.ride(C.Park.rides(p), ((C.Tile.a(t) >> 8n) .&. 2047 : U32), 0), C.NONE())))
 
 # inspecting: a ride's window opens beside the mouse
 def open_at(+ws: +List<Win>, +p: C.Park, +hov: U32, +lx: U32, +ly: U32) -> +List<Win>:
@@ -3839,9 +3863,11 @@ def Follow.staff(+ss: +List<C.Staff>, +id: U32, +q: C.Q) -> U32:
       sel(U32.is_eq(sid, id), Follow.cam(x, y, h, (6 + Stair.dz(q, x, y, h) : U32)), Follow.staff(rest, id, q))
 
 def Follow.guest(g: C.Guest, +q: C.Q) -> U32:
-  C.Guest{+id, +x, +y, dir, st, tgt, tmr, cash, hu, th, en, na, ha, lk, mind, bl} = g
-  +h = C.Land.h(q, (x >> 4n : U32), (y >> 4n : U32))
-  sel(U32.is_eq(id, C.NONE()), C.NONE(), Follow.cam(x, y, h, (6 + Stair.dz(q, x, y, h) : U32)))
+  C.Guest{+id, +x, +y, +dir, st, tgt, tmr, cash, hu, th, en, na, ha, lk, mind, bl} = g
+  +tl = C.Land.get(q, (x >> 4n : U32), (y >> 4n : U32))
+  +up = Bool.not(U32.is_eq((dir .&. 65536 : U32), 0)) && Bool.not(U32.is_eq(C.Deck.of(tl), 0))
+  +h = sel(up, C.Deck.of(tl), C.Tile.h(tl))
+  sel(U32.is_eq(id, C.NONE()), C.NONE(), Follow.cam(x, y, h, (6 + sel(up, 0, Stair.dz(q, x, y, h)) : U32)))
 
 # the place of the train with the lowest id (piece * 256 + progress), or
 # NONE: the block list turns every tick, so "the first train in the list"
@@ -4381,11 +4407,19 @@ def shot.lib(g: Game) -> Game:
     Design.of(C.Tracks.get(C.Park.track(Game.park(g2)), 0)))
   Game.with_ds(g2, lib, 0)
 
+def bridge_acts() -> List<C.Act>:
+  List.append(&1, C.Act, clear2_acts(), [C.Build{2, 39, 56, 0}, C.Build{2, 39, 56, 0}, C.Build{2, 41, 56, 0}, C.Build{2, 41, 56, 0},
+   C.Build{2, 38, 56, 0}, C.Build{2, 38, 56, 0}, C.Build{2, 42, 56, 0}, C.Build{2, 42, 56, 0},
+   C.Build{1, 38, 56, 0}, C.Build{1, 39, 56, 0}, C.Build{1, 41, 56, 0}, C.Build{1, 42, 56, 0},
+   C.Build{1, 40, 54, 0}, C.Build{1, 40, 55, 0}, C.Build{1, 40, 56, 0}, C.Build{1, 40, 57, 0},
+   C.Build{1, 40, 58, 0}, C.Build{48, 40, 56, 0}])
+
 def shot(path: String, n: Nat, +tool: U32, +cx: U32, +cy: U32, +win: U32, +z: U32) -> IO(Unit):
   +g = Game.new()
   +wk = ((win >> 8n) .&. 15 : U32)
   shot.go(Bool.pick(Game, U32.is_eq(wk, 8), Game.with(g, shot.acts(U32.is_eq((win >> 12n : U32), 15))),
-    Bool.pick(Game, U32.is_eq(wk, 10) || U32.is_eq(tool, 47), shot.lib(Game.new()), g)), path, n, tool, cx, cy, win, z)
+    Bool.pick(Game, U32.is_eq(wk, 10) || U32.is_eq(tool, 47), shot.lib(Game.new()),
+    Bool.pick(Game, U32.is_eq(wk, 11), Game.with(Game.new(), bridge_acts()), g))), path, n, tool, cx, cy, win, z)
 
 # the designs window pictured with the save test's second loop as a design
 def is_shot(+args: +List<String>) -> Bool:
@@ -4499,6 +4533,21 @@ def ctest.design(+p: C.Park, +w: +List<U32>) -> String:
   +p2 = C.Park.run(Design.acts(w, 40, 56, 0, C.len32(C.Track, C.Park.track(p))), p)
   "fits " ++ Bool.show(fits) ++ ", " ++ U32.show(C.Tab.at(w, 0)) ++ " pieces after the station, rating "
     ++ U32.show(Design.rate(w)) ++ "; built: " ++ ctest.state(p2, 2)
+
+# a walkway: raised paths at x 38-39 and 41-42 (two levels up), a ground
+# path along x = 40 under them, a deck at (40, 56) between
+def btest.go() -> IO(Unit):
+  +p = C.Park.run(bridge_acts(), Game.park(Game.new()))
+  +q = C.Park.map(p)
+  +g = C.Land.h(q, 40, 55)
+  +hi = C.Land.h(q, 39, 56)
+  do IO<Unit>:
+    IO.print("ground " ++ U32.show(g) ++ ", raised paths " ++ U32.show(hi) ++ ", deck level " ++ U32.show(C.Deck.of(C.Land.get(q, 40, 56))))
+    IO.print("from the raised path onto the deck: " ++ U32.show(C.Land.step(q, 40, 56, hi, False{}, False{}, True{}))
+      ++ " (9 | level << 4: up on the deck)")
+    IO.print("from the ground path under it: " ++ U32.show(C.Land.step(q, 40, 56, g, False{}, False{}, True{}))
+      ++ " (1 | height << 4: the path below)")
+    IO.print("off the deck to the far raised path: " ++ U32.show(C.Land.step(q, 41, 56, hi, False{}, False{}, True{})))
 
 def ctest.go() -> IO(Unit):
   do IO<Unit>:
@@ -5098,9 +5147,10 @@ def start.go(bench: Bool, +args: +List<String>) -> IO(Unit):
         Bool.pick(IO(Unit), is_arg(args, "--pieces"), pieces_shot(nth(args, 1)),
         Bool.pick(IO(Unit), is_arg(args, "--cars"), cars_shot(nth(args, 1)),
         Bool.pick(IO(Unit), is_arg(args, "--coastertest"), ctest.go(),
+        Bool.pick(IO(Unit), is_arg(args, "--bridgetest"), btest.go(),
         Bool.pick(IO(Unit), is_arg(args, "--rides"), rides_shot(nth(args, 1), arg_u32(nth(args, 2))),
         Bool.pick(IO(Unit), is_arg(args, "--scen"), scen.run(arg_nat(nth(args, 2)), Scn.park(arg_u32(nth(args, 1)))),
-          start.test(is_arg(args, "--savetest"), args))))))))
+          start.test(is_arg(args, "--savetest"), args)))))))))
 
 def start(+args: +List<String>) -> IO(Unit):
   start.go(is_bench(args), args)
