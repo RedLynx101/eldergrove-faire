@@ -219,6 +219,14 @@ Small design decisions made while working, listed here so they can be revisited.
   leaves ends the follow. The staff window's FOLLOW steps through that row's staff.
 - **Steep-up pieces get a taller hit box than the rest** (22 px over 12): giving every piece the taller box
   cost about 4% of frame time.
+- **Toolbar clicks were read as tab clicks.** Tab buttons carry codes 20-25 and the click handler took any
+  code from 20 up as a tab, so every tool coded 30 or more (rides, shops, scenery, buying land) opened a
+  bogus tab instead. Only 20-25 are tabs now; the UI test clicks a gentle ride's tool.
+- **Speed levels:** pause, 1/4, 1/2 (default), 1x, 2x, 3x; the slow ones tick every fourth or second frame.
+  Space remembers the level it paused. Benches run at 1x so their numbers stay comparable.
+- **Dynamic resolution** now drops to half size only after two 32-frame samples under 22 fps, and returns
+  after ten samples at 45 fps or more; it used to drop below 52 fps and retry every ten seconds.
+- **needs_bounded covers the bladder** (LAWS.bend, at the owner's request); the clamp proof gained a step.
 
 ## Done: M1, the vertical slice
 Isometric fantasy map, paths, terrain editing, 4 enchanted tree kinds, Dragon Carousel, Arcane Spire, Potion
@@ -408,7 +416,7 @@ Spikes, in order:
 - Frame time and simulation cost measured against M7: within noise (about 1.4 ms a tick at 200 guests;
   16 ms a frame).
 
-## M9: Fixes, polish and the deferred items (planned)
+## M9: Fixes, polish and the deferred items (in progress: spike 1 done)
 Decisions from the owner (2026-09-24): bridges are my call (walkways for guests over paths and track);
 1 to 20 cars per train, never more than the track allows; steep pieces only in the two headings that face
 the camera; a coaster can be demolished, and removing track re-runs the check and closes the ride if it no

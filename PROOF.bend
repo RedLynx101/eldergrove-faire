@@ -300,14 +300,15 @@ def ok_clamp(+g: C.Guest) -> {Laws.needs_ok(C.Guest.clamp(g)) == True{} : Bool}:
   match g:
     case C.Guest{id, x, y, dir, st, tgt, tmr, cash, hu, th, en, na, ha, lk, mind, bl}:
       %le_cl(hu) : {_ && U32.is_le(C.cl255(th), 255) && U32.is_le(C.cl255(en), 255)
-        && U32.is_le(C.cl255(na), 255) && U32.is_le(C.cl255(ha), 255) == True{} : Bool}
+        && U32.is_le(C.cl255(na), 255) && U32.is_le(C.cl255(ha), 255) && U32.is_le(C.cl255(bl), 255) == True{} : Bool}
       %le_cl(th) : {True{} && _ && U32.is_le(C.cl255(en), 255)
-        && U32.is_le(C.cl255(na), 255) && U32.is_le(C.cl255(ha), 255) == True{} : Bool}
+        && U32.is_le(C.cl255(na), 255) && U32.is_le(C.cl255(ha), 255) && U32.is_le(C.cl255(bl), 255) == True{} : Bool}
       %le_cl(en) : {True{} && True{} && _
-        && U32.is_le(C.cl255(na), 255) && U32.is_le(C.cl255(ha), 255) == True{} : Bool}
+        && U32.is_le(C.cl255(na), 255) && U32.is_le(C.cl255(ha), 255) && U32.is_le(C.cl255(bl), 255) == True{} : Bool}
       %le_cl(na) : {True{} && True{} && True{}
-        && _ && U32.is_le(C.cl255(ha), 255) == True{} : Bool}
-      %le_cl(ha) : {True{} && True{} && True{} && True{} && _ == True{} : Bool}
+        && _ && U32.is_le(C.cl255(ha), 255) && U32.is_le(C.cl255(bl), 255) == True{} : Bool}
+      %le_cl(ha) : {True{} && True{} && True{} && True{} && _ && U32.is_le(C.cl255(bl), 255) == True{} : Bool}
+      %le_cl(bl) : {True{} && True{} && True{} && True{} && True{} && _ == True{} : Bool}
       {==}
 
 def all_app(+xs: +List<C.Guest>, +ys: +List<C.Guest>,

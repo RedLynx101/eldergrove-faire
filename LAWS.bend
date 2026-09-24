@@ -38,7 +38,7 @@ def needs_ok(g: C.Guest) -> Bool:
   C.Guest{id, x, y, dir, st, tgt, tmr, cash, hunger, thirst, energy, nausea,
     happy, look, mind, bl} = g
   U32.is_le(hunger, 255) && U32.is_le(thirst, 255) && U32.is_le(energy, 255)
-    && U32.is_le(nausea, 255) && U32.is_le(happy, 255)
+    && U32.is_le(nausea, 255) && U32.is_le(happy, 255) && U32.is_le(bl, 255)
 
 def all_needs_ok(gs: +List<C.Guest>) -> Bool:
   match gs:

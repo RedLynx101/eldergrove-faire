@@ -165,8 +165,8 @@ def Light.tint(+c: U32, +kr: U32, +kg: U32, +kb: U32) -> U32:
   (((((c >> 16n) .&. 255) * kr) >> 8n << 16n) .|. (((((c >> 8n) .&. 255) * kg) >> 8n) << 8n) .|. (((c .&. 255) * kb) >> 8n) : U32)
 
 def Light.drop(+sx: U32, +sy: U32, +t: U32) -> Bool:
-  +fall = (sy + t * 7 : U32)
-  +col = (sx + (sy >> 2n) : U32)
+  +fall = (sy - t * 7 : U32)
+  +col = (sx + (fall >> 2n) : U32)
   ((fall .&. 7) < 3 : U32) && U32.is_eq((hash(col, (fall >> 3n : U32)) .&. 31 : U32), 0)
 
 def Light.go(on: Bool, +c: U32, +n: U32, +wet: Bool, +t: U32, +sx: U32, +sy: U32) -> U32:

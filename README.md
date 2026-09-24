@@ -55,12 +55,12 @@ Dev modes:
 | Right-click | Open a ride's window, whatever the tool |
 | P / F / K | The park, finances and staff windows (or the PARK, FINANCES and STAFF buttons) |
 | M / N | Music on or off / sound effects on or off |
-| O | Options: window size, stretched or whole pixels, dynamic resolution, music and effects volume |
+| O | Options: window size, stretched or whole pixels, dynamic resolution, music and effects volume; KEYS lists every control |
 | 1 - 6 | Open a toolbar tab: paths and furniture, land, scenery, gentle rides, thrill rides, shops. Press again for its next tool |
 | X | Demolish |
 | U | Queue line (12 gold a tile) |
 | R | Next tree kind (oak, moonpine, glowcap, crystal) / coaster direction |
-| Space | Pause; `+` / `-` speed (up to 3x) |
+| Space | Pause and resume; `+` / `-` speed: 1/4, 1/2 (the default), 1x, 2x, 3x |
 | F5 / F9 | Save / load `eldergrove.sav` |
 | Esc | Close the front window (with none open: quit) |
 
