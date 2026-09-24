@@ -1732,7 +1732,7 @@ def Guests.come(+gs: +List<Guest>, +rs: +List<Ride>, +t: U32, +f: Fin) -> Bool:
   +roll = (hash(t, 77) .&. 255 : U32)
   # fewer come on a rainy day (the rain Art.rain draws)
   +wet = ((hash((t >> 11n : U32), 99) .&. 7) < 2 : U32)
-  (roll < sel(wet, (rate >> 1n : U32), rate) : U32) && (len32(Guest, gs) < 700 : U32)
+  (roll < sel(wet, (rate >> 1n : U32), rate) : U32) && (len32(Guest, gs) < 1200 : U32)
 
 def Guests.arrivals(+gs: +List<Guest>, +rs: +List<Ride>, +t: U32, +nid: U32, +f: Fin)
   -> +List<Guest>:

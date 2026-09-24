@@ -164,6 +164,12 @@ Small design decisions made while working, listed here so they can be revisited.
   staff), most thrilling (4+ thrill rides). An award is announced in the message bar with a bell. Awards
   don't change the simulation.
 
+- **Crowds past 700 without route maps.** Measured: the simulation costs 4.0 ms a tick at 700 guests and
+  7.3 ms at 1200, growing in a straight line, while drawing a frame of 1200 guests costs about twice that.
+  Shared route maps would speed up the part that isn't the bottleneck, so the crowd cap simply rises to 1200
+  and dynamic resolution absorbs the drawing. Live, 1100 guests ran at about 40 fps on a machine that was
+  running slow that day (it gave 60 at 700 earlier). Route maps stay an option if the sim ever dominates.
+
 ## Done: M1, the vertical slice
 Isometric fantasy map, paths, terrain editing, 4 enchanted tree kinds, Dragon Carousel, Arcane Spire, Potion
 Stall, Troll Tavern, pre-built Wyrm Coaster with block signals and a track editor, guests with needs and
@@ -323,7 +329,7 @@ Spikes, in order:
   tool. A bridge tool raises paths over water, lower paths and track, on supports that match the theme. The
   land stays terraced (no slopes).
 
-## M7: Structure (in progress: all but bigger crowds done)
+## Done: M7, structure
 - Scenarios with goals and awards, alongside sandbox mode (a main menu to choose).
 - Research that unlocks rides over time.
 - Weather and a day/night cycle, with lanterns and fireflies at night.
