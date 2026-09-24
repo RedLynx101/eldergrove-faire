@@ -198,82 +198,175 @@ def Art.block(+x: U32, +y: U32, +dl: U32, +dr: U32, +ter: U32, +obj: U32,
 
 # Trees (anchored at the tile centre)
 # -----------------------------------
+# Leaves and caps are shaded as small lit volumes (light from the top
+# left): a highlight rim, three body tones with dithered edges, a deep
+# outline on the shadowed side, and a soft ground shadow under each tree.
 
-def Art.leafy(+dx: U32, +dy: U32, +cx: U32, +cy: U32, +r: U32, +n: U32,
-  +c: U32) -> U32:
+def Art.checker(+x: U32, +y: U32) -> Bool:
+  U32.is_eq(((x + y) .&. 1 : U32), 0)
+
+# a soft ground shadow: dark meadow tones, dithered
+def Art.shadow(+dx: U32, +dy: U32, +rx: U32, +ry: U32) -> U32:
+  +in = ell(dx, dy, rx, ry)
+  +edge = in && Bool.not(ell(dx, dy, (rx - 2 : U32), U32.max((ry - 1 : U32), 1)))
+  sel(in, sel(edge && Art.checker(dx, dy), TR(), sel(Art.checker(dx, dy), 3310120, 3574314)), TR())
+
+# one clump of leaves of radius r centred at (cx, cy): 5 tones
+def Art.leaf(+k: U32) -> U32:
+  match k:
+    case 0:
+      8833118
+    case 1:
+      5938756
+    case 2:
+      4161332
+    case 3:
+      2908969
+    case _:
+      1786397
+
+def Art.clump.go(in: Bool, +dx: U32, +dy: U32, +ex: U32, +ey: U32, +d2: U32, +r: U32,
+  +n: U32) -> U32:
+  match in:
+    case True{}:
+      +v = (ex + ey : U32)
+      +h = (r >> 1n : U32)
+      +q = (h >> 1n : U32)
+      +rim = ((d2 + r + r) > (r * r) : U32)
+      +dith = Art.checker(dx, dy)
+      +tone = sel(slt(v, (0 - h - 1 : U32)), 1, sel(slt(v, (0 - h + 1 : U32)), sel(dith, 1, 2),
+        sel(slt(v, q), 2, sel(slt(v, (q + 2 : U32)), sel(dith, 2, 3), 3))))
+      +speck = U32.is_eq((hash((ex + n : U32), (ey * 7 + n : U32)) .&. 7 : U32), 0)
+      +t2 = sel(speck, U32.min((tone + 1 : U32), 3), tone)
+      Art.leaf(sel(rim && slt(0, v), 4, sel(rim && slt(v, (0 - q : U32)), 0, t2)))
+    case False{}:
+      TR()
+
+# one clump of leaves of radius r centred at (cx, cy): 5 tones
+def Art.clump(+dx: U32, +dy: U32, +cx: U32, +cy: U32, +r: U32, +n: U32) -> U32:
   +ex = (dx - cx : U32)
   +ey = (dy - cy : U32)
   +d2 = (ex * ex + ey * ey : U32)
-  +l = (ex + ey : U32)
-  +k = sel(slt(l, (0 - r / 2 : U32)), 300, sel(slt((r / 2 : U32), l), 170, 230))
-  +rim = ((d2 + r * 2) > (r * r) : U32) && slt(0, l)
-  sel((d2 <= r * r : U32), sel(rim, shade(c, 110),
-    shade(c, sel(U32.is_eq((n .&. 7 : U32), 0), (k + 40 : U32), k))), TR())
+  Art.clump.go((d2 <= r * r : U32), dx, dy, ex, ey, d2, r, n)
 
-def Art.oak(+dx: U32, +dy: U32, +n: U32) -> U32:
-  +trunk = (sabs(dx) <= 1 : U32) && between(dy, (0 - 9 : U32), 0)
-  +bark = sel(U32.is_eq(dx, 1), 5388834, 7031339)
-  +leaf = {4557110 : U32}
-  over(Art.leafy(dx, dy, 0, (0 - 19 : U32), 8, n, leaf),
-    over(Art.leafy(dx, dy, (0 - 5 : U32), (0 - 13 : U32), 6, n, leaf),
-      over(Art.leafy(dx, dy, 5, (0 - 12 : U32), 6, n, leaf),
-        sel(trunk, bark, TR()))))
+def Art.bark(+dx: U32, +dy: U32) -> U32:
+  sel(U32.is_eq(dx, (0 - 1 : U32)), 9068600, sel(U32.is_eq(dx, 1), 4862492,
+    sel(U32.is_eq(((dy + 64) .&. 3 : U32), 0), 5913634, 7031339)))
 
-def Art.pine_tier(+dx: U32, +dy: U32, +apex: U32, +h: U32, +w: U32) -> U32:
+def Art.oak(+dx: U32, +dy: U32, +n: U32, +t: U32) -> U32:
+  # the crown sways a pixel or two in the wind
+  +sw = wsin(((t * 3) + n : U32), 2)
+  +cx = (dx - sw : U32)
+  +flare = sle((0 - 2 : U32), dy) && (sabs(dx) <= 2 : U32)
+  +trunk = (sabs(dx) <= 1 : U32) && between(dy, (0 - 12 : U32), 0) || flare && sle(dy, 0)
+  +k = (0 - dy - 9 : U32)
+  +bl = (k <= 7 : U32) && U32.is_eq(dx, (0 - (k >> 1n) : U32))
+  +br = (k <= 6 : U32) && U32.is_eq(dx, (k >> 1n : U32))
+  +wood = sel(trunk, Art.bark(dx, dy), sel(bl || br, 5913634, TR()))
+  +crown = over(Art.clump(cx, dy, 4, (0 - 11 : U32), 5, n), over(Art.clump(cx, dy, (0 - 3 : U32), (0 - 12 : U32), 5, n),
+    over(Art.clump(cx, dy, 8, (0 - 12 : U32), 4, n), over(Art.clump(cx, dy, (0 - 8 : U32), (0 - 12 : U32), 4, n),
+    over(Art.clump(cx, dy, 6, (0 - 17 : U32), 5, n), over(Art.clump(cx, dy, (0 - 6 : U32), (0 - 17 : U32), 5, n),
+    over(Art.clump(cx, dy, 0, (0 - 16 : U32), 6, n), Art.clump(cx, dy, 0, (0 - 22 : U32), 6, n))))))))
+  over(crown, over(wood, Art.shadow((dx - 1 : U32), (dy - 1 : U32), 10, 4)))
+
+# a moonpine tier: serrated edges, moonlit from the left, frosted tips
+def Art.pine_tier(+dx: U32, +dy: U32, +apex: U32, +h: U32, +w: U32, +n: U32) -> U32:
   +d = (dy - apex : U32)
-  +inside = (d < h : U32) && ((sabs(dx) * h) <= (d * w) : U32)
-  +frost = (d < 2 : U32)
-  sel(inside, sel(frost, 13625574, sel(neg(dx), 4889226, sel((sabs(dx) * 3 < w : U32),
-    2977384, 2051914))), TR())
+  +ax = sabs(dx)
+  +dw = (d * w : U32)
+  +edge = ((ax + 1) * h >= dw : U32)
+  +jag = U32.is_eq(((ax + d + n) .&. 1 : U32), 1) && edge
+  +inside = (d < h : U32) && (ax * h <= dw : U32) && Bool.not(jag)
+  +frost = (d + 1 >= h : U32) && U32.is_eq(((dx + n) .&. 1 : U32), 0)
+    || (d < 1 : U32)
+  +tone = sel(neg(dx), sel((ax * 2 * h > dw : U32), 6270621, 3834744), sel((ax * 3 * h < dw : U32), 3834744,
+    sel(edge, 1522233, 2382419)))
+  sel(inside, sel(frost, 14217193, tone), TR())
 
 def Art.pine(+dx: U32, +dy: U32, +n: U32) -> U32:
-  +trunk = (sabs(dx) <= 1 : U32) && between(dy, (0 - 5 : U32), 0)
-  over(Art.pine_tier(dx, dy, (0 - 34 : U32), 12, 4),
-    over(Art.pine_tier(dx, dy, (0 - 26 : U32), 13, 6),
-      over(Art.pine_tier(dx, dy, (0 - 18 : U32), 14, 8),
-        sel(trunk, 5913891, TR()))))
+  +trunk = (sabs(dx) <= 1 : U32) && between(dy, (0 - 6 : U32), 0)
+  over(Art.pine_tier(dx, dy, (0 - 38 : U32), 10, 3, n),
+    over(Art.pine_tier(dx, dy, (0 - 31 : U32), 11, 5, n),
+      over(Art.pine_tier(dx, dy, (0 - 24 : U32), 12, 7, n),
+        over(Art.pine_tier(dx, dy, (0 - 17 : U32), 12, 9, n),
+          over(sel(trunk, Art.bark(dx, dy), TR()), Art.shadow((dx - 1 : U32), (dy - 1 : U32), 8, 3))))))
+
+# a glowcap: domed cap with a highlight, glowing spots, gills beneath, and
+# a fibrous stem with a skirt; sometimes a small one beside it
+def Art.cap(+dx: U32, +dy: U32, +cy: U32, +rx: U32, +ry: U32, +n: U32, +t: U32) -> U32:
+  +ey = (dy - cy : U32)
+  +dome = ell(dx, ey, rx, ry) && sle(ey, 0)
+  +gill = ell(dx, (ey - 1 : U32), (rx - 1 : U32), U32.max(div3(ry), 1)) && sle(0, ey)
+  +gstripe = U32.is_eq((((dx + 64) >> 1n) .&. 1 : U32), 0)
+  +hi = ell((dx + div3(rx) : U32), (ey + (ry >> 1n) + 1 : U32), U32.max((rx >> 2n : U32), 1), U32.max((ry >> 2n : U32), 1))
+  +cellx = div3((dx + 66 : U32))
+  +celly = div3((ey + 66 : U32))
+  +spoton = U32.is_eq((hash((cellx + n : U32), celly) .&. 1 : U32), 0)
+  +sx = ((dx + 66) - cellx * 3 : U32)
+  +sy = ((ey + 66) - celly * 3 : U32)
+  +spot = spoton && (sx >= 1 : U32) && (sy >= 1 : U32) && slt(ey, (0 - 1 : U32))
+  +spotsh = spot && U32.is_eq(sx, 2) && U32.is_eq(sy, 2)
+  +pulse = (tri(((t * 4) + n : U32)) > 32 : U32)
+  +rimk = Bool.not(ell(dx, ey, (rx - 1 : U32), U32.max((ry - 1 : U32), 1)))
+  +body = sel(slt(ey, (0 - div3((ry * 2 : U32)) : U32)), 16738906, sel(neg(dx), 14172218, 11546154))
+  +capc = sel(hi, 16761008, sel(spotsh, 14207168, sel(spot, sel(pulse, 16776144, 16774378),
+    sel(rimk && slt(0, dx), 9052192, body))))
+  sel(dome, capc, sel(gill, sel(gstripe, 15259312, 13218956), TR()))
+
+def Art.stem(+dx: U32, +dy: U32, +top: U32, +w: U32) -> U32:
+  +bulge = sel(sle((0 - 2 : U32), dy), (w + 1 : U32), w)
+  +in = (sabs(dx) <= bulge : U32) && between(dy, top, 0)
+  +skirt = U32.is_eq(dy, (top + 3 : U32)) && (sabs(dx) <= (w + 1 : U32) : U32)
+  +c = sel(U32.is_eq(sabs(dx), bulge) && slt(0, dx), 12100738, sel(U32.is_eq((dx .&. 1 : U32), 0), 14207140, 15787208))
+  sel(skirt, 13218956, sel(in, c, TR()))
 
 def Art.glowcap(+dx: U32, +dy: U32, +n: U32, +t: U32) -> U32:
-  +stem = (sabs(dx) <= 2 : U32) && between(dy, (0 - 11 : U32), 0)
-  +cap = ell(dx, (dy + 12 : U32), 10, 7) && sle(dy, (0 - 10 : U32))
-  +spot = U32.is_eq((hash(((dx + 64) >> 1n : U32), ((dy + 64) >> 1n : U32)) .&. 7 : U32), 0)
-  +under = between(dy, (0 - 11 : U32), (0 - 10 : U32)) && ell(dx, (dy + 12 : U32), 10, 7)
-  +glow = U32.is_eq((hash(n, (t >> 4n : U32)) .&. 3 : U32), 0)
-  sel(cap, sel(under, 11874348, sel(spot, sel(glow, 16777215, 16314600),
-    sel(neg(dx), 14696506, 12070962))), sel(stem, sel(neg(dx), 15261888, 12627616), TR()))
+  +big = over(Art.cap(dx, dy, (0 - 12 : U32), 12, 9, n, t), Art.stem(dx, dy, (0 - 12 : U32), 2))
+  +bx = (dx - 8 : U32)
+  +by = (dy - 2 : U32)
+  +baby = sel(U32.is_eq((n .&. 1 : U32), 1),
+    over(Art.cap(bx, by, (0 - 5 : U32), 4, 3, (n + 5 : U32), t), Art.stem(bx, by, (0 - 5 : U32), 1)), TR())
+  over(big, over(baby, Art.shadow((dx - 1 : U32), (dy - 1 : U32), 10, 4)))
 
-def Art.spike(+dx: U32, +dy: U32, +ox: U32, +h: U32) -> U32:
+# crystals: faceted spikes on a rocky base, their tips twinkling
+def Art.spike(+dx: U32, +dy: U32, +ox: U32, +h: U32, +w: U32) -> U32:
   +ex = (dx - ox : U32)
-  +inside = (sabs(ex) <= 2 : U32) && sle((0 - h + sabs(ex) * 2 : U32), dy) && sle(dy, 0)
+  +ax = sabs(ex)
+  +inside = (ax <= w : U32) && sle((0 - h + ax * 2 : U32), dy) && sle(dy, 0)
+  +ridge = U32.is_eq(ex, 0)
   +tip = sle(dy, (0 - h + 3 : U32))
-  sel(inside, sel(tip && U32.is_eq(ex, 0), 16777215, sel(neg(ex), 13674751,
-    sel(U32.is_eq(ex, 0), 10182117, 6962352))), TR())
+  +deep = sle((0 - 2 : U32), dy)
+  sel(inside, sel(ridge && tip, 16777215, sel(ridge, 15523071, sel(deep, 5910672,
+    sel(neg(ex), sel(U32.is_eq(ax, w), 11828479, 14203135), sel(U32.is_eq(ax, w), 5910672, 9066704))))), TR())
 
-def Art.crystal(+dx: U32, +dy: U32) -> U32:
-  over(Art.spike(dx, dy, 0, 20), over(Art.spike(dx, dy, (0 - 5 : U32), 13),
-    Art.spike(dx, (dy - 1 : U32), 5, 11)))
+def Art.crystal(+dx: U32, +dy: U32, +n: U32, +t: U32) -> U32:
+  +glint = ((((t + n * 13) .&. 127) : U32) < 10 : U32)
+  +star = glint && (U32.is_eq(dx, 0) && between(dy, (0 - 25 : U32), (0 - 19 : U32))
+    || U32.is_eq(dy, (0 - 22 : U32)) && between(dx, (0 - 3 : U32), 3))
+  +rocks = ell(dx, (dy - 1 : U32), 7, 3)
+  +rockc = sel(Art.checker(dx, dy), 8026760, sel(neg(dx), 9079450, 5921384))
+  over(sel(star, 16777215, TR()), over(Art.spike(dx, dy, 0, 21, 2),
+    over(Art.spike(dx, dy, (0 - 5 : U32), 14, 2), over(Art.spike(dx, (dy - 1 : U32), 5, 12, 2),
+      over(Art.spike(dx, (dy + 1 : U32), 2, 8, 1), sel(rocks, rockc, TR()))))))
 
 def Art.tree(+v: U32, +dx: U32, +dy: U32, +n: U32, +t: U32) -> U32:
   match v:
     case 0:
-      Art.oak(dx, dy, n)
+      Art.oak(dx, dy, n, t)
     case 1:
       Art.pine(dx, dy, n)
     case 2:
       Art.glowcap(dx, dy, n, t)
     case _:
-      Art.crystal(dx, dy)
+      Art.crystal(dx, dy, n, t)
 
-# Shapes for buildings
-# --------------------
 
-# an upright cylinder standing on (0, base), radius r, height h
 def Art.cyl(+dx: U32, +dy: U32, +base: U32, +r: U32, +h: U32, +c: U32) -> U32:
   +ry = (r >> 1n : U32)
   +body = (sabs(dx) <= r : U32) && between(dy, (base - h : U32), base)
   +bot = ell(dx, (dy - base : U32), r, U32.max(ry, 1))
   +topc = ell(dx, (dy - (base - h) : U32), r, U32.max(ry, 1))
-  +k = sel(slt(dx, (0 - r / 3 : U32)), 290, sel(slt((r / 3 : U32), dx), 175, 230))
+  +k = sel(slt(dx, (0 - div3(r) : U32)), 290, sel(slt(div3(r), dx), 175, 230))
   sel(topc, shade(c, 320), sel(body || bot, shade(c, k), TR()))
 
 # a cone with its base ellipse centred at (0, base)
@@ -283,22 +376,22 @@ def Art.cone(+dx: U32, +dy: U32, +base: U32, +r: U32, +h: U32, +c: U32,
   +d = (dy - apex : U32)
   +inside = sle(apex, dy) && sle(dy, base) && ((sabs(dx) * h) <= (d * r) : U32)
   +rim = ell(dx, (dy - base : U32), r, U32.max((r >> 1n : U32), 1)) && sle(base, dy)
-  +stripe = U32.is_eq(((((dx + 256) : U32) / 6 : U32) .&. 1 : U32), 0)
-  +k = sel(slt(dx, (0 - r / 3 : U32)), 290, sel(slt((r / 3 : U32), dx), 180, 235))
+  +stripe = U32.is_eq(((div3((dx + 256 : U32)) >> 1n) .&. 1 : U32), 0)
+  +k = sel(slt(dx, (0 - div3(r) : U32)), 290, sel(slt(div3(r), dx), 180, 235))
   sel(inside || rim, shade(sel(stripe, c, c2), k), TR())
 
 # an iso box on (0, base): footprint diamond half-width r, height h
 def Art.box(+dx: U32, +dy: U32, +base: U32, +r: U32, +h: U32, +top: U32,
   +left: U32, +right: U32) -> U32:
   +X = dx
-  +Yt = ((dy - (base - h - r / 2)) * 2 : U32)
+  +Yt = ((dy - (base - h - (r >> 1n))) * 2 : U32)
   +tu = iso_u((X + r : U32), Yt)
   +tv = iso_v((X + r : U32), Yt)
   +ontop = (tu < r : U32) && (tv < r : U32)
   # side faces: below the top diamond's lower edges, above the bottom ones
   +ax = sabs(dx)
-  +lowtop = (base - h + (r / 2) - (ax / 2) : U32)
-  +lowbot = (base + (r / 2) - (ax / 2) : U32)
+  +lowtop = (base - h + (r >> 1n) - (ax >> 1n) : U32)
+  +lowbot = (base + (r >> 1n) - (ax >> 1n) : U32)
   +side = (ax <= r : U32) && sle(lowtop, dy) && sle(dy, lowbot)
   sel(ontop, top, sel(side, sel(neg(dx), left, right), TR()))
 
@@ -373,9 +466,9 @@ def Art.guest(+dx: U32, +dy: U32, +look: U32, +t: U32) -> U32:
   +step = U32.is_eq(((t >> 3n) .&. 1 : U32), 1)
   +legl = sel(step, (0 - 1 : U32), 0)
   +legr = sel(step, 1, 0)
-  +legs = between(h, 0, (2 - sh / 2 : U32)) && (U32.is_eq(dx, legl) || U32.is_eq(dx, (legr + 0 : U32)) || U32.is_eq(dx, (legl + 2 : U32)))
-  +body = between(h, (3 - sh / 2 : U32), (6 - sh : U32)) && between(dx, (0 - 2 : U32), 2)
-  +belt = U32.is_eq(h, (4 - sh / 2 : U32)) && between(dx, (0 - 2 : U32), 2)
+  +legs = between(h, 0, (2 - (sh >> 1n) : U32)) && (U32.is_eq(dx, legl) || U32.is_eq(dx, (legr + 0 : U32)) || U32.is_eq(dx, (legl + 2 : U32)))
+  +body = between(h, (3 - (sh >> 1n) : U32), (6 - sh : U32)) && between(dx, (0 - 2 : U32), 2)
+  +belt = U32.is_eq(h, (4 - (sh >> 1n) : U32)) && between(dx, (0 - 2 : U32), 2)
   +head = between(h, (7 - sh : U32), (9 - sh : U32)) && between(dx, (0 - 1 : U32), 1)
   +eye = U32.is_eq(h, (8 - sh : U32)) && U32.is_eq(dx, 1)
   # hats
@@ -505,11 +598,11 @@ def Art.sseat(+dx: U32, +dy: U32, +ringy: U32, +s: U32, +code: U32) -> U32:
 def Art.spire(+dx: U32, +dy: U32, +t: U32, +ra: U32, +rb: U32) -> U32:
   +base = Art.box(dx, dy, 0, 12, 5, 9602196, 8418172, 6708076)
   +tower = Art.cyl(dx, dy, (0 - 4 : U32), 5, 60, 7100042)
-  +rune = (sabs(dx) <= 1 : U32) && U32.is_eq((((dy + 1024) + (t >> 1n)) % 12 : U32), 0)
+  +rune = (sabs(dx) <= 1 : U32) && U32.is_eq((((dy + 1024) + (t >> 1n)) .&. 15 : U32), 0)
   +orb = ell(dx, (dy + 70 : U32), 4, 4)
   +core = ell(dx, (dy + 71 : U32), 1, 1)
-  +ph = (t % 400 : U32)
-  +up = sel((ph < 300 : U32), (ph / 6 : U32), ((400 - ph) / 2 : U32))
+  +ph = (t .&. 511 : U32)
+  +up = sel((ph < 384 : U32), (div3(ph) >> 1n : U32), ((512 - ph) >> 1n : U32))
   +ringy = (0 - 8 - up : U32)
   +ring = ell(dx, (dy - ringy : U32), 10, 5) && Bool.not(ell(dx, (dy - ringy : U32), 6, 3))
   +ringside = ell(dx, (dy - ringy - 2 : U32), 10, 5) && Bool.not(ell(dx, (dy - ringy : U32), 10, 5))
@@ -561,8 +654,8 @@ def Art.tavern(+dx: U32, +dy: U32, +t: U32) -> U32:
   # the thatched roof: a pyramid over the walls
   +ax = sabs(dx)
   +apex = (0 - 30 : U32)
-  +upper = (apex + (ax * 16 / 13) : U32)
-  +lower = (0 - 11 + (13 - ax) / 2 : U32)
+  +upper = (apex + ((ax * 20) >> 4n) : U32)
+  +lower = (0 - 11 + ((13 - ax) >> 1n) : U32)
   +roof = (ax <= 13 : U32) && sle(upper, dy) && sle(dy, lower)
   +thatch = U32.is_eq(((dy + ax + 256) .&. 3 : U32), 0)
   +roofc = sel(neg(dx), sel(thatch, 11045432, 13148232), sel(thatch, 8420896, 10122800))

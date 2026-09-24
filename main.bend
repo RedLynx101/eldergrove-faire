@@ -47,7 +47,7 @@ def Dr.hits(d: Dr, +bx: U32, +by: U32, +s: U32) -> Bool:
     case DBlock{+x, +y, +dl, +dr, ter, obj, hov, wx, wy}:
       ov((x - 16 : U32), y, (x + 16 : U32), (y + 17 + U32.max(dl, dr) : U32), bx, by, s)
     case DTree{+x, +y, v, n}:
-      ov((x - 11 : U32), (y - 36 : U32), (x + 12 : U32), (y + 2 : U32), bx, by, s)
+      ov((x - 13 : U32), (y - 40 : U32), (x + 14 : U32), (y + 6 : U32), bx, by, s)
     case DRide{+x, +y, k, ra, rb}:
       ov((x - 30 : U32), (y - 78 : U32), (x + 31 : U32), (y + 16 : U32), bx, by, s)
     case DGate{+x, +y}:
