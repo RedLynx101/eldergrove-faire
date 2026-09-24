@@ -729,6 +729,12 @@ def msg_text(+m: U32) -> String:
       "THE WYRM COASTER OPENS!"
     case 7:
       "THE WYRM COASTER CLOSES"
+    case 8:
+      "BORROWED 1000 GOLD"
+    case 9:
+      "REPAID 1000 GOLD"
+    case 10:
+      "THE BANK SAYS NO"
     case _:
       ""
 
@@ -783,7 +789,7 @@ def ride_state(r: C.Ride) -> String:
     Bool.pick(String, U32.is_eq(ph, 1), "  RUNNING", "  UNLOADING"))))))
 
 def hover_info(+p: C.Park, +hov: U32, +acc: +List<Dr>) -> +List<Dr>:
-  C.Park{+map, +guests, +rides, track, cash, time, nid} = p
+  C.Park{+map, +guests, +rides, track, cash, time, nid, fin} = p
   +i = (hov >> 6n : U32)
   +j = (hov .&. 63 : U32)
   +t = C.Land.get(map, i, j)
@@ -801,8 +807,17 @@ def coaster_help(+tool: U32, +acc: +List<Dr>) -> +List<Dr>:
     text("CLICK: STATION  W:AHEAD A/D:TURN Q:UP Z:DOWN L:LIFT BKSP:UNDO ENTER:OPEN",
       (B() + 4 : U32), (B() + 284 : U32), 12648447, acc), acc)
 
+def T(s: String, +x: U32, +y: U32, +col: U32, +acc: +List<Dr>) -> +List<Dr>:
+  text(s, (B() + x : U32), (B() + y : U32), col, acc)
+
+def R(+x: U32, +y: U32, +w: U32, +h: U32, +col: U32, +acc: +List<Dr>) -> +List<Dr>:
+  DRect{(B() + x : U32), (B() + y : U32), w, h, col} <> acc
+
+def button(label: String, +x: U32, +y: U32, +w: U32, +col: U32, +acc: +List<Dr>) -> +List<Dr>:
+  T(label, (x + 2 : U32), (y + 2 : U32), 16777215, R(x, y, w, 9, col, acc))
+
 def hud(+p: C.Park, +ui: UI, +hov: U32) -> +List<Dr>:
-  C.Park{map, +guests, rides, track, +cash, +time, nid} = p
+  C.Park{map, +guests, rides, track, +cash, +time, nid, fin} = p
   UI{camx, camy, keys, mx, my, md, +tool, var, +sp, +msg, fr, +inc, last, io, +fps, tl} = ui
   +day = ((time / 120) % 30 + 1 : U32)
   +month = (time / 3600 + 1 : U32)
@@ -817,7 +832,8 @@ def hud(+p: C.Park, +ui: UI, +hov: U32) -> +List<Dr>:
     text(tool_name(tool), (B() + 298 : U32), (B() + 302 : U32), 16777215,
     text(msg_text(msg), (B() + 298 : U32), (B() + 310 : U32), 16766282,
     text("INCOME " ++ money(inc), (B() + 410 : U32), (B() + 3 : U32), 11468718,
-    text(U32.show(fps) ++ " FPS", (B() + 470 : U32), (B() + 310 : U32), 8421504, []))))))))))
+    text(U32.show(fps) ++ " FPS", (B() + 4 : U32), (B() + 14 : U32), 8421504,
+    button("PARK", 462, 294, 46, 5913248, button("FINANCES", 462, 305, 46, 5913248, []))))))))))))
   +bars = {DRect{B(), B(), 512, 11, 1973802} <> DRect{B(), (B() + 11 : U32), 512, 1, 13148232}
     <> DRect{B(), (B() + 291 : U32), 512, 1, 13148232}
     <> DRect{B(), (B() + 292 : U32), 512, 28, 1973802} <> [] : +List<Dr>}
@@ -842,15 +858,19 @@ def Win.w(+k: U32) -> U32:
   match k:
     case 1:
       196
+    case 2:
+      200
     case _:
-      160
+      224
 
 def Win.h(+k: U32) -> U32:
   match k:
     case 1:
       154
+    case 2:
+      132
     case _:
-      100
+      148
 
 def Win.hit(w: Win, +mx: U32, +my: U32) -> Bool:
   Win{+k, +x, +y, a} = w
@@ -919,12 +939,6 @@ def WM.wins(m: WM) -> +List<Win>:
 
 # Drawing windows (screen coordinates; front-most items first)
 
-def T(s: String, +x: U32, +y: U32, +col: U32, +acc: +List<Dr>) -> +List<Dr>:
-  text(s, (B() + x : U32), (B() + y : U32), col, acc)
-
-def R(+x: U32, +y: U32, +w: U32, +h: U32, +col: U32, +acc: +List<Dr>) -> +List<Dr>:
-  DRect{(B() + x : U32), (B() + y : U32), w, h, col} <> acc
-
 def window_box(title: String, +x: U32, +y: U32, +w: U32, +h: U32, +acc: +List<Dr>) -> +List<Dr>:
   T(title, (x + 4 : U32), (y + 2 : U32), 16766282,
   T("X", (x + w - 7 : U32), (y + 2 : U32), 16777215,
@@ -932,9 +946,6 @@ def window_box(title: String, +x: U32, +y: U32, +w: U32, +h: U32, +acc: +List<Dr
   R((x + 1 : U32), (y + 1 : U32), (w - 2 : U32), 8, 4863024,
   R((x + 1 : U32), (y + 10 : U32), (w - 2 : U32), (h - 11 : U32), 2763330,
   R(x, y, w, h, 13148232, acc))))))
-
-def button(label: String, +x: U32, +y: U32, +w: U32, +col: U32, +acc: +List<Dr>) -> +List<Dr>:
-  T(label, (x + 2 : U32), (y + 2 : U32), 16777215, R(x, y, w, 9, col, acc))
 
 def pm(+x: U32, +y: U32, +acc: +List<Dr>) -> +List<Dr>:
   button("-", x, y, 11, 5913248, button("+", (x + 14 : U32), y, 11, 5913248, acc))
@@ -978,7 +989,7 @@ def Rides.kind_at(+rs: +List<C.Ride>, +k: U32, +i: U32) -> U32:
 # a ride's window: open or closed, price, riders and queue, the loading
 # waits (cycling rides), and its record so far
 def ride_win(+p: C.Park, +x: U32, +y: U32, +idx: U32, +acc: +List<Dr>) -> +List<Dr>:
-  C.Park{map, +guests, +rides, track, cash, +time, nid} = p
+  C.Park{map, +guests, +rides, track, cash, +time, nid, fin} = p
   +rd = C.Rides.get(rides, idx)
   +k = C.Ride.kind(rd)
   +open = U32.is_eq(C.Ride.open_flag(rd), 1)
@@ -998,10 +1009,83 @@ def ride_win(+p: C.Park, +x: U32, +y: U32, +idx: U32, +acc: +List<Dr>) -> +List<
   T("AGE " ++ U32.show(age) ++ Bool.pick(String, U32.is_eq(age, 1), " MONTH", " MONTHS"),
     (x + 6 : U32), (y + 102 : U32), 15261888, waits))))))))
 
+# the guest count over the last four months: 32 bars, newest on the right
+def graph(+hs: +List<U32>, +i: U32, +x: U32, +y: U32, +acc: +List<Dr>) -> +List<Dr>:
+  match hs:
+    case []:
+      acc
+    case v <> rest:
+      +h = U32.max(U32.min((v * 50 / 700 : U32), 50), 1)
+      graph(rest, (i + 1 : U32), x, y,
+        R((x + (31 - i) * 5 : U32), (y + 50 - h : U32), 4, h, 7324480, acc))
+
+# the park: its rating, guests, entry fee, and the guest count graph
+def park_win(+p: C.Park, +x: U32, +y: U32, +acc: +List<Dr>) -> +List<Dr>:
+  C.Park{map, +guests, +rides, track, cash, time, nid, +fin} = p
+  +rating = C.Fin.rating(fin)
+  +frame = window_box("ELDERGROVE FAIRE", x, y, 200, 132, acc)
+  T("PARK RATING " ++ U32.show(rating), (x + 6 : U32), (y + 15 : U32), 16766282,
+  R((x + 96 : U32), (y + 15 : U32), U32.max((rating / 10 : U32), 1), 5, sel((rating < 400 : U32), 14163020, 7324480),
+  R((x + 96 : U32), (y + 15 : U32), 100, 5, 4210752,
+  T("GUESTS " ++ U32.show(C.len32(C.Guest, guests)) ++ "   HAPPY " ++ U32.show(happy_avg(guests, 0, 0)) ++ "%",
+    (x + 6 : U32), (y + 28 : U32), 15261888,
+  T("ENTRY FEE *" ++ U32.show(C.Fin.fee(fin)), (x + 6 : U32), (y + 42 : U32), 16766282,
+  pm((x + 110 : U32), (y + 40 : U32),
+  T("GUESTS, LAST FOUR MONTHS", (x + 6 : U32), (y + 58 : U32), 12648447,
+  graph(C.Fin.hist(fin), 0, (x + 20 : U32), (y + 70 : U32),
+  R((x + 18 : U32), (y + 70 : U32), 164, 52, 1973802, frame)))))))))
+
+def fin_at(+xs: +List<U32>, +i: U32) -> U32:
+  C.Tab.at(xs, i)
+
+def fin_amt(+spend: Bool, +v: U32) -> String:
+  Bool.pick(String, spend && (v > 0 : U32), "-*", "*") ++ U32.show(v)
+
+# a row of the books: this month and last month (spend rows show a minus)
+def fin_row(label: String, +i: U32, +spend: Bool, +now: +List<U32>, +last: +List<U32>, +x: U32, +y: U32,
+  +acc: +List<Dr>) -> +List<Dr>:
+  +col = sel(spend, 16750480, 11468718)
+  T(label, (x + 6 : U32), y, 15261888,
+  T(fin_amt(spend, fin_at(now, i)), (x + 110 : U32), y, col,
+  T(fin_amt(spend, fin_at(last, i)), (x + 168 : U32), y, col, acc)))
+
+# takings less costs (loans themselves aside)
+def profit(+xs: +List<U32>) -> U32:
+  (fin_at(xs, 0) + fin_at(xs, 3) + fin_at(xs, 4) + fin_at(xs, 5) + fin_at(xs, 6)
+    - fin_at(xs, 1) - fin_at(xs, 2) - fin_at(xs, 9) : U32)
+
+def fin_win(+p: C.Park, +x: U32, +y: U32, +acc: +List<Dr>) -> +List<Dr>:
+  C.Park{map, guests, rides, track, cash, time, nid, +fin} = p
+  +now = C.Fin.now(fin)
+  +last = C.Fin.last(fin)
+  +frame = window_box("FINANCES", x, y, 224, 148, acc)
+  T("THIS MONTH", (x + 110 : U32), (y + 14 : U32), 12648447,
+  T("LAST MONTH", (x + 168 : U32), (y + 14 : U32), 12648447,
+  fin_row("RIDE TICKETS", 0, False{}, now, last, x, (y + 26 : U32),
+  fin_row("FOOD", 4, False{}, now, last, x, (y + 35 : U32),
+  fin_row("DRINKS", 5, False{}, now, last, x, (y + 44 : U32),
+  fin_row("ENTRY FEES", 6, False{}, now, last, x, (y + 53 : U32),
+  fin_row("RIDE UPKEEP", 1, True{}, now, last, x, (y + 62 : U32),
+  fin_row("CONSTRUCTION", 2, True{}, now, last, x, (y + 71 : U32),
+  fin_row("REFUNDS", 3, False{}, now, last, x, (y + 80 : U32),
+  fin_row("LOAN INTEREST", 9, True{}, now, last, x, (y + 89 : U32),
+  T("PROFIT", (x + 6 : U32), (y + 102 : U32), 16766282,
+  T(money(profit(now)), (x + 110 : U32), (y + 102 : U32), 16766282,
+  T(money(profit(last)), (x + 168 : U32), (y + 102 : U32), 16766282,
+  R((x + 6 : U32), (y + 99 : U32), 212, 1, 8421504,
+  T("LOAN *" ++ U32.show(C.Fin.loan(fin)), (x + 6 : U32), (y + 118 : U32), 16750480,
+  T("INTEREST 1/80 A MONTH", (x + 6 : U32), (y + 132 : U32), 8421504,
+  button("BORROW 1000", (x + 100 : U32), (y + 116 : U32), 54, 5913248,
+  button("REPAY 1000", (x + 160 : U32), (y + 116 : U32), 54, 5913248, frame))))))))))))))))))
+
 def win_dr.go(+k: U32, +x: U32, +y: U32, +a: U32, +p: C.Park, +acc: +List<Dr>) -> +List<Dr>:
   match k:
     case 1:
       ride_win(p, x, y, a, acc)
+    case 2:
+      park_win(p, x, y, acc)
+    case 3:
+      fin_win(p, x, y, acc)
     case _:
       acc
 
@@ -1024,15 +1108,27 @@ def ride_click(+lx: U32, +ly: U32) -> U32:
   sel(in_box(lx, ly, 96, 50, 11, 9), 104, sel(in_box(lx, ly, 110, 50, 11, 9), 103,
   sel(in_box(lx, ly, 96, 62, 11, 9), 106, sel(in_box(lx, ly, 110, 62, 11, 9), 105, 0)))))))
 
+def park_click(+lx: U32, +ly: U32) -> U32:
+  sel(in_box(lx, ly, 110, 40, 11, 9), 201, sel(in_box(lx, ly, 124, 40, 11, 9), 200, 0))
+
+def fin_click(+lx: U32, +ly: U32) -> U32:
+  sel(in_box(lx, ly, 100, 116, 54, 9), 202, sel(in_box(lx, ly, 160, 116, 54, 9), 203, 0))
+
 def win_code(+k: U32, +lx: U32, +ly: U32) -> U32:
   sel((ly < 10 : U32) && (lx + 10 >= Win.w(k) : U32), 1, sel((ly < 10 : U32), 2,
-    sel(U32.is_eq(k, 1), ride_click(lx, ly), 0)))
+    sel(U32.is_eq(k, 1), ride_click(lx, ly), sel(U32.is_eq(k, 2), park_click(lx, ly),
+      sel(U32.is_eq(k, 3), fin_click(lx, ly), 0)))))
 
-# a ride setting; opening the coaster goes through its track
+# the act a window button asks for
 def ride_act(+p: C.Park, +idx: U32, +op: U32) -> C.Act:
   +k = C.Ride.kind(C.Rides.get(C.Park.rides(p), idx))
   Bool.pick(C.Act, U32.is_eq(op, 0) && U32.is_eq(k, 5), C.TrackOp{8}, C.RideOp{idx, op})
 
+def win_act(+p: C.Park, +arg: U32, +code: U32) -> +List<C.Act>:
+  Bool.pick(+List<C.Act>, (code >= 200 : U32), [C.ParkOp{(code - 200 : U32)}],
+    Bool.pick(+List<C.Act>, (code >= 100 : U32), [ride_act(p, arg, (code - 100 : U32))], []))
+
+# a ride setting; opening the coaster goes through its track
 type Game is Data:
   Game{park: C.Park, ui: UI, wm: WM}
 
@@ -1063,7 +1159,7 @@ def dyn_from(+ds: +List<Dyn>, +k: U32) -> +List<Dyn>:
 
 def scene(+g: Game) -> +List<Dr>:
   Game{+p, +ui, +wm} = g
-  C.Park{+map, +guests, +rides, +track, cash, +time, nid} = p
+  C.Park{+map, +guests, +rides, +track, cash, +time, nid, fin} = p
   C.Track{+ps, open, +bs, st, en} = track
   UI{+camx, +camy, keys, mx, my, md, tool, var, sp, msg, fr, inc, last, io, fps, tl} = ui
   +hov = pick(map, ui)
@@ -1158,7 +1254,9 @@ def on_key(+c: U32, +down: Bool, +ui: UI, +wm: WM, +q: C.Q) -> EV:
   +tact = down && U32.is_eq(tool, 10) && (op < 99 : U32)
   +io2 = sel(down && U32.is_eq(c, 63240), 1, sel(down && U32.is_eq(c, 63244), 2, io))
   EV{UI{cx, cy, keys2, mx, my, md, tool2, var2, sp2, msg, fr, inc, last, io2, fps, tl},
-    WM{Bool.pick(+List<Win>, esc && haswin, Wins.drop(ws, 0), ws), dg, gx, gy},
+    WM{Bool.pick(+List<Win>, esc && haswin, Wins.drop(ws, 0),
+      Bool.pick(+List<Win>, down && U32.is_eq(c, 112), Wins.open(ws, 2, 0, 150, 40),
+      Bool.pick(+List<Win>, down && U32.is_eq(c, 102), Wins.open(ws, 3, 0, 140, 30), ws))), dg, gx, gy},
     Bool.pick(+List<C.Act>, tact, [C.TrackOp{op}], []),
     esc && Bool.not(haswin)}
 
@@ -1225,7 +1323,11 @@ def on_map(+lx: U32, +ly: U32, +button: U32, +down: Bool, +ui: UI, +wm: WM, +p: 
   +hov = pick(q, ui2)
   +ui3 = UI.with_tool(UI.with_last(ui2, sel(build, hov, 99999)), sel(pickt, slot, tool))
   +ws = WM.wins(wm)
-  EV{ui3, WM{Bool.pick(+List<Win>, inspect, open_at(ws, p, hov, lx, ly), ws), 0, 0, 0},
+  +parkb = down && in_box(lx, ly, 462, 294, 46, 9)
+  +finb = down && in_box(lx, ly, 462, 305, 46, 9)
+  +ws2 = Bool.pick(+List<Win>, parkb, Wins.open(ws, 2, 0, 150, 40),
+    Bool.pick(+List<Win>, finb, Wins.open(ws, 3, 0, 140, 30), ws))
+  EV{ui3, WM{Bool.pick(+List<Win>, inspect, open_at(ws2, p, hov, lx, ly), ws2), 0, 0, 0},
     Bool.pick(+List<C.Act>, build, build_act(q, ui2), []), False{}}
 
 def Win.x(w: Win) -> U32:
@@ -1255,7 +1357,7 @@ def on_win(+wi: U32, +lx: U32, +ly: U32, +ui: UI, +wm: WM, +p: C.Park) -> EV:
   EV{UI.at(ui, lx, ly),
     WM{Bool.pick(+List<Win>, U32.is_eq(code, 1), Wins.drop(ws, 0), ws), sel(U32.is_eq(code, 2), 1, 0),
       (lx - wx : U32), (ly - wy : U32)},
-    Bool.pick(+List<C.Act>, (code >= 100 : U32), [ride_act(p, Win.arg(w), (code - 100 : U32))], []),
+    win_act(p, Win.arg(w), code),
     False{}}
 
 def on_mouse.go(inwin: Bool, +wi: U32, +lx: U32, +ly: U32, +button: U32, +down: Bool, +ui: UI,
@@ -1312,8 +1414,8 @@ def on_events(es: List<Event>, +ui: UI, +wm: WM, +p: C.Park, +acts: +List<C.Act>
 # gold earned: the Gain entries of a ledger
 def gains1(t: C.Txn) -> U32:
   match t:
-    case C.Gain{k, a}:
-      sel(U32.is_eq(k, 1), a, 0)
+    case C.Gain{+k, a}:
+      sel(U32.is_eq(k, 1) || U32.is_eq(k, 5) || U32.is_eq(k, 6) || U32.is_eq(k, 7), a, 0)
     case C.Spend{k, a}:
       0
 
@@ -1353,6 +1455,8 @@ def act_msg(+a: C.Act, +o: C.Out) -> U32:
         sel(paid(o), 0, 2))
     case C.RideOp{r, op}:
       0
+    case C.ParkOp{+op}:
+      sel(U32.is_eq(op, 2), sel(paid(o), 8, 10), sel(U32.is_eq(op, 3), sel(paid(o), 9, 10), 0))
 
 def apply(+acts: +List<C.Act>, +p: C.Park, +msg: U32, +inc: U32) -> Res:
   match acts:
@@ -1694,13 +1798,13 @@ def crowd.go(+n: Nat, +id: U32, +t: U32, +acc: +List<C.Guest>) -> +List<C.Guest>
     case 0n:
       acc
     case 1n+k:
-      crowd.go(k, (id + 1 : U32), t, C.Guest.new(id, (t + id * 7 : U32)) <> acc)
+      crowd.go(k, (id + 1 : U32), t, C.Guest.new(id, (t + id * 7 : U32), 0) <> acc)
 
 def crowd(g: Game, +n: U32) -> Game:
   Game{p, ui, wm} = g
-  C.Park{map, guests, rides, track, cash, +time, +nid} = p
+  C.Park{map, guests, rides, track, cash, +time, +nid, fin} = p
   Game{C.Park{map, crowd.go(U32.to_nat(n), nid, time, guests), rides, track, cash, time,
-    (nid + n : U32)}, ui, wm}
+    (nid + n : U32), fin}, ui, wm}
 
 def warm(g: Game, +n: Nat) -> Game:
   Game{+p, +ui, wm} = g
@@ -1899,17 +2003,58 @@ def ui.report(g: Game) -> String:
   +r0 = C.Rides.get(C.Park.rides(p), 0)
   "windows " ++ U32.show(C.len32(Win, WM.wins(wm))) ++ ", carousel price " ++ U32.show(C.Ride.price(r0))
     ++ ", open " ++ U32.show(C.Ride.open_flag(r0)) ++ ", max wait " ++ U32.show(C.Ride.wmax(r0))
+    ++ ", fee " ++ U32.show(C.Fin.fee(C.Park.fin(p))) ++ ", loan " ++ U32.show(C.Fin.loan(C.Park.fin(p)))
+    ++ ", gold " ++ U32.show(C.Park.cash(p))
+
+# each stage: what it did, then the game after it
+def ui.s1(g: Game) -> Game:
+  ui.step(g, ui.click(398, 136, 0))
+
+def ui.s2(g: Game) -> Game:
+  ui.step(ui.step(g, ui.click(427, 136, 0)), ui.click(427, 136, 0))
+
+def ui.s3(g: Game) -> Game:
+  ui.step(ui.step(g, ui.click(318, 124, 0)), ui.click(427, 172, 0))
+
+def ui.s4(g: Game) -> Game:
+  ui.step(g, [Key{27, True{}}])
+
+# F opens the finances window at (140, 30): BORROW 1000 at (240, 146)
+def ui.s5(g: Game) -> Game:
+  ui.step(ui.step(g, [Key{102, True{}}]), ui.click(245, 150, 0))
+
+# the PARK button, then entry fee + twice at (150 + 124, 40 + 40)
+def ui.s6(g: Game) -> Game:
+  ui.step(ui.step(ui.step(g, ui.click(470, 297, 0)), ui.click(278, 84, 0)), ui.click(278, 84, 0))
+
+def ui.next(+k: U32, g: Game) -> Game:
+  match k:
+    case 1:
+      ui.s2(g)
+    case 2:
+      ui.s3(g)
+    case 3:
+      ui.s4(g)
+    case 4:
+      ui.s5(g)
+    case 5:
+      ui.s6(g)
+    case _:
+      g
+
+# stages: 1 inspect the carousel, 2 price + twice, 3 close it and max wait +,
+# 4 Esc, 5 F and borrow, 6 PARK and entry fee + twice
+def ui.run(+n: Nat, +k: U32, +g: Game) -> IO(Unit):
+  match n:
+    case 0n:
+      IO.pure(Unit, Unit{})
+    case 1n+m:
+      do IO<Unit>:
+        IO.print("after stage " ++ U32.show(k) ++ ": " ++ ui.report(g))
+        ui.run(m, (k + 1 : U32), ui.next(k, g))
 
 def ui.test() -> IO(Unit):
-  +g1 = ui.step(Game.new(), ui.click(398, 136, 0))
-  +g2 = ui.step(ui.step(g1, ui.click(427, 136, 0)), ui.click(427, 136, 0))
-  +g3 = ui.step(ui.step(g2, ui.click(318, 124, 0)), ui.click(427, 172, 0))
-  +g4 = ui.step(g3, [Key{27, True{}}])
-  do IO<Unit>:
-    IO.print("after inspect click: " ++ ui.report(g1))
-    IO.print("after price + twice: " ++ ui.report(g2))
-    IO.print("after close, max wait +: " ++ ui.report(g3))
-    IO.print("after Esc: " ++ ui.report(g4))
+  ui.run(6n, 1, ui.s1(Game.new()))
 
 def start.go(bench: Bool, +args: +List<String>) -> IO(Unit):
   match bench:

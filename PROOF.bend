@@ -147,7 +147,7 @@ def trains_rot(+xs: +List<C.Slot>)
 
 def Laws.money_conserved(p, a):
   match p:
-    case C.Park{map, guests, rides, track, cash, time, nid}:
+    case C.Park{map, guests, rides, track, cash, time, nid, fin}:
       match a:
         case C.Tick{}:
           {==}
@@ -156,6 +156,8 @@ def Laws.money_conserved(p, a):
         case C.TrackOp{op}:
           {==}
         case C.RideOp{ride, op}:
+          {==}
+        case C.ParkOp{op}:
           {==}
 
 # Headcount
@@ -228,11 +230,11 @@ def hc_tick(+arr: +List<C.Guest>, +g: +List<C.Guest>, +q: C.Q, +rs: +List<C.Ride
 
 def Laws.headcount_conserved(p, a):
   match p:
-    case C.Park{map, guests, rides, track, cash, time, nid}:
+    case C.Park{map, guests, rides, track, cash, time, nid, fin}:
       match a:
         case C.Tick{}:
           +sn = C.Track.stn(track)
-          hc_tick(C.Guests.arrivals(guests, rides, time, nid), guests, map, rides, time,
+          hc_tick(C.Guests.arrivals(guests, rides, time, nid, fin), guests, map, rides, time,
             C.Boards.plan(guests, C.Occ.table(guests, rides, sn), map, rides, sn, []), sn,
             C.Queue.list(guests, map, []))
         case C.Build{tool, x, y, v}:
@@ -240,6 +242,8 @@ def Laws.headcount_conserved(p, a):
         case C.TrackOp{op}:
           {==}
         case C.RideOp{ride, op}:
+          {==}
+        case C.ParkOp{op}:
           {==}
 
 # Needs
@@ -350,30 +354,32 @@ def all_step(+g: +List<C.Guest>, +q: C.Q, +rs: +List<C.Ride>, +t: U32,
         Laws.all_needs_ok(C.Guests.step(r, q, rs, t, pl, sn, qs)),
         ok_clamp(C.Guest.needs(C.Guest.move(x, q, rs, t, pl, sn, qs), t)), all_step(r, q, rs, t, pl, sn, qs))
 
-def all_arrive(+go: Bool, +id: U32, +t: U32)
-  -> {Laws.all_needs_ok(C.Guests.arrive(go, id, t)) == True{} : Bool}:
+def all_arrive(+go: Bool, +id: U32, +t: U32, +fee: U32)
+  -> {Laws.all_needs_ok(C.Guests.arrive(go, id, t, fee)) == True{} : Bool}:
   match go:
     case True{}:
-      and_i(Laws.needs_ok(C.Guest.new(id, t)), True{}, ok_clamp(C.Guest.raw(id, t)), {==})
+      and_i(Laws.needs_ok(C.Guest.new(id, t, fee)), True{}, ok_clamp(C.Guest.raw(id, t, fee)), {==})
     case False{}:
       {==}
 
 def Laws.needs_bounded(p, a, h):
   match p:
-    case C.Park{map, guests, rides, track, cash, time, nid}:
+    case C.Park{map, guests, rides, track, cash, time, nid, fin}:
       match a:
         case C.Tick{}:
           +sn = C.Track.stn(track)
           +pl = C.Boards.plan(guests, C.Occ.table(guests, rides, sn), map, rides, sn, [])
           +m = C.Guests.step(guests, map, rides, time, pl, sn, C.Queue.list(guests, map, []))
-          all_app(C.Guests.arrivals(guests, rides, time, nid), C.Guests.stay(m),
-            all_arrive(C.Guests.come(guests, rides, time), nid, time),
+          all_app(C.Guests.arrivals(guests, rides, time, nid, fin), C.Guests.stay(m),
+            all_arrive(C.Guests.come(guests, rides, time, fin), nid, time, U32.min(C.Fin.fee(fin), 40)),
             all_stay(m, all_step(guests, map, rides, time, pl, sn, C.Queue.list(guests, map, []))))
         case C.Build{tool, x, y, v}:
           h
         case C.TrackOp{op}:
           h
         case C.RideOp{ride, op}:
+          h
+        case C.ParkOp{op}:
           h
 
 # The coaster runs only on a closed circuit
@@ -439,7 +445,7 @@ def circ_op(+t: C.Track, +op: U32, +ok: Bool, h: {Laws.circuit_ok(t) == True{} :
 
 def Laws.coaster_on_circuit(p, a, h):
   match p:
-    case C.Park{map, guests, rides, track, cash, time, nid}:
+    case C.Park{map, guests, rides, track, cash, time, nid, fin}:
       match a:
         case C.Tick{}:
           circ_tick(track, h)
@@ -448,6 +454,8 @@ def Laws.coaster_on_circuit(p, a, h):
         case C.TrackOp{op}:
           circ_op(track, op, C.TrackOp.ok(map, track, cash, op), h)
         case C.RideOp{ride, op}:
+          h
+        case C.ParkOp{op}:
           h
 
 def Laws.no_collisions(blocks, pieces):
@@ -592,16 +600,46 @@ def rt_track(+t: C.Track, +rest: List<&2, U32>, +st: List<&2, S.Item>)
             case C.Pose{ex, ey, ez, ed}:
               rt_track_go(ps, open, ss, sx, sy, sz, sd, ex, ey, ez, ed, rest, st)
 
+def rt_w(+w: U32, +rest: List<&2, U32>, +more: List<&2, U32>, +st: List<&2, S.Item>)
+  -> {S.dec(16 <> w <> rest, S.IW{more} <> st) == S.dec(rest, S.IW{w <> more} <> st) : List<&2, S.Item>}:
+  {==}
+
+def rt_ws(+xs: List<&2, U32>, +rest: List<&2, U32>, +st: List<&2, S.Item>)
+  -> {S.dec(S.Enc.ws(xs, rest), st) == S.dec(rest, S.IW{xs} <> st) : List<&2, S.Item>}:
+  match xs:
+    case []:
+      {==}
+    case x <> more:
+      +lhs = S.dec(S.Enc.ws(x <> more, rest), st)
+      %rt_w(x, rest, more, st) : {lhs == _ : List<&2, S.Item>}
+      %rt_ws(more, 16 <> x <> rest, st) : {lhs == _ : List<&2, S.Item>}
+      {==}
+
+def rt_fin(+f: C.Fin, +rest: List<&2, U32>, +st: List<&2, S.Item>)
+  -> {S.dec(S.Enc.fin(f, rest), st) == S.dec(rest, S.IF{f} <> st) : List<&2, S.Item>}:
+  match f:
+    case C.Fin{fee, loan, rating, now, last, hist}:
+      +r14 = {14 <> fee <> loan <> rating <> rest : List<&2, U32>}
+      +rh = S.Enc.ws(hist, r14)
+      +rl = S.Enc.ws(last, rh)
+      +lhs = S.dec(S.Enc.fin(C.Fin{fee, loan, rating, now, last, hist}, rest), st)
+      %rt_ws(hist, r14, S.IW{last} <> S.IW{now} <> st) : {lhs == _ : List<&2, S.Item>}
+      %rt_ws(last, rh, S.IW{now} <> st) : {lhs == _ : List<&2, S.Item>}
+      %rt_ws(now, rl, st) : {lhs == _ : List<&2, S.Item>}
+      {==}
+
 def rt_park(+p: C.Park, +rest: List<&2, U32>, +st: List<&2, S.Item>)
   -> {S.dec(S.Enc.park(p, rest), st) == S.dec(rest, S.IK{p} <> st) : List<&2, S.Item>}:
   match p:
-    case C.Park{q, gs, rs, t, cash, time, nid}:
+    case C.Park{q, gs, rs, t, cash, time, nid, fin}:
       +r13 = {13 <> cash <> time <> nid <> rest : List<&2, U32>}
-      +rt = S.Enc.track(t, r13)
+      +rf = S.Enc.fin(fin, r13)
+      +rt = S.Enc.track(t, rf)
       +rr = S.Enc.rs(rs, rt)
       +rg = S.Enc.gs(gs, rr)
-      +lhs = S.dec(S.Enc.park(C.Park{q, gs, rs, t, cash, time, nid}, rest), st)
-      %rt_track(t, r13, S.IR{rs} <> S.IG{gs} <> S.IQ{q} <> st) : {lhs == _ : List<&2, S.Item>}
+      +lhs = S.dec(S.Enc.park(C.Park{q, gs, rs, t, cash, time, nid, fin}, rest), st)
+      %rt_fin(fin, r13, S.IT{t} <> S.IR{rs} <> S.IG{gs} <> S.IQ{q} <> st) : {lhs == _ : List<&2, S.Item>}
+      %rt_track(t, rf, S.IR{rs} <> S.IG{gs} <> S.IQ{q} <> st) : {lhs == _ : List<&2, S.Item>}
       %rt_rs(rs, rt, S.IG{gs} <> S.IQ{q} <> st) : {lhs == _ : List<&2, S.Item>}
       %rt_gs(gs, rr, S.IQ{q} <> st) : {lhs == _ : List<&2, S.Item>}
       %rt_q(q, rg, st) : {lhs == _ : List<&2, S.Item>}

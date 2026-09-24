@@ -575,14 +575,16 @@ def Guest.gone(g: Guest) -> Bool:
   Guest{id, x, y, dir, st, tgt, tmr, cash, hu, th, en, na, ha, lk} = g
   U32.is_eq(st, 3)
 
-def Guest.raw(+id: U32, +t: U32) -> Guest:
+# a new adventurer, their gold already less the entry fee (at most 40, and
+# everyone brings at least 40)
+def Guest.raw(+id: U32, +t: U32, +fee: U32) -> Guest:
   +r = hash(id, t)
   Guest{id, (GATE_X() * 16 + 8 : U32), (GATE_Y() * 16 + 8 : U32),
-    3, 0, NONE(), 0, (40 + (r .&. 127) : U32), (r >> 7n .&. 63 : U32),
+    3, 0, NONE(), 0, (40 + (r .&. 127) - U32.min(fee, 40) : U32), (r >> 7n .&. 63 : U32),
     (r >> 13n .&. 63 : U32), (190 + (r >> 19n .&. 63) : U32), 0, 200, (r .&. 1023 : U32)}
 
-def Guest.new(+id: U32, +t: U32) -> Guest:
-  Guest.clamp(Guest.raw(id, t))
+def Guest.new(+id: U32, +t: U32, +fee: U32) -> Guest:
+  Guest.clamp(Guest.raw(id, t, fee))
 
 def dx_of(+d: U32) -> U32:
   match d:
@@ -1350,10 +1352,10 @@ def Guests.left(+gs: +List<Guest>) -> +List<Guest>:
     case g <> rest:
       Guests.put(Guest.gone(g), g, Guests.left(rest))
 
-def Guests.arrive(go: Bool, +id: U32, +t: U32) -> +List<Guest>:
+def Guests.arrive(go: Bool, +id: U32, +t: U32, +fee: U32) -> +List<Guest>:
   match go:
     case True{}:
-      [Guest.new(id, t)]
+      [Guest.new(id, t, fee)]
     case False{}:
       []
 
@@ -1364,15 +1366,30 @@ def Rides.attractions(+rs: +List<Ride>) -> U32:
     case r <> rest:
       (sel(Ride.is_open(r), 1, 0) + Rides.attractions(rest) : U32)
 
-# a new adventurer comes through the gate now and then; more rides draw more
-def Guests.come(+gs: +List<Guest>, +rs: +List<Ride>, +t: U32) -> Bool:
-  +rate = U32.min((2 + Rides.attractions(rs) * 3 : U32), 24)
+# a new adventurer comes through the gate now and then: more rides and a
+# better park rating draw more, a steep entry fee fewer
+type Fin is Data:
+  Fin{fee: U32, loan: U32, rating: U32, now: List<&2, U32>, last: List<&2, U32>,
+    hist: List<&2, U32>}
+
+def Fin.fee(f: Fin) -> U32:
+  Fin{fee, loan, rating, now, last, hist} = f
+  fee
+
+def Fin.rating(f: Fin) -> U32:
+  Fin{fee, loan, rating, now, last, hist} = f
+  rating
+
+def Guests.come(+gs: +List<Guest>, +rs: +List<Ride>, +t: U32, +f: Fin) -> Bool:
+  +base = U32.min((2 + Rides.attractions(rs) * 3 : U32), 24)
+  +fee = Fin.fee(f)
+  +rate = sub0((base * (200 + Fin.rating(f)) / 800 : U32), (fee * fee / 16 : U32))
   +roll = (hash(t, 77) .&. 255 : U32)
   (roll < rate : U32) && (len32(Guest, gs) < 700 : U32)
 
-def Guests.arrivals(+gs: +List<Guest>, +rs: +List<Ride>, +t: U32, +nid: U32)
+def Guests.arrivals(+gs: +List<Guest>, +rs: +List<Ride>, +t: U32, +nid: U32, +f: Fin)
   -> +List<Guest>:
-  Guests.arrive(Guests.come(gs, rs, t), nid, t)
+  Guests.arrive(Guests.come(gs, rs, t, f), nid, t, U32.min(Fin.fee(f), 40))
 
 # Rides each tick: doors, queue lengths, the cycle, and the tallies
 # -----------------------------------------------------------------
@@ -1464,7 +1481,8 @@ def Ride.rating(+k: U32, +ps: +List<Piece>) -> U32:
 
 # Money: every change to the park's gold is a ledger entry
 # ---------------------------------------------------------
-# kind: 1 ride tickets and shop sales, 2 upkeep, 3 construction, 4 refunds
+# kind: 1 ride tickets, 2 upkeep, 3 construction, 4 refunds, 5 food, 6 drinks,
+# 7 entry fees, 8 loans taken, 9 loans repaid, 10 loan interest
 
 def Ride.tick(r: Ride, +idx: U32, +q: Q, +ps: +List<Piece>, +occ: +List<U32>,
   +plan: +List<Board>, +qt: +List<U32>) -> Ride:
@@ -1513,13 +1531,24 @@ def Ledger.put(keep: Bool, t: Txn, +xs: +List<Txn>) -> +List<Txn>:
     case False{}:
       xs
 
+# what a sale counts as: the tavern sells food, the potion stall drinks
+def Ride.cat(+k: U32) -> U32:
+  match k:
+    case 3:
+      6
+    case 4:
+      5
+    case _:
+      1
+
 def Ledger.sales(+gs: +List<Guest>, +rs: +List<Ride>, +plan: +List<Board>)
   -> +List<Txn>:
   match gs:
     case []:
       []
     case g <> rest:
-      Ledger.put(Boards.has(plan, Guest.id(g)), Gain{1, Guest.fee(g, rs)},
+      Ledger.put(Boards.has(plan, Guest.id(g)),
+        Gain{Ride.cat(Ride.kind(Rides.get(rs, Guest.tgt(g)))), Guest.fee(g, rs)},
         Ledger.sales(rest, rs, plan))
 
 def Ledger.upkeep(+rs: +List<Ride>) -> +List<Txn>:
@@ -1534,11 +1563,110 @@ def Ledger.upkeep(+rs: +List<Ride>) -> +List<Txn>:
 def MONTH() -> U32:
   3600
 
-def Ledger.tick(+gs: +List<Guest>, +rs: +List<Ride>, +t: U32, +plan: +List<Board>)
-  -> +List<Txn>:
+# a tick's gold: sales, the arrivals' entry fees, and each month the rides'
+# upkeep and the loan's interest (1/80 of it)
+def Fin.loan(f: Fin) -> U32:
+  Fin{fee, loan, rating, now, last, hist} = f
+  loan
+
+def Ledger.tick(+gs: +List<Guest>, +rs: +List<Ride>, +t: U32, +plan: +List<Board>,
+  +narr: U32, +f: Fin) -> +List<Txn>:
   +monthly = U32.is_eq((t % MONTH() : U32), 0) && (t > 0 : U32)
-  List.append(&2, Txn, Ledger.sales(gs, rs, plan),
-    Bool.pick(+List<Txn>, monthly, Ledger.upkeep(rs), []))
+  +fees = (narr * U32.min(Fin.fee(f), 40) : U32)
+  +interest = (Fin.loan(f) / 80 : U32)
+  Ledger.put(Bool.not(U32.is_eq(fees, 0)), Gain{7, fees},
+    List.append(&2, Txn, Ledger.sales(gs, rs, plan),
+      Bool.pick(+List<Txn>, monthly,
+        Ledger.put(Bool.not(U32.is_eq(interest, 0)), Spend{10, interest}, Ledger.upkeep(rs)), [])))
+
+# The books: every ledger entry is added to this month's column
+def Txn.book(t: Txn, +tab: +List<U32>) -> +List<U32>:
+  match t:
+    case Gain{+k, +a}:
+      Tab.add(tab, (k - 1 : U32), a)
+    case Spend{+k, +a}:
+      Tab.add(tab, (k - 1 : U32), a)
+
+def Fin.book_all(+xs: +List<Txn>, +tab: +List<U32>) -> +List<U32>:
+  match xs:
+    case []:
+      tab
+    case t <> rest:
+      Fin.book_all(rest, Txn.book(t, tab))
+
+def Fin.book(f: Fin, +xs: +List<Txn>) -> Fin:
+  Fin{fee, loan, rating, +now, last, hist} = f
+  Fin{fee, loan, rating, Fin.book_all(xs, now), last, hist}
+
+# The park rating: happy guests and open rides raise it, queasy guests lower
+# it (worked out every 64 ticks)
+def Guests.happy_sum(+gs: +List<Guest>, +acc: U32) -> U32:
+  match gs:
+    case []:
+      acc
+    case g <> rest:
+      Guest{id, x, y, dir, st, tgt, tmr, cash, hu, th, en, na, +ha, lk} = g
+      Guests.happy_sum(rest, (acc + ha : U32))
+
+def Guests.sick_sum(+gs: +List<Guest>, +acc: U32) -> U32:
+  match gs:
+    case []:
+      acc
+    case g <> rest:
+      Guest{id, x, y, dir, st, tgt, tmr, cash, hu, th, en, +na, ha, lk} = g
+      Guests.sick_sum(rest, (acc + na : U32))
+
+def Park.rate(+gs: +List<Guest>, +rs: +List<Ride>) -> U32:
+  +n = len32(Guest, gs)
+  +happy = sel(U32.is_eq(n, 0), 200, (Guests.happy_sum(gs, 0) / U32.max(n, 1) : U32))
+  +sick = sel(U32.is_eq(n, 0), 0, (Guests.sick_sum(gs, 0) / U32.max(n, 1) : U32))
+  U32.min(sub0((150 + happy * 2 + U32.min((Rides.attractions(rs) * 30 : U32), 240) : U32), sick), 999)
+
+def Park.rate_if(now: Bool, +gs: +List<Guest>, +rs: +List<Ride>, +old: U32) -> U32:
+  match now:
+    case True{}:
+      Park.rate(gs, rs)
+    case False{}:
+      old
+
+def Wins32.take(+n: Nat, +xs: +List<U32>) -> +List<U32>:
+  match n xs:
+    case 0n _:
+      []
+    case 1n+m Con{x, rest}:
+      x <> Wins32.take(m, rest)
+    case 1n+m Nil{}:
+      []
+
+def Fin.fresh(month: Bool, +now: +List<U32>) -> +List<U32>:
+  match month:
+    case True{}:
+      Tab.zero(10, [])
+    case False{}:
+      now
+
+def Fin.roll(month: Bool, +now: +List<U32>, +last: +List<U32>) -> +List<U32>:
+  match month:
+    case True{}:
+      now
+    case False{}:
+      last
+
+def Fin.sample(go: Bool, +gs: +List<Guest>, +hist: +List<U32>) -> +List<U32>:
+  match go:
+    case True{}:
+      Wins32.take(32n, len32(Guest, gs) <> hist)
+    case False{}:
+      hist
+
+# each tick: the rating now and then, the guest count sampled, and at a
+# month's turn this month's column becomes last month's
+def Fin.tick(f: Fin, +t: U32, +gs: +List<Guest>, +rs: +List<Ride>) -> Fin:
+  Fin{fee, loan, +rating, +now, +last, +hist} = f
+  +month = U32.is_eq((t % MONTH() : U32), 0) && (t > 0 : U32)
+  +sample = U32.is_eq((t % 450 : U32), 0)
+  Fin{fee, loan, Park.rate_if(U32.is_eq((t .&. 63 : U32), 0), gs, rs, rating),
+    Fin.fresh(month, now), Fin.roll(month, now, last), Fin.sample(sample, gs, hist)}
 
 # The Wyrm Coaster: track pieces and block sections
 # -------------------------------------------------
@@ -1714,15 +1842,35 @@ def Track.tick(t: Track) -> Track:
 # The park
 # --------
 
+# The park's books and standing: fee: the entry fee; loan: gold owed;
+# rating: the park rating (0..999); now, last: this month's and last month's
+# gold by ledger kind (index kind - 1); hist: the guest count, sampled eight
+# times a month, newest first (32 samples)
+def Fin.new() -> Fin:
+  Fin{0, 0, 600, Tab.zero(10, []), Tab.zero(10, []), []}
+
+def Fin.now(f: Fin) -> +List<U32>:
+  Fin{fee, loan, rating, now, last, hist} = f
+  now
+
+def Fin.last(f: Fin) -> +List<U32>:
+  Fin{fee, loan, rating, now, last, hist} = f
+  last
+
+def Fin.hist(f: Fin) -> +List<U32>:
+  Fin{fee, loan, rating, now, last, hist} = f
+  hist
+
 type Park is Data:
   Park{map: Q, guests: List<&2, Guest>, rides: List<&2, Ride>, track: Track,
-    cash: U32, time: U32, nid: U32}
+    cash: U32, time: U32, nid: U32, fin: Fin}
 
 type Act is Data:
   Tick{}
   Build{tool: U32, x: U32, y: U32, v: U32}
   TrackOp{op: U32}
   RideOp{ride: U32, op: U32}
+  ParkOp{op: U32}
 
 type Out is Data:
   Out{park: Park, ledger: List<&2, Txn>, arrived: List<&2, Guest>,
@@ -1733,17 +1881,17 @@ def Track.pieces(t: Track) -> +List<Piece>:
   pieces
 
 def Park.tick(p: Park) -> Out:
-  Park{+map, +guests, +rides, +track, cash, +time, +nid} = p
+  Park{+map, +guests, +rides, +track, cash, +time, +nid, +fin} = p
   +stn = Track.stn(track)
   +occ = Occ.table(guests, rides, stn)
   +plan = Boards.plan(guests, occ, map, rides, stn, [])
   +moved = Guests.step(guests, map, rides, time, plan, stn, Queue.list(guests, map, []))
-  +arr = Guests.arrivals(guests, rides, time, nid)
-  +led = Ledger.tick(guests, rides, time, plan)
+  +arr = Guests.arrivals(guests, rides, time, nid, fin)
+  +led = Ledger.tick(guests, rides, time, plan, len32(Guest, arr), fin)
   Out{Park{map, List.append(&2, Guest, arr, Guests.stay(moved)),
     Rides.tick(rides, 0, map, Track.pieces(track), occ, plan, Qlen.fill(guests, map, Tab.zero(len32(Ride, rides), []))),
     Track.tick(track), Ledger.apply(led, cash), (time + 1 : U32),
-    (nid + len32(Guest, arr) : U32)}, led, arr, Guests.left(moved)}
+    (nid + len32(Guest, arr) : U32), Fin.tick(fin, time, guests, rides)}, led, arr, Guests.left(moved)}
 
 # Building
 # --------
@@ -1936,12 +2084,12 @@ def Build.track(ok: Bool, +q: Q, +trk: Track, +tool: U32, +x: U32, +y: U32,
       trk
 
 def Park.build(p: Park, +tool: U32, +x: U32, +y: U32, +v: U32) -> Out:
-  Park{+map, guests, +rides, +track, +cash, +time, nid} = p
+  Park{+map, guests, +rides, +track, +cash, +time, nid, fin} = p
   +ok = Build.ok(map, track, cash, tool, x, y)
   +led = Build.ledger(ok, map, rides, tool, x, y)
   Out{Park{Build.map(ok, map, rides, tool, x, y, v), guests,
     Build.rides(ok, map, rides, tool, x, y, time), Build.track(ok, map, track, tool,
-    x, y, v), Ledger.apply(led, cash), time, nid}, led, [], []}
+    x, y, v), Ledger.apply(led, cash), time, nid, fin}, led, [], []}
 
 # Coaster track editing
 # ---------------------
@@ -2066,13 +2214,13 @@ def Rides.coaster(+rs: +List<Ride>, +open: U32) -> +List<Ride>:
         <> Rides.coaster(rest, open)
 
 def Park.track_op(p: Park, +op: U32) -> Out:
-  Park{+map, guests, +rides, +track, +cash, time, nid} = p
+  Park{+map, guests, +rides, +track, +cash, time, nid, fin} = p
   +ok = TrackOp.ok(map, track, cash, op)
   +led = TrackOp.ledger(ok, op)
   +trk2 = Track.op(track, op, ok)
   Out{Park{TrackOp.map(ok, map, track, op), guests,
     Rides.coaster(rides, sel(Track.open(trk2), 1, 0)), trk2,
-    Ledger.apply(led, cash), time, nid}, led, [], []}
+    Ledger.apply(led, cash), time, nid, fin}, led, [], []}
 
 # Ride settings (the ride window)
 # -------------------------------
@@ -2101,11 +2249,35 @@ def Rides.set(+rs: +List<Ride>, +i: U32, +op: U32) -> +List<Ride>:
       Bool.pick(Ride, U32.is_eq(i, 0), Ride.set(r, op), r) <> Rides.set(rest, (i - 1 : U32), op)
 
 def Park.ride_op(p: Park, +ride: U32, +op: U32) -> Out:
-  Park{map, guests, +rides, track, cash, time, nid} = p
-  Out{Park{map, guests, Rides.set(rides, ride, op), track, cash, time, nid}, [], [], []}
+  Park{map, guests, +rides, track, cash, time, nid, fin} = p
+  Out{Park{map, guests, Rides.set(rides, ride, op), track, cash, time, nid, fin}, [], [], []}
 
-# the one door every change comes through
-def Park.step(p: Park, a: Act) -> Out:
+# Park settings (the park and finances windows)
+# ---------------------------------------------
+# op 0, 1: entry fee up, down (0..40); 2: borrow 1000 gold (owing at most
+# 20000); 3: repay 1000 (with the gold in hand)
+
+def Fin.set(f: Fin, +op: U32, +borrow: Bool, +repay: Bool) -> Fin:
+  Fin{+fee, +loan, rating, now, last, hist} = f
+  Fin{sel(U32.is_eq(op, 0), U32.min((fee + 1 : U32), 40), sel(U32.is_eq(op, 1), sub0(fee, 1), fee)),
+    sel(borrow, (loan + 1000 : U32), sel(repay, (loan - 1000 : U32), loan)), rating, now, last, hist}
+
+def Park.park_op(p: Park, +op: U32) -> Out:
+  Park{map, guests, rides, track, +cash, time, nid, +fin} = p
+  +loan = Fin.loan(fin)
+  +borrow = U32.is_eq(op, 2) && (loan + 1000 <= 20000 : U32)
+  +repay = U32.is_eq(op, 3) && (loan >= 1000 : U32) && Bool.not(neg(cash)) && (cash >= 1000 : U32)
+  +led = Bool.pick(+List<Txn>, borrow, [Gain{8, 1000}], Bool.pick(+List<Txn>, repay, [Spend{9, 1000}], []))
+  Out{Park{map, guests, rides, track, Ledger.apply(led, cash), time, nid, Fin.set(fin, op, borrow, repay)},
+    led, [], []}
+
+# every step's ledger goes into the books
+def Out.book(o: Out) -> Out:
+  Out{p, +l, ar, de} = o
+  Park{map, guests, rides, track, cash, time, nid, fin} = p
+  Out{Park{map, guests, rides, track, cash, time, nid, Fin.book(fin, l)}, l, ar, de}
+
+def Park.step0(p: Park, a: Act) -> Out:
   match a:
     case Tick{}:
       Park.tick(p)
@@ -2115,9 +2287,15 @@ def Park.step(p: Park, a: Act) -> Out:
       Park.track_op(p, op)
     case RideOp{ride, op}:
       Park.ride_op(p, ride, op)
+    case ParkOp{op}:
+      Park.park_op(p, op)
+
+# the one door every change comes through
+def Park.step(p: Park, a: Act) -> Out:
+  Out.book(Park.step0(p, a))
 
 def Park.new() -> Park:
-  Park{Q.build(6n, 0, 0), [], [], Track.empty(), 30000, 0, 1}
+  Park{Q.build(6n, 0, 0), [], [], Track.empty(), 30000, 0, 1, Fin.new()}
 
 def Out.park(o: Out) -> Park:
   Out{p, l, ar, de} = o
@@ -2143,25 +2321,29 @@ def Park.run(acts: List<Act>, +p: Park) -> Park:
       Park.run(rest, Out.park(Park.step(p, a)))
 
 def Park.map(p: Park) -> Q:
-  Park{map, guests, rides, track, cash, time, nid} = p
+  Park{map, guests, rides, track, cash, time, nid, fin} = p
   map
 
 def Park.guests(p: Park) -> +List<Guest>:
-  Park{map, guests, rides, track, cash, time, nid} = p
+  Park{map, guests, rides, track, cash, time, nid, fin} = p
   guests
 
 def Park.track(p: Park) -> Track:
-  Park{map, guests, rides, track, cash, time, nid} = p
+  Park{map, guests, rides, track, cash, time, nid, fin} = p
   track
 
 def Park.cash(p: Park) -> U32:
-  Park{map, guests, rides, track, cash, time, nid} = p
+  Park{map, guests, rides, track, cash, time, nid, fin} = p
   cash
 
 def Park.time(p: Park) -> U32:
-  Park{map, guests, rides, track, cash, time, nid} = p
+  Park{map, guests, rides, track, cash, time, nid, fin} = p
   time
 
 def Park.rides(p: Park) -> +List<Ride>:
-  Park{map, guests, rides, track, cash, time, nid} = p
+  Park{map, guests, rides, track, cash, time, nid, fin} = p
   rides
+
+def Park.fin(p: Park) -> Fin:
+  Park{map, guests, rides, track, cash, time, nid, fin} = p
+  fin

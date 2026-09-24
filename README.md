@@ -39,6 +39,7 @@ Dev modes:
 | Click / drag | Use the tool on a tile (or pick a tool in the bar) |
 | I | Inspect tool (the default): click a ride to open its window |
 | Right-click | Open a ride's window, whatever the tool |
+| P / F | The park window / the finances window (or the PARK and FINANCES buttons) |
 | 1 - 9, 0 | Path, raise land, lower land (to water), enchanted tree, Dragon Carousel, Arcane Spire, Potion Stall, Troll Tavern, demolish, Wyrm Coaster |
 | U | Queue line (12 gold a tile) |
 | R | Next tree kind (oak, moonpine, glowcap, crystal) / coaster direction |
@@ -73,6 +74,14 @@ spire and worked out from the track for the coaster (turns, drops, height,
 length). Guests prefer exciting rides, skip rides wilder than they like
 (each adventurer has their own taste), enjoy a ride by its excitement, and
 come off queasy by its nausea. Drag windows by their title bar; up to four stay open.
+
+The park window shows the park rating, guests and their happiness, the entry
+fee (0-40 gold, paid at the gate; a steep fee turns guests away, a good
+rating draws them), and the guest count over the last four months. The
+finances window shows this month and last month by category (ride tickets,
+food, drinks, entry fees, upkeep, construction, refunds, loan interest) and
+the profit, and borrows or repays 1000 gold at a time (interest: 1/80 of the
+loan a month, owing at most 20000).
 
 Coaster tool (0): `Enter` opens or closes the coaster; while closed, `W`
 ahead, `A`/`D` turn, `Q` up, `Z` down, `L` lift hill, `Backspace` removes the

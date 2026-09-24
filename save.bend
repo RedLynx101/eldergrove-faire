@@ -18,6 +18,8 @@ type Item is Data:
   IS{ss: List<&2, C.Slot>}
   IT{t: C.Track}
   IK{p: C.Park}
+  IW{ws: List<&2, U32>}
+  IF{f: C.Fin}
   IBad{}
 
 def b2u(b: Bool) -> U32:
@@ -97,10 +99,21 @@ def Enc.track(t: C.Track, rest: List<&2, U32>) -> List<&2, U32>:
   Enc.ps(ps, Enc.ss(ss, 12 <> b2u(open) <> sx <> sy <> sz <> sd <> ex <> ey
     <> ez <> ed <> rest))
 
+def Enc.ws(ws: List<&2, U32>, rest: List<&2, U32>) -> List<&2, U32>:
+  match ws:
+    case []:
+      15 <> rest
+    case w <> more:
+      Enc.ws(more, 16 <> w <> rest)
+
+def Enc.fin(f: C.Fin, rest: List<&2, U32>) -> List<&2, U32>:
+  C.Fin{fee, loan, rating, now, last, hist} = f
+  Enc.ws(now, Enc.ws(last, Enc.ws(hist, 14 <> fee <> loan <> rating <> rest)))
+
 def Enc.park(p: C.Park, rest: List<&2, U32>) -> List<&2, U32>:
-  C.Park{map, guests, rides, track, cash, time, nid} = p
-  Enc.q(map, Enc.gs(guests, Enc.rs(rides, Enc.track(track, 13 <> cash <> time
-    <> nid <> rest))))
+  C.Park{map, guests, rides, track, cash, time, nid, fin} = p
+  Enc.q(map, Enc.gs(guests, Enc.rs(rides, Enc.track(track, Enc.fin(fin, 13 <> cash <> time
+    <> nid <> rest)))))
 
 def save(p: C.Park) -> List<&2, U32>:
   Enc.park(p, [])
@@ -151,11 +164,25 @@ def Pop.track(o: Bool, s: C.Pose, e: C.Pose, st: List<&2, Item>)
     case _:
       [IBad{}]
 
+def Pop.w(w: U32, st: List<&2, Item>) -> List<&2, Item>:
+  match st:
+    case IW{ws} <> more:
+      IW{w <> ws} <> more
+    case _:
+      [IBad{}]
+
+def Pop.fin(fee: U32, loan: U32, rating: U32, st: List<&2, Item>) -> List<&2, Item>:
+  match st:
+    case IW{hist} <> IW{last} <> IW{now} <> more:
+      IF{C.Fin{fee, loan, rating, now, last, hist}} <> more
+    case _:
+      [IBad{}]
+
 def Pop.park(cash: U32, time: U32, nid: U32, st: List<&2, Item>)
   -> List<&2, Item>:
   match st:
-    case IT{t} <> IR{rs} <> IG{gs} <> IQ{q} <> more:
-      IK{C.Park{q, gs, rs, t, cash, time, nid}} <> more
+    case IF{f} <> IT{t} <> IR{rs} <> IG{gs} <> IQ{q} <> more:
+      IK{C.Park{q, gs, rs, t, cash, time, nid, f}} <> more
     case _:
       [IBad{}]
 
@@ -192,6 +219,12 @@ def dec(ws: List<&2, U32>, st: List<&2, Item>) -> List<&2, Item>:
         st))
     case 13 <> cash <> time <> nid <> rest:
       dec(rest, Pop.park(cash, time, nid, st))
+    case 14 <> fee <> loan <> rating <> rest:
+      dec(rest, Pop.fin(fee, loan, rating, st))
+    case 15 <> rest:
+      dec(rest, IW{[]} <> st)
+    case 16 <> w <> rest:
+      dec(rest, Pop.w(w, st))
     case _:
       [IBad{}]
 
@@ -209,7 +242,7 @@ def load(ws: List<&2, U32>) -> Maybe<&2, C.Park>:
 # ---------------------------------------------------------
 
 def MAGIC() -> U32:
-  859981637
+  876758853
 
 def to_bytes(ws: List<&2, U32>) -> List<&2, U32>:
   match ws:
