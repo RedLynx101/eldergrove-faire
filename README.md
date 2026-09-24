@@ -30,10 +30,13 @@ Dev modes:
 - `./park --uitest` clicks through a ride window headlessly and reports what changed.
 - `./park --people out.ppm` draws every folk and outfit on one sheet.
 - `./park --rides out.ppm T` draws the M6 rides T ticks into a run, every seat taken.
+- `./park --pieces out.ppm` draws every coaster track piece in its four headings.
 - `./park --scen K MONTHS` plays scenario K (0 sandbox, 1-3) a month at a time and reports it.
 - `./park --wav out.wav SECONDS` records the music with every effect in turn;
   `python3 tools/wavcheck.py out.wav out.png` prints its levels and draws it. `PARK_MUTE=1` plays nothing.
 - `--shot` takes an optional 6th argument, a window to show (kind * 256 + ride; 256 is the carousel's), and a 7th, the zoom (0 normal, 1 close, 2 far).
+  Window kind 8 (construction) adds an unfinished second coaster to picture; piece * 4096 added to it
+  picks the piece previewed.
 - Environment: `PARK_OPT=n` starts with options n (bits: 0-1 window size, 2 whole pixels, 3 dynamic
   resolution off), `PARK_PROF=1` prints frame timings, `PARK_NOPACE=1` removes the 60 Hz cap,
   `PARK_DUMP=out.ppm` writes the 300th shown frame. `tools/prof.sh ./park ...` profiles with perf.
@@ -165,10 +168,15 @@ The crowd: wizards, knights, elves, dwarves, halflings, gnomes, orcs and
 commoners, some bearded or in straw hats; nobles in capes, merchants with
 packs, pilgrims with staffs; and children, who keep to the gentler rides.
 
-Coaster tool (key 4, third tool): `Enter` opens or closes the coaster; while closed, `T`
-ahead, `G`/`H` turn, `Y` up, `B` down, `L` lift hill, `Backspace` removes the
-last piece (WASD always moves the camera). It opens only once the track closes back on its station. One
-coaster per park for now (the Wyrm Coaster comes pre-built).
+Coasters (thrill rides tab): click to place a station and its construction window opens. Its buttons
+lay the next piece; hovering one shows it as a ghost at the end of the track, green where it fits and
+red where it doesn't, with its cost and the height it ends at. Each button has a key: `T` straight,
+`G`/`H` turn left/right, `Q`/`E` banked turn left/right, `Y`/`B` gentle up/down, `C`/`V` steep up/down,
+`L` lift hill, `J` brakes, `Z` another station platform, `Backspace` takes the last piece off (half its
+price back). WASD always moves the camera. The window says how far the track's end is from the station.
+A coaster opens from its ride window, and only once its track closes back on its station; its track
+can be changed only while it is closed (the ride window's BUILD button reopens the construction
+window). A park holds up to 8 coasters; the Wyrm Coaster comes pre-built.
 
 ## Files
 
@@ -190,7 +198,7 @@ coaster per park for now (the Wyrm Coaster comes pre-built).
 1. **money_conserved**: after any step the park's gold is its gold before with that step's ledger applied.
 2. **headcount_conserved**: guests after + guests who left = guests before + guests who arrived.
 3. **needs_bounded**: every guest's hunger, thirst, energy, nausea and happiness stay within 0..255.
-4. **coaster_on_circuit**: an open coaster's track always closes back on its station.
+4. **coaster_on_circuit**: every open coaster's track closes back on its station.
 5. **no_collisions**: a block holds at most one train, and the block signals never lose or duplicate one.
 6. **save_load_roundtrip**: loading a save gives back exactly the park that was saved.
 7. **capacity_respected**: the boarding plan (the only way anyone gets a seat) never seats a guest at or past their ride's seat count.

@@ -173,6 +173,18 @@ Small design decisions made while working, listed here so they can be revisited.
   train, so two coasters never show each other's passengers.
 - **Opening an unfinished track does nothing.** Before, it placed trains on a track that was not a closed
   circuit while leaving the ride shut; now the track stays empty until the circuit closes.
+- **Steep slopes face the camera or run along the view.** In this projection a slope that climbs two
+  levels in one tile, heading away from the camera, is seen exactly edge-on, so it draws as a rail over a
+  band of timber; heading toward the camera it draws as a full ladder of track. Physics and testing
+  treat all four the same.
+- **Piece buttons build straight away.** Hovering a button previews that piece as the ghost; a click or
+  its key builds it (RCT2 has a separate build button; one click fewer here, and undo is one key).
+  Buttons for pieces that won't fit turn brown, so you see what's possible before trying.
+- **Piece prices:** straight 30, gentle slopes and flat turns 40, brakes and banked turns 50, steep slopes,
+  lift hill and station 60; taking a piece off gives half back. The track keys work while a construction
+  window is open (the front-most one), not with the coaster tool.
+- **Stations only extend the platform:** a station piece can only follow another station piece.
+- **The highest track is level 12**, so nothing is ever left with no piece that fits above it.
 
 ## Done: M1, the vertical slice
 Isometric fantasy map, paths, terrain editing, 4 enchanted tree kinds, Dragon Carousel, Arcane Spire, Potion
@@ -341,7 +353,7 @@ Spikes, in order:
 - Crowds past 700: guests share per-ride route maps instead of each searching paths themselves.
 
 ## M8: Custom coasters
-Progress: spike 1 (several coasters per park) done.
+Progress: spike 1 (several coasters per park) and spike 2 (the construction window and new pieces) done.
 
 - **A construction window,** built carefully for ease of use:
   - piece buttons, grouped: straight, gentle and steep slopes, small and large turns, banked turns, lift

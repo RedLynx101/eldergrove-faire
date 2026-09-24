@@ -418,7 +418,7 @@ def circ_edit(+t: C.Track, +op: U32) -> {Laws.circuit_ok(C.Track.edit(t, op)) ==
   match t:
     case C.Track{ps, open, bs, s, e, cfg, stats}:
       +pc = {C.Piece{C.Pose.x(e), C.Pose.y(e), C.Pose.z(e), op, C.Pose.d(e)} : C.Piece}
-      bcase(U32.is_lt(op, 7), b => {Laws.circuit_ok(Bool.pick(C.Track, b,
+      bcase(C.Piece.adds(op), b => {Laws.circuit_ok(Bool.pick(C.Track, b,
         C.Track{List.append(&2, C.Piece, ps, [pc]), False{}, [], s, C.Piece.exit(pc), cfg, stats},
         C.Track{C.Pieces.init(ps), False{}, [], s, C.Piece.pose(C.Pieces.last(ps)), cfg, stats}))
         == True{} : Bool}, {==}, {==})
@@ -1251,14 +1251,14 @@ def wl_build(+ok: Bool, +q: C.Q, +rs: +List<C.Ride>, +tool: U32, +x: U32, +y: U3
     case False{}:
       {==}
 
-def wl_track(+ok: Bool, +op: U32) -> {Laws.wage_list(C.TrackOp.ledger(ok, op)) == [] : List<U32>}:
+def wl_track(+ok: Bool, +op: U32, +last: U32) -> {Laws.wage_list(C.TrackOp.ledger(ok, op, last)) == [] : List<U32>}:
   match ok:
     case True{}:
-      bcase((op < 7 : U32),
-        b => {Laws.wage_list(Bool.pick(+List<C.Txn>, b, [C.Spend{3, 40}],
-          Bool.pick(+List<C.Txn>, U32.is_eq(op, 7), [C.Gain{4, 20}], []))) == [] : List<U32>},
+      bcase(C.Piece.adds(op),
+        b => {Laws.wage_list(Bool.pick(+List<C.Txn>, b, [C.Spend{3, C.Piece.cost(op)}],
+          Bool.pick(+List<C.Txn>, U32.is_eq(op, 7), [C.Gain{4, (C.Piece.cost(last) >> 1n : U32)}], []))) == [] : List<U32>},
         {==},
-        bcase(U32.is_eq(op, 7), b => {Laws.wage_list(Bool.pick(+List<C.Txn>, b, [C.Gain{4, 20}], [])) == [] : List<U32>},
+        bcase(U32.is_eq(op, 7), b => {Laws.wage_list(Bool.pick(+List<C.Txn>, b, [C.Gain{4, (C.Piece.cost(last) >> 1n : U32)}], [])) == [] : List<U32>},
           {==}, {==}))
     case False{}:
       {==}
@@ -1280,7 +1280,8 @@ def Laws.wages_booked(p, a):
         case C.Build{tool, x, y, v}:
           wl_build(C.Build.ok(map, track, cash, tool, x, y), map, rides, tool, x, y)
         case C.TrackOp{op}:
-          wl_track(C.TrackOp.ok(map, C.Tracks.get(track, (op >> 5n : U32)), cash, (op .&. 31 : U32)) && ((op >> 5n) < C.len32(C.Track, track) : U32), (op .&. 31 : U32))
+          wl_track(C.TrackOp.ok(map, C.Tracks.get(track, (op >> 5n : U32)), cash, (op .&. 31 : U32)) && ((op >> 5n) < C.len32(C.Track, track) : U32), (op .&. 31 : U32),
+            C.Piece.kind(C.Pieces.last(C.Track.pieces(C.Tracks.get(track, (op >> 5n : U32))))))
         case C.RideOp{ride, op}:
           {==}
         case C.ParkOp{op}:

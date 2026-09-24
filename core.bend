@@ -1149,7 +1149,9 @@ def Train.adv(t: Train, +start: U32, +len: U32, +st: U32, +ps: +List<Piece>)
   +k = Piece.kind(Pieces.get(ps, (start + (prog >> 8n) : U32)))
   +hold = U32.is_eq(st, 1) && (wait > 0 : U32)
   +s1 = sel(U32.is_eq(k, 6), 20, sel(U32.is_eq(k, 2), (speed + 3 : U32),
-    sel(U32.is_eq(k, 1), sub0(speed, 3), sub0(speed, 1))))
+    sel(U32.is_eq(k, 1), sub0(speed, 3), sel(U32.is_eq(k, 13), (speed + 7 : U32),
+    sel(U32.is_eq(k, 12), sub0(speed, 7), sel(U32.is_eq(k, 9), U32.min(sub0(speed, 1), 24),
+      sub0(speed, 1)))))))
   +s2 = sel(hold, 0, U32.min(U32.max(s1, 10), 90))
   +end = (len * 256 : U32)
   Train{id, U32.min((prog + s2 : U32), end), s2, sub0(wait, 1)}
@@ -2475,14 +2477,35 @@ def Fin.tick(f: Fin, +t: U32, +gs: +List<Guest>, +rs: +List<Ride>, +nm: U32, +q:
 # The Wyrm Coaster: track pieces and block sections
 # -------------------------------------------------
 # A piece stands on tile (x, y), entered at height z heading dir. kind: 0
-# straight, 1 up, 2 down, 3 turn left, 4 turn right, 5 station, 6 lift hill.
+# straight, 1 up, 2 down, 3 turn left, 4 turn right, 5 station, 6 lift hill,
+# 9 brakes, 10 banked left, 11 banked right, 12 steep up, 13 steep down.
+# Track ops 7 (take the last piece off) and 8 (open or close) are not
+# pieces.
+
+def Piece.adds(+op: U32) -> Bool:
+  (op < 7 : U32) || (op >= 9 : U32) && (op < 14 : U32)
+
+def Piece.left(+k: U32) -> Bool:
+  U32.is_eq(k, 3) || U32.is_eq(k, 10)
+
+def Piece.right(+k: U32) -> Bool:
+  U32.is_eq(k, 4) || U32.is_eq(k, 11)
+
+def Piece.rise(+k: U32) -> U32:
+  sel(U32.is_eq(k, 1) || U32.is_eq(k, 6), 1, sel(U32.is_eq(k, 12), 2, 0))
+
+def Piece.drop(+k: U32) -> U32:
+  sel(U32.is_eq(k, 2), 1, sel(U32.is_eq(k, 13), 2, 0))
+
+def Piece.cost(+k: U32) -> U32:
+  sel(U32.is_eq(k, 0), 30, sel(U32.is_eq(k, 5) || U32.is_eq(k, 6) || (k >= 12 : U32), 60,
+    sel((k >= 9 : U32), 50, 40)))
 
 def Piece.exit(p: Piece) -> Pose:
   Piece{+x, +y, +z, +kind, +dir} = p
-  +d2 = sel(U32.is_eq(kind, 3), ((dir + 3) .&. 3 : U32),
-    sel(U32.is_eq(kind, 4), ((dir + 1) .&. 3 : U32), dir))
-  +z2 = sel(U32.is_eq(kind, 1) || U32.is_eq(kind, 6), (z + 1 : U32),
-    sel(U32.is_eq(kind, 2), (z - 1 : U32), z))
+  +d2 = sel(Piece.left(kind), ((dir + 3) .&. 3 : U32),
+    sel(Piece.right(kind), ((dir + 1) .&. 3 : U32), dir))
+  +z2 = ((z + Piece.rise(kind)) - Piece.drop(kind) : U32)
   Pose{(x + dx_of(d2) : U32), (y + dy_of(d2) : U32), z2, d2}
 
 def Pose.eq(a: Pose, b: Pose) -> Bool:
@@ -2966,7 +2989,7 @@ def Build.land.go(+tool: U32, +q: Q, +rs: +List<Ride>, +x: U32, +y: U32,
     case 9:
       Build.demolish(q, rs, x, y)
     case 10:
-      Land.set(q, x, y, Tile{h, ter, 6, ((5 + (v .&. 3) * 8) .|. (nt << 8n) : U32), h})
+      Land.set(q, x, y, Tile{h, ter, 6, ((5 + (v .&. 3) * 16) .|. (nt << 8n) : U32), h})
     case 11:
       Land.set(q, x, y, Tile{h, 1, 7, 0, 0})
     case 13:
@@ -3058,6 +3081,10 @@ def Park.build(p: Park, +tool: U32, +x: U32, +y: U32, +v: U32) -> Out:
 # op 0..6: add a piece of that kind at the end; 7: remove the last piece;
 # 8: open or close the coaster
 
+def Track.start(t: Track) -> Pose:
+  Track{pieces, open, blocks, start, end, cfg, stats} = t
+  start
+
 def Track.end(t: Track) -> Pose:
   Track{pieces, open, blocks, start, end, cfg, stats} = t
   end
@@ -3098,30 +3125,31 @@ def Track.room(+q: Q, +e: Pose, +op: U32) -> Bool:
   +y = Pose.y(e)
   +z = Pose.z(e)
   +t = Land.get(q, x, y)
-  +low = sel(U32.is_eq(op, 2), sub0(z, 1), z)
+  +dr = Piece.drop(op)
   inmap(x, y) && U32.is_eq(Tile.obj(t), 0) && Bool.not(U32.is_eq(Tile.ter(t), 4))
-    && (Tile.h(t) <= low : U32) && (z < 13 : U32)
-    && Bool.not(U32.is_eq(op, 2) && U32.is_eq(z, 0))
+    && (z >= dr : U32) && (Tile.h(t) + dr <= z : U32) && (z + Piece.rise(op) <= 12 : U32)
 
 def TrackOp.ok(+q: Q, +trk: Track, +cash: U32, +op: U32) -> Bool:
   +n = len32(Piece, Track.pieces(trk))
   +shut = Bool.not(Track.open(trk))
-  +add = (op < 7 : U32) && shut && (n > 0 : U32) && Bool.not(Track.closed(trk))
-    && Track.room(q, Track.end(trk), op) && Build.can_pay(cash, 40)
+  +plat = Bool.not(U32.is_eq(op, 5)) || U32.is_eq(Piece.kind(Pieces.last(Track.pieces(trk))), 5)
+  +add = Piece.adds(op) && shut && (n > 0 : U32) && Bool.not(Track.closed(trk)) && plat
+    && Track.room(q, Track.end(trk), op) && Build.can_pay(cash, Piece.cost(op))
   +del = U32.is_eq(op, 7) && shut && (n > 1 : U32)
   add || del || U32.is_eq(op, 8)
 
-def TrackOp.ledger(ok: Bool, +op: U32) -> +List<Txn>:
+# a piece costs its price; taking one off gives half of its price back
+def TrackOp.ledger(ok: Bool, +op: U32, +last: U32) -> +List<Txn>:
   match ok:
     case True{}:
-      Bool.pick(+List<Txn>, (op < 7 : U32), [Spend{3, 40}],
-        Bool.pick(+List<Txn>, U32.is_eq(op, 7), [Gain{4, 20}], []))
+      Bool.pick(+List<Txn>, Piece.adds(op), [Spend{3, Piece.cost(op)}],
+        Bool.pick(+List<Txn>, U32.is_eq(op, 7), [Gain{4, (Piece.cost(last) >> 1n : U32)}], []))
     case False{}:
       []
 
 def Piece.code(p: Piece) -> U32:
   Piece{x, y, z, kind, dir} = p
-  (kind + dir * 8 : U32)
+  (kind + dir * 16 : U32)
 
 def TrackOp.map(ok: Bool, +q: Q, +trk: Track, +op: U32, +k: U32) -> Q:
   match ok:
@@ -3130,7 +3158,7 @@ def TrackOp.map(ok: Bool, +q: Q, +trk: Track, +op: U32, +k: U32) -> Q:
       +pc = {Piece{Pose.x(e), Pose.y(e), Pose.z(e), op, Pose.d(e)} : Piece}
       +last = Pieces.last(Track.pieces(trk))
       +lp = Piece.pose(last)
-      Bool.pick(Q, (op < 7 : U32),
+      Bool.pick(Q, Piece.adds(op),
         Land.put(q, Pose.x(e), Pose.y(e), 6, (Piece.code(pc) .|. (k << 8n) : U32), Pose.z(e)),
         Bool.pick(Q, U32.is_eq(op, 7), Land.put(q, Pose.x(lp), Pose.y(lp), 0, 0, 0),
           q))
@@ -3156,7 +3184,7 @@ def Track.toggle(t: Track) -> Track:
 def Track.edit(t: Track, +op: U32) -> Track:
   Track{+ps, open, bs, +s, +e, +cfg, +stats} = t
   +pc = {Piece{Pose.x(e), Pose.y(e), Pose.z(e), op, Pose.d(e)} : Piece}
-  Bool.pick(Track, (op < 7 : U32),
+  Bool.pick(Track, Piece.adds(op),
     Track{List.append(&2, Piece, ps, [pc]), False{}, [], s, Piece.exit(pc), cfg, stats},
     Track{Pieces.init(ps), False{}, [], s, Piece.pose(Pieces.last(ps)), cfg, stats})
 
@@ -3182,7 +3210,7 @@ def Park.track_op(p: Park, +op: U32) -> Out:
   +code = (op .&. 31 : U32)
   +trk = Tracks.get(track, k)
   +ok = TrackOp.ok(map, trk, cash, code) && (k < len32(Track, track) : U32)
-  +led = TrackOp.ledger(ok, code)
+  +led = TrackOp.ledger(ok, code, Piece.kind(Pieces.last(Track.pieces(trk))))
   +trk2 = Track.op(trk, code, ok)
   Out{Park{Land.fix(TrackOp.map(ok, map, trk, code, k)), guests,
     Rides.coaster(rides, k, sel(Track.open(trk2), 1, 0)), Tracks.set(track, k, trk2),

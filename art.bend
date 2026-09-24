@@ -2045,17 +2045,39 @@ def Art.rails(+u: U32, +v: U32, +along_u: Bool, +kind: U32, +t: U32) -> U32:
   +tie = U32.is_eq((a .&. 3 : U32), 1) && between(c, 2, 13)
   +chain = U32.is_eq(kind, 6) && between(c, 7, 8) && ((((a + (t >> 1n)) .&. 3) < 2) : U32)
   +plat = U32.is_eq(kind, 5) && ((c < 2 : U32) || (c > 13 : U32))
-  sel(ok, sel(rail, 13120044, sel(chain, 4210752, sel(tie, 7031339,
-    sel(plat, sel(U32.is_eq((a .&. 3 : U32), 0), 8011834, 11041354), TR())))), TR())
+  # brakes: a red and gold fin between the rails
+  +fin = U32.is_eq(kind, 9) && between(c, 6, 9)
+  sel(ok, sel(rail, 13120044, sel(chain, 4210752, sel(fin, sel(U32.is_eq((a .&. 2 : U32), 0), 12597547, 14329120),
+    sel(tie, 7031339, sel(plat, sel(U32.is_eq((a .&. 3 : U32), 0), 8011834, 11041354), TR()))))), TR())
 
-def Art.turn(+u: U32, +v: U32, +cu: U32, +cv: U32) -> U32:
+# a banked turn has a planked deck, its outer rail picked out in gold
+def Art.turn(+u: U32, +v: U32, +cu: U32, +cv: U32, +bank: Bool) -> U32:
   +ok = (u < 16 : U32) && (v < 16 : U32)
   +eu = (u - cu : U32)
   +ev = (v - cv : U32)
   +d2 = (eu * eu + ev * ev : U32)
-  +rail = between(d2, 9, 25) || between(d2, 121, 169)
-  +deck = between(d2, 26, 120) && U32.is_eq(((u + v) .&. 3 : U32), 0)
-  sel(ok, sel(rail, 13120044, sel(deck, 7031339, TR())), TR())
+  +inner = between(d2, 9, 25)
+  +outer = between(d2, 121, 169)
+  +deck = between(d2, 26, 120)
+  +tie = U32.is_eq(((u + v) .&. 3 : U32), 0)
+  sel(ok, sel(inner, 13120044, sel(outer, sel(bank, 14329120, 13120044),
+    sel(deck && tie, 7031339, sel(deck && bank, 9661500, TR())))), TR())
+
+# a steep slope climbs two levels in one tile. Facing the camera it is
+# solved like a gentle one; facing away, the view runs along its surface, so
+# it shows as a rail over a band of timber.
+def Art.steep(+kind: U32, +d: U32, +X: U32, +Y0: U32, +t: U32) -> U32:
+  +up = U32.is_eq(kind, 12)
+  +along_u = U32.is_eq((d .&. 1 : U32), 0)
+  +face = (up && (d >= 2 : U32)) || (Bool.not(up) && (d < 2 : U32))
+  +Yf = sel(up, (Y0 + 32 : U32), Y0)
+  +fu = sel(along_u, ((Yf + X) >> 2n : U32), ((((Yf - X) >> 2n) + X) : U32))
+  +fv = sel(along_u, ((((Yf + X) >> 2n) - X) : U32), ((Yf - X) >> 2n : U32))
+  +Ye = sel(up, Y0, (Y0 - 32 : U32))
+  +e = sel(along_u, (Ye + X : U32), (Ye - X : U32))
+  +band = (e < 10 : U32) && (sabs(X) <= 12 : U32)
+  +edge = sel((e < 2 : U32), 13120044, sel(U32.is_eq((X .&. 3 : U32), 0), 5913890, 7031339))
+  sel(face, Art.rails(fu, fv, along_u, kind, t), sel(band, edge, TR()))
 
 def Art.side_u(+d: U32) -> U32:
   match d:
@@ -2072,6 +2094,7 @@ def Art.side_u(+d: U32) -> U32:
 def Art.track_top(+kind: U32, +d: U32, +X: U32, +Y0: U32, +t: U32) -> U32:
   +along_u = U32.is_eq((d .&. 1 : U32), 0)
   +up = U32.is_eq(kind, 1) || U32.is_eq(kind, 6)
+  +steep = U32.is_eq(kind, 12) || U32.is_eq(kind, 13)
   +down = U32.is_eq(kind, 2)
   # slope rising toward +u or +v ("pos"), or toward -u / -v
   +rise_pos = (up && (d < 2 : U32)) || (down && (d >= 2 : U32))
@@ -2086,8 +2109,9 @@ def Art.track_top(+kind: U32, +d: U32, +X: U32, +Y0: U32, +t: U32) -> U32:
   +fv = iso_v(X, Y0)
   +u = sel(slope, su, fu)
   +v = sel(slope, sv, fv)
-  +turn = U32.is_eq(kind, 3) || U32.is_eq(kind, 4)
-  +d2 = sel(U32.is_eq(kind, 3), ((d + 3) .&. 3 : U32), ((d + 1) .&. 3 : U32))
+  +left = U32.is_eq(kind, 3) || U32.is_eq(kind, 10)
+  +turn = left || U32.is_eq(kind, 4) || U32.is_eq(kind, 11)
+  +d2 = sel(left, ((d + 3) .&. 3 : U32), ((d + 1) .&. 3 : U32))
   # the turn's centre: the corner between its entry and exit sides
   +entry_u = sel(U32.is_eq(d, 0), 0, 16)
   +entry_v = sel(U32.is_eq(d, 1), 0, 16)
@@ -2095,25 +2119,32 @@ def Art.track_top(+kind: U32, +d: U32, +X: U32, +Y0: U32, +t: U32) -> U32:
   +exit_v = sel(U32.is_eq(d2, 1), 16, 0)
   +cu = sel(along_u, entry_u, exit_u)
   +cv = sel(along_u, exit_v, entry_v)
-  sel(turn, Art.turn(fu, fv, cu, cv), Art.rails(u, v, along_u, kind, t))
+  sel(steep, Art.steep(kind, d, X, Y0, t),
+    sel(turn, Art.turn(fu, fv, cu, cv, (kind >= 10 : U32)), Art.rails(u, v, along_u, kind, t)))
 
 # a track piece on a tile whose ground top vertex is (x, y); zr levels up
 def Art.track(+x: U32, +y: U32, +code: U32, +zr: U32, +t: U32, +px: U32,
   +py: U32) -> U32:
-  +kind = (code .&. 7 : U32)
-  +d = ((code >> 3n) .&. 7 : U32)
+  +kind = (code .&. 15 : U32)
+  +d = ((code >> 4n) .&. 3 : U32)
   +X = (px - x : U32)
   +Y0 = (((py - y) * 2) + zr * 16 : U32)
-  +sign = Art.broke(Bool.not(U32.is_eq((code >> 16n : U32), 0)), X, (py - y + zr * 8 - 54 : U32), t)
+  +sign = Art.broke(Bool.not(U32.is_eq(((code >> 16n) .&. 1 : U32), 0)), X, (py - y + zr * 8 - 54 : U32), t)
   +surf = Art.track_top(kind, d, X, Y0, t)
-  +slope = sel(U32.is_eq(kind, 1) || U32.is_eq(kind, 6), 4,
-    sel(U32.is_eq(kind, 2), (0 - 4 : U32), 0))
+  +slope = sel(U32.is_eq(kind, 1) || U32.is_eq(kind, 6), 4, sel(U32.is_eq(kind, 12), 8,
+    sel(U32.is_eq(kind, 2), (0 - 4 : U32), sel(U32.is_eq(kind, 13), (0 - 8 : U32), 0))))
   +stop = (y + 8 - zr * 8 - slope : U32)
   +post = (sabs(X) <= 1 : U32) && sle(stop, py) && sle(py, (y + 8 : U32))
     && (zr > 0 : U32)
   +brace = U32.is_eq(((py + 256 - y) .&. 7 : U32), 0) && (sabs(X) <= 3 : U32)
     && sle(stop, py) && sle(py, (y + 8 : U32)) && (zr > 0 : U32)
-  over(sign, over(surf, sel(post, sel(U32.is_eq(X, 1), 5913890, 8017200), sel(brace, 6964776, TR()))))
+  +c = over(sign, over(surf, sel(post, sel(U32.is_eq(X, 1), 5913890, 8017200), sel(brace, 6964776, TR()))))
+  # a ghost (bit 17; bit 18 when it fits): tinted green or red, pulsing
+  +ghost = Bool.not(U32.is_eq(((code >> 17n) .&. 1 : U32), 0))
+  +fit = Bool.not(U32.is_eq(((code >> 18n) .&. 1 : U32), 0))
+  +pulse = U32.is_eq(((t >> 4n) .&. 1 : U32), 0)
+  +t1 = Art.tint(c, fit)
+  sel(ghost, sel(opaque(c), sel(fit || pulse, Art.tint(t1, fit), t1), TR()), c)
 
 # a coaster car centred at (0, 0) on the track, heading d
 def Art.car_in(+X: U32, +Y: U32, +along_u: Bool) -> Bool:
