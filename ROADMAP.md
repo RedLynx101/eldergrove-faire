@@ -1,6 +1,6 @@
 # Eldergrove Faire: Roadmap
 
-Last updated: 2026-09-23 · M1 and M2 done; M3 riders and tree/mushroom art done, queues and polish next.
+Last updated: 2026-09-23 · M1, M2 and M3 done; M4 (economy and UI) next.
 
 ## Decisions
 
@@ -39,30 +39,38 @@ What it took:
 Measure it yourself: `PARK_PROF=1 ./park --live 700 1500` (add `PARK_NOPACE=1` for the uncapped rate).
 Still open: zoom levels and a larger window.
 
-## M3: Riders you can see, plus the art pass (in progress)
-**Done:**
-- **Seats and boarding:** carousel and spire 8 seats, shops 4, each coaster train 6. Each tick one pass
-  (`Boards.plan`) seats whoever is ready, in order, so no seat is shared and no ride overfills. Guest updates,
-  ticket sales and drawing all read that one plan; a rider's seat lives in their `dir` field.
-- **Riders drawn in their own class, tunic and skin:**
-  - Carousel: 8 dragons, each carrying its rider; the back half passes behind the centre pole.
-  - Arcane Spire: riders around the ring as it rises and drops; the back ones behind the tower.
-  - Coaster: trains have ids. Guests board only the train loading in the station, ride the whole circuit,
-    and get off when that same train returns. Two riders per car.
-  - Shops: buyers stay visible at the counter.
-- **Trees:** elder oaks with clustered, five-tone shaded crowns, dithered edges, branches, bark, a wind sway
-  and soft shadows; moonpines with serrated, frosted tiers.
-- **Mushrooms:** domed glowcaps with highlights, dense pulsing spots, gills and a fibrous stem, sometimes
-  with a small one beside them. **Crystals:** facets, a rocky base, twinkling tips.
-- Performance kept: 60 fps live with 700 guests (11.0-11.5 ms frames uncapped).
+## Done: M3, riders you can see, queues, and the art pass
+**Result:** guests visibly ride every ride and wait in real queue lines; two more laws are proven (eight in
+all); the live window holds 60 fps with 700 guests (8-9 ms frames uncapped, faster than after M2).
 
-**Still open in M3:**
-- **Queue paths** with ride entrances (see Decisions). Guests currently wait at the ride's edge.
-- **Paths, water, cliffs:** joined path edges, shoreline foam, overhanging cliff lips, grass tufts.
-- **Guests:** 4-way facing, a better walk cycle, carried items, thought bubbles.
-- **Ride detail:** carousel poles and lights, scalloped canopy, shop signage.
-- New laws: **capacity_respected** and **riders_conserved**. The seat plan was built to make them provable
-  (one pass, one plan), but they need bit-mask reasoning that isn't written yet.
+- **Seats and boarding:** carousel and spire 8 seats, shops 4, each coaster train 6. Each tick one pass
+  (`Boards.plan`) seats whoever is ready, in order. Guest updates, ticket sales and drawing all read that one
+  plan; a rider's seat lives in their `dir` field.
+- **Riders drawn in their own class, tunic and skin:** carousel dragons (the back half passes behind the
+  pole), riders around the spire's ring (behind the tower at the back), coaster trains with ids (guests board
+  the train in the station and leave when that train returns), buyers at shop counters.
+- **Queue paths** (tool `U`, 12 gold a tile): a queue tile beside a ride is its entrance. Guests heading for a
+  ride with a queue steer to its entrance, board only there, and wait for a seat. They join a line only at its
+  free end (a lone tile, or the end away from the ride), keep half a tile apart, and riders leave onto a path
+  beside the ride. Rope rails close every side except along the line, to the ride, and at the free end.
+- **Terrain:** path curbs on open edges, shoreline foam, cliff lips (bright turf, dark overhang, hanging
+  roots), grass blades and tufts.
+- **Guests:** four-way facing (front and back views), a four-frame walk with a bob and a swinging hand,
+  carried potions and tankards, thought bubbles (hungry, thirsty, queasy, tired, cross, delighted).
+- **Rides:** twisted brass poles, a scalloped valance and twinkling lamps on the carousel; sparkles around the
+  spire's orb; a framed potion sign; a hanging tankard sign at the tavern.
+- **Trees and mushrooms:** shaded, clustered oak crowns with sway and shadows, frosted moonpine tiers,
+  domed glowcaps with pulsing spots and gills, faceted crystals.
+- **Laws 7 and 8:** **capacity_respected** (the boarding plan never seats anyone at or past the ride's seat
+  count) and **riders_conserved** (nobody leaves the park from a ride). `Seat.free` became a chain of steps
+  that each test `k < cap`, which made the first proof short. Not proven yet: that no two guests are planned
+  into the same seat.
+- **Speed:** tile lookups in the map's quadtree now walk into just the one child they need, which removed
+  most of the reference-count work in the simulation (sim 3 ms → 1.2 ms a frame with 700 guests). The path
+  search stops once it arrives, and ride entrances are worked out once a tick.
+
+Known limits: guests who give up while queuing step off the line sideways; queues longer than the path
+search's 12 steps are walked by feel (still in order, since a line offers only forward or back).
 
 ## M4: Economy and UI
 - **Ride window** (click a ride): open/close, price +/−, riders, income, upkeep, age, reliability, and
@@ -105,8 +113,8 @@ Still open: zoom levels and a larger window.
 
 ## Laws
 Proven: money_conserved, headcount_conserved, needs_bounded, coaster_on_circuit, no_collisions,
-save_load_roundtrip.
-Planned: capacity_respected, riders_conserved (M3, open); purchase_is_transfer, prices_bounded (M4).
+save_load_roundtrip, capacity_respected, riders_conserved.
+Planned: purchase_is_transfer, prices_bounded (M4); seats_unique (no seat planned twice), later.
 Proof maintenance rule: keep the code field-wise (each park field updated by its own function) so
 existing proofs survive new features.
 

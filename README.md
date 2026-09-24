@@ -46,6 +46,10 @@ Guests ride visibly: carousel and spire hold 8 riders, shops serve 4 at a
 time, and each coaster train seats 6. Coaster riders board the train loading
 in the station and stay aboard for the whole circuit.
 
+Guests face the way they walk, carry what they buy (potions, tankards of
+ale), and now and then show what they think in a bubble: hungry, thirsty,
+queasy, tired, cross or delighted.
+
 Queue lines (U): a queue tile beside a ride is its entrance. Once a ride has
 one, guests board only from the entrance, so they walk the line single file;
 they can join a line only at its free end (the tile away from the ride), and
