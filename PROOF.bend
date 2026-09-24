@@ -66,24 +66,24 @@ def add_assoc_r(+a: Nat, +b: Nat, +c: Nat)
 # their blocks, handing a train to the next block (a swap), the pass along
 # the ring, and the ring's rotation.
 
-def cnt_adv(+s: C.Slot, +ps: +List<C.Piece>)
-  -> {C.Slot.count(C.Slot.adv(s, ps)) == C.Slot.count(s) : Nat}:
+def cnt_adv(+s: C.Slot, +ps: +List<C.Piece>, +cfg: U32)
+  -> {C.Slot.count(C.Slot.adv(s, ps, cfg)) == C.Slot.count(s) : Nat}:
   match s:
     case C.Free{a, n, st}:
       {==}
     case C.Held{a, n, st, t}:
       {==}
 
-def trains_adv(+xs: +List<C.Slot>, +ps: +List<C.Piece>)
-  -> {C.Blocks.trains(C.Slots.adv(xs, ps)) == C.Blocks.trains(xs) : Nat}:
+def trains_adv(+xs: +List<C.Slot>, +ps: +List<C.Piece>, +cfg: U32)
+  -> {C.Blocks.trains(C.Slots.adv(xs, ps, cfg)) == C.Blocks.trains(xs) : Nat}:
   match xs:
     case []:
       {==}
     case s <> rest:
-      %cnt_adv(s, ps) : {Nat.add(C.Slot.count(C.Slot.adv(s, ps)), C.Blocks.trains(C.Slots.adv(rest, ps)))
+      %cnt_adv(s, ps, cfg) : {Nat.add(C.Slot.count(C.Slot.adv(s, ps, cfg)), C.Blocks.trains(C.Slots.adv(rest, ps, cfg)))
         == Nat.add(_, C.Blocks.trains(rest)) : Nat}
-      %trains_adv(rest, ps) : {Nat.add(C.Slot.count(C.Slot.adv(s, ps)), C.Blocks.trains(C.Slots.adv(rest, ps)))
-        == Nat.add(C.Slot.count(C.Slot.adv(s, ps)), _) : Nat}
+      %trains_adv(rest, ps, cfg) : {Nat.add(C.Slot.count(C.Slot.adv(s, ps, cfg)), C.Blocks.trains(C.Slots.adv(rest, ps, cfg)))
+        == Nat.add(C.Slot.count(C.Slot.adv(s, ps, cfg)), _) : Nat}
       {==}
 
 def cnt_pair(+c: C.Slot, +b: C.Slot)
@@ -405,6 +405,11 @@ def circ_tick(+t: C.Track, h: {Laws.circuit_ok(t) == True{} : Bool})
         case False{}:
           {==}
 
+def circ_cfg(+t: C.Track, +op: U32) -> {Laws.circuit_ok(C.Track.setcfg(t, op)) == True{} : Bool}:
+  match t:
+    case C.Track{ps, open, bs, s, e, cfg, stats}:
+      {==}
+
 def circ_toggle(+t: C.Track) -> {Laws.circuit_ok(C.Track.toggle(t)) == True{} : Bool}:
   match t:
     case C.Track{ps, open, bs, s, e, cfg, stats}:
@@ -428,8 +433,10 @@ def circ_op(+t: C.Track, +op: U32, +ok: Bool, h: {Laws.circuit_ok(t) == True{} :
   match ok:
     case True{}:
       bcase(U32.is_eq(op, 8), b => {Laws.circuit_ok(Bool.pick(C.Track, b,
-        C.Track.toggle(t), C.Track.edit(t, op))) == True{} : Bool},
-        circ_toggle(t), circ_edit(t, op))
+        C.Track.toggle(t), Bool.pick(C.Track, (op >= 16 : U32), C.Track.setcfg(t, op), C.Track.edit(t, op)))) == True{} : Bool},
+        circ_toggle(t),
+        bcase((op >= 16 : U32), b => {Laws.circuit_ok(Bool.pick(C.Track, b, C.Track.setcfg(t, op), C.Track.edit(t, op))) == True{} : Bool},
+          circ_cfg(t, op), circ_edit(t, op)))
     case False{}:
       h
 
@@ -510,16 +517,16 @@ def Laws.coaster_on_circuit(p, a, h):
         case C.ParkOp{op}:
           h
 
-def Laws.no_collisions(blocks, pieces):
+def Laws.no_collisions(blocks, pieces, cfg):
   match blocks:
     case []:
       {==}
     case s <> rest:
-      +a1 = C.Slot.adv(s, pieces)
-      +ar = C.Slots.adv(rest, pieces)
-      +lhs = C.Blocks.trains(C.Blocks.step(s <> rest, pieces))
-      %trains_adv(rest, pieces) : {lhs == Nat.add(C.Slot.count(s), _) : Nat}
-      %cnt_adv(s, pieces) : {lhs == Nat.add(_, C.Blocks.trains(ar)) : Nat}
+      +a1 = C.Slot.adv(s, pieces, cfg)
+      +ar = C.Slots.adv(rest, pieces, cfg)
+      +lhs = C.Blocks.trains(C.Blocks.step(s <> rest, pieces, cfg))
+      %trains_adv(rest, pieces, cfg) : {lhs == Nat.add(C.Slot.count(s), _) : Nat}
+      %cnt_adv(s, pieces, cfg) : {lhs == Nat.add(_, C.Blocks.trains(ar)) : Nat}
       %trains_pass(ar, a1) : {lhs == _ : Nat}
       %trains_rot(C.Slots.pass(ar, a1)) : {lhs == _ : Nat}
       {==}

@@ -185,6 +185,16 @@ Small design decisions made while working, listed here so they can be revisited.
   window is open (the front-most one), not with the coaster tool.
 - **Stations only extend the platform:** a station piece can only follow another station piece.
 - **The highest track is level 12**, so nothing is ever left with no piece that fits above it.
+- **Coaster types differ in top speed and look.** Wyrm 90, Dwarven Minecart 64, Griffin Flyer 100 (speed
+  units per tick); each has its own rail, sleeper and support colours and its own cars. The Flyer's cars
+  hang 13 px below the rails on a bar. Type, trains and lift speed can change only while the coaster is
+  closed, and changing one takes its trains off (it opens again from the ride window).
+- **Trains:** "as many as fit" (one in every third block) by default; the window steps it down to 1 or back
+  up. Cars per train stay at three (six seats): changing them would touch boarding and its proven laws.
+- **Lift speed** runs 12 to 36 in steps of 4 (20 by default).
+- **no_collisions gained a parameter.** Train physics now reads the coaster's settings, so `Blocks.step`
+  takes them and the law quantifies over them too (`for +cfg: U32`). A mechanical change to LAWS.bend; the
+  proof threads the value through unchanged.
 
 ## Done: M1, the vertical slice
 Isometric fantasy map, paths, terrain editing, 4 enchanted tree kinds, Dragon Carousel, Arcane Spire, Potion
@@ -353,7 +363,8 @@ Spikes, in order:
 - Crowds past 700: guests share per-ride route maps instead of each searching paths themselves.
 
 ## M8: Custom coasters
-Progress: spike 1 (several coasters per park) and spike 2 (the construction window and new pieces) done.
+Progress: spikes 1-3 done (several coasters per park; the construction window and new pieces; coaster types,
+trains and lift speed).
 
 - **A construction window,** built carefully for ease of use:
   - piece buttons, grouped: straight, gentle and steep slopes, small and large turns, banked turns, lift

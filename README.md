@@ -31,6 +31,7 @@ Dev modes:
 - `./park --people out.ppm` draws every folk and outfit on one sheet.
 - `./park --rides out.ppm T` draws the M6 rides T ticks into a run, every seat taken.
 - `./park --pieces out.ppm` draws every coaster track piece in its four headings.
+- `./park --cars out.ppm` draws each coaster type's car on its own track, in four headings.
 - `./park --scen K MONTHS` plays scenario K (0 sandbox, 1-3) a month at a time and reports it.
 - `./park --wav out.wav SECONDS` records the music with every effect in turn;
   `python3 tools/wavcheck.py out.wav out.png` prints its levels and draws it. `PARK_MUTE=1` plays nothing.
@@ -176,7 +177,10 @@ red where it doesn't, with its cost and the height it ends at. Each button has a
 price back). WASD always moves the camera. The window says how far the track's end is from the station.
 A coaster opens from its ride window, and only once its track closes back on its station; its track
 can be changed only while it is closed (the ride window's BUILD button reopens the construction
-window). A park holds up to 8 coasters; the Wyrm Coaster comes pre-built.
+window). The window also sets the coaster's type (the wooden Wyrm; the Dwarven Minecart, slower and
+gentler; the Griffin Flyer, fastest, its cars hanging below the rails), how many trains run (up to one
+in every third block) and the lift hill's speed. A park holds up to 8 coasters; the Wyrm Coaster comes
+pre-built.
 
 ## Files
 
@@ -199,7 +203,7 @@ window). A park holds up to 8 coasters; the Wyrm Coaster comes pre-built.
 2. **headcount_conserved**: guests after + guests who left = guests before + guests who arrived.
 3. **needs_bounded**: every guest's hunger, thirst, energy, nausea and happiness stay within 0..255.
 4. **coaster_on_circuit**: every open coaster's track closes back on its station.
-5. **no_collisions**: a block holds at most one train, and the block signals never lose or duplicate one.
+5. **no_collisions**: a block holds at most one train, and the block signals never lose or duplicate one (for any coaster's settings).
 6. **save_load_roundtrip**: loading a save gives back exactly the park that was saved.
 7. **capacity_respected**: the boarding plan (the only way anyone gets a seat) never seats a guest at or past their ride's seat count.
 8. **riders_conserved**: nobody leaves the park from a ride: a guest riding at the start of a tick is still in the park after it.

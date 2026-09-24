@@ -80,7 +80,8 @@ law coaster_on_circuit:
 law no_collisions:
   for +blocks: List<&2, C.Slot>
   for +pieces: List<&2, C.Piece>
-  {C.Blocks.trains(C.Blocks.step(blocks, pieces)) == C.Blocks.trains(blocks) : Nat}
+  for +cfg: U32
+  {C.Blocks.trains(C.Blocks.step(blocks, pieces, cfg)) == C.Blocks.trains(blocks) : Nat}
 
 # 6. SAVES. Loading a save gives back exactly the park that was saved.
 law save_load_roundtrip:

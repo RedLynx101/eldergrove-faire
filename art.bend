@@ -2122,7 +2122,24 @@ def Art.track_top(+kind: U32, +d: U32, +X: U32, +Y0: U32, +t: U32) -> U32:
   sel(steep, Art.steep(kind, d, X, Y0, t),
     sel(turn, Art.turn(fu, fv, cu, cv, (kind >= 10 : U32)), Art.rails(u, v, along_u, kind, t)))
 
-# a track piece on a tile whose ground top vertex is (x, y); zr levels up
+# the track's colours by coaster type: the Wyrm's red rails on timber; the
+# Dwarven Minecart's iron rails on dark sleepers; the Griffin Flyer's blue
+# rails on steel
+def Art.recolor(+c: U32, +ty: U32) -> U32:
+  +mine = U32.is_eq(ty, 1)
+  +fly = U32.is_eq(ty, 2)
+  +rail = U32.is_eq(c, 13120044)
+  +tie = U32.is_eq(c, 7031339)
+  +post = U32.is_eq(c, 8017200)
+  +dark = U32.is_eq(c, 5913890)
+  +brace = U32.is_eq(c, 6964776)
+  sel(mine && rail, 9474192, sel(mine && tie, 5125166,
+  sel(fly && rail, 5072841, sel(fly && tie, 8421504, sel(fly && post, 12632256,
+  sel(fly && dark, 9474192, sel(fly && brace, 10526880, c)))))))
+
+# a track piece on a tile whose ground top vertex is (x, y); zr levels up;
+# code: kind | heading << 4 | coaster << 8 | type << 12 | broken << 16 |
+# ghost << 17 | fits << 18
 def Art.track(+x: U32, +y: U32, +code: U32, +zr: U32, +t: U32, +px: U32,
   +py: U32) -> U32:
   +kind = (code .&. 15 : U32)
@@ -2138,7 +2155,8 @@ def Art.track(+x: U32, +y: U32, +code: U32, +zr: U32, +t: U32, +px: U32,
     && (zr > 0 : U32)
   +brace = U32.is_eq(((py + 256 - y) .&. 7 : U32), 0) && (sabs(X) <= 3 : U32)
     && sle(stop, py) && sle(py, (y + 8 : U32)) && (zr > 0 : U32)
-  +c = over(sign, over(surf, sel(post, sel(U32.is_eq(X, 1), 5913890, 8017200), sel(brace, 6964776, TR()))))
+  +c = over(sign, Art.recolor(over(surf, sel(post, sel(U32.is_eq(X, 1), 5913890, 8017200), sel(brace, 6964776, TR()))),
+    ((code >> 12n) .&. 3 : U32)))
   # a ghost (bit 17; bit 18 when it fits): tinted green or red, pulsing
   +ghost = Bool.not(U32.is_eq(((code >> 17n) .&. 1 : U32), 0))
   +fit = Bool.not(U32.is_eq(((code >> 18n) .&. 1 : U32), 0))
@@ -2154,14 +2172,17 @@ def Art.car_in(+X: U32, +Y: U32, +along_u: Bool) -> Bool:
   +c = sel(along_u, v, u)
   (sabs(a) <= 5 : U32) && (sabs(c) <= 3 : U32)
 
-def Art.car(+dx: U32, +dy: U32, +d: U32, +lead: U32, +rd: U32) -> U32:
+# lead: bit 0 the front car, bits 1-2 the coaster type (a Griffin Flyer's
+# car hangs from its rails on a bar)
+def Art.car_body(+dx: U32, +dy: U32, +d: U32, +front: Bool, +ty: U32, +rd: U32) -> U32:
   +along_u = U32.is_eq((d .&. 1 : U32), 0)
   +topy = ((dy + 5) * 2 : U32)
   +ontop = Art.car_in(dx, topy, along_u)
   +side = Art.car_in(dx, (dy * 2 : U32), along_u) || Art.car_in(dx, ((dy + 1) * 2 : U32), along_u)
     || Art.car_in(dx, ((dy + 2) * 2 : U32), along_u) || Art.car_in(dx, ((dy + 3) * 2 : U32), along_u)
     || Art.car_in(dx, ((dy + 4) * 2 : U32), along_u)
-  +body = sel(U32.is_eq(lead, 1), 13120044, 4172373)
+  +body = sel(U32.is_eq(ty, 1), sel(front, 10053171, 7359264),
+    sel(U32.is_eq(ty, 2), sel(front, 14329120, 3368652), sel(front, 13120044, 4172373)))
   +sx = sel(along_u, 3, (0 - 3 : U32))
   +front = Art.rider((dx - sx : U32), (dy + 5 - 1 : U32), ((rd >> 8n) .&. 255 : U32))
   +back = Art.rider((dx + sx : U32), (dy + 5 + 1 : U32), (rd .&. 255 : U32))
@@ -2171,6 +2192,12 @@ def Art.car(+dx: U32, +dy: U32, +d: U32, +lead: U32, +rd: U32) -> U32:
 # Adventurers
 # -----------
 # look: bits 0-1 class (wizard, knight, elf, dwarf), 4-6 tunic, 8-9 skin
+
+def Art.car(+dx: U32, +dy: U32, +d: U32, +lead: U32, +rd: U32) -> U32:
+  +ty = ((lead >> 1n) .&. 3 : U32)
+  +front = U32.is_eq((lead .&. 1 : U32), 1)
+  +hang = U32.is_eq(ty, 2) && (sabs(dx) <= 0 : U32) && between(dy, (0 - 18 : U32), (0 - 6 : U32))
+  sel(hang, 10526880, Art.car_body(dx, dy, d, front, ty, rd))
 
 def bitmask(+k: U32) -> U32:
   match k:

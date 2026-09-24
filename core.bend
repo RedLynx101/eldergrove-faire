@@ -1141,34 +1141,75 @@ def Piece.kind(p: Piece) -> U32:
   Piece{x, y, z, kind, dir} = p
   kind
 
-# physics inside a block: lift hills pull, slopes accelerate, the station
-# holds the train while it loads
-def Train.adv(t: Train, +start: U32, +len: U32, +st: U32, +ps: +List<Piece>)
+# A coaster's settings (its track's cfg): bits 0-1 its type (0 the Wyrm, a
+# wooden coaster; 1 a Dwarven Minecart; 2 a Griffin Flyer, hanging below its
+# rails), 2-4 how many trains (0: as many as fit), 5-7 the lift hill's speed
+# step (speed 12 + 4 * step)
+def Cfg.type(+c: U32) -> U32:
+  (c .&. 3 : U32)
+
+def Cfg.trains(+c: U32) -> U32:
+  ((c >> 2n) .&. 7 : U32)
+
+def Cfg.lift(+c: U32) -> U32:
+  (12 + ((c >> 5n) .&. 7) * 4 : U32)
+
+# top speed: minecarts are slower, flyers faster
+def Cfg.top(+c: U32) -> U32:
+  sel(U32.is_eq(Cfg.type(c), 1), 64, sel(U32.is_eq(Cfg.type(c), 2), 100, 90))
+
+# a new coaster: a Wyrm, as many trains as fit, lift speed 20
+def Cfg.new() -> U32:
+  64
+
+# how many blocks a track of n pieces makes (see Blocks.make), and how many
+# trains fit (one in every third block)
+def Blocks.count(+n: U32) -> U32:
+  sel((n < 8 : U32), 1, ((n - 8) / 4 + 2 : U32))
+
+def Track.most(+n: U32) -> U32:
+  ((Blocks.count(n) + 2) / 3 : U32)
+
+# a settings op: 16-18 the type, 20/21 one train fewer/more, 22/23 the lift
+# slower/faster
+def Cfg.set(+c: U32, +op: U32, +most: U32) -> U32:
+  +w0 = Cfg.trains(c)
+  +w = sel(U32.is_eq(w0, 0), most, U32.min(w0, most))
+  +lv = ((c >> 5n) .&. 7 : U32)
+  +ty = sel((op >= 16 : U32) && (op <= 18 : U32), (op - 16 : U32), Cfg.type(c))
+  +w2 = sel(U32.is_eq(op, 20), U32.max(sub0(w, 1), 1),
+    sel(U32.is_eq(op, 21), U32.min((w + 1 : U32), U32.min(most, 7)), w0))
+  +lv2 = sel(U32.is_eq(op, 22), sub0(lv, 1), sel(U32.is_eq(op, 23), U32.min((lv + 1 : U32), 6), lv))
+  (ty .|. (w2 << 2n) .|. (lv2 << 5n) : U32)
+
+# physics inside a block: lift hills pull at the coaster's lift speed, slopes
+# accelerate, the station holds the train while it loads
+def Train.adv(t: Train, +start: U32, +len: U32, +st: U32, +ps: +List<Piece>, +cfg: U32)
   -> Train:
   Train{id, +prog, +speed, +wait} = t
   +k = Piece.kind(Pieces.get(ps, (start + (prog >> 8n) : U32)))
   +hold = U32.is_eq(st, 1) && (wait > 0 : U32)
-  +s1 = sel(U32.is_eq(k, 6), 20, sel(U32.is_eq(k, 2), (speed + 3 : U32),
+  +s1 = sel(U32.is_eq(k, 6), Cfg.lift(cfg), sel(U32.is_eq(k, 2), (speed + 3 : U32),
     sel(U32.is_eq(k, 1), sub0(speed, 3), sel(U32.is_eq(k, 13), (speed + 7 : U32),
     sel(U32.is_eq(k, 12), sub0(speed, 7), sel(U32.is_eq(k, 9), U32.min(sub0(speed, 1), 24),
       sub0(speed, 1)))))))
-  +s2 = sel(hold, 0, U32.min(U32.max(s1, 10), 90))
+  +s2 = sel(hold, 0, U32.min(U32.max(s1, 10), Cfg.top(cfg)))
   +end = (len * 256 : U32)
   Train{id, U32.min((prog + s2 : U32), end), s2, sub0(wait, 1)}
 
-def Slot.adv(s: Slot, +ps: +List<Piece>) -> Slot:
+def Slot.adv(s: Slot, +ps: +List<Piece>, +cfg: U32) -> Slot:
   match s:
     case Free{a, n, st}:
       Free{a, n, st}
     case Held{+a, +n, +st, t}:
-      Held{a, n, st, Train.adv(t, a, n, st, ps)}
+      Held{a, n, st, Train.adv(t, a, n, st, ps, cfg)}
 
-def Slots.adv(+ss: +List<Slot>, +ps: +List<Piece>) -> +List<Slot>:
+def Slots.adv(+ss: +List<Slot>, +ps: +List<Piece>, +cfg: U32) -> +List<Slot>:
   match ss:
     case []:
       []
     case s <> rest:
-      Slot.adv(s, ps) <> Slots.adv(rest, ps)
+      Slot.adv(s, ps, cfg) <> Slots.adv(rest, ps, cfg)
 
 def Train.ready(t: Train, +len: U32) -> Bool:
   Train{id, prog, speed, wait} = t
@@ -1210,18 +1251,18 @@ def Slots.rot(+ss: +List<Slot>) -> +List<Slot>:
     case s <> rest:
       List.append(&2, Slot, rest, [s])
 
-def Blocks.step(+ss: +List<Slot>, +ps: +List<Piece>) -> +List<Slot>:
+def Blocks.step(+ss: +List<Slot>, +ps: +List<Piece>, +cfg: U32) -> +List<Slot>:
   match ss:
     case []:
       []
     case s <> rest:
-      Slots.rot(Slots.pass(Slots.adv(rest, ps), Slot.adv(s, ps)))
+      Slots.rot(Slots.pass(Slots.adv(rest, ps, cfg), Slot.adv(s, ps, cfg)))
 
 def Track.tick.go(open: Bool, +ps: +List<Piece>, +bs: +List<Slot>, s: Pose,
   e: Pose, +cfg: U32, +stats: U32) -> Track:
   match open:
     case True{}:
-      Track{ps, True{}, Blocks.step(bs, ps), s, e, cfg, stats}
+      Track{ps, True{}, Blocks.step(bs, ps, cfg), s, e, cfg, stats}
     case False{}:
       Track{ps, False{}, bs, s, e, cfg, stats}
 
@@ -2539,7 +2580,7 @@ def Blocks.trains(+ss: +List<Slot>) -> Nat:
       Nat.add(Slot.count(s), Blocks.trains(rest))
 
 # blocks of 4 pieces; a train waits in every third block
-def Blocks.make(+n: Nat, +start: U32, +total: U32, +k: U32) -> +List<Slot>:
+def Blocks.make(+n: Nat, +start: U32, +total: U32, +k: U32, +left: U32) -> +List<Slot>:
   match n:
     case 0n:
       []
@@ -2548,9 +2589,9 @@ def Blocks.make(+n: Nat, +start: U32, +total: U32, +k: U32) -> +List<Slot>:
       +len = sel((left < 8 : U32), left, 4)
       +st = sel(U32.is_eq(start, 0), 1, 0)
       +more = (start + len < total : U32)
-      +train = U32.is_eq((k % 3 : U32), 0)
+      +train = U32.is_eq((k % 3 : U32), 0) && (left > 0 : U32)
       +rest = Bool.pick(+List<Slot>, more,
-        Blocks.make(p, (start + len : U32), total, (k + 1 : U32)), [])
+        Blocks.make(p, (start + len : U32), total, (k + 1 : U32), sel(train, (left - 1 : U32), left)), [])
       Bool.pick(Slot, train, Held{start, len, st, Train{k, 0, 0, 60}},
         Free{start, len, st}) <> rest
 
@@ -3058,7 +3099,7 @@ def Build.rides(ok: Bool, +q: Q, +rs: +List<Ride>, +tool: U32, +x: U32,
 def Track.begin(+q: Q, +x: U32, +y: U32, +v: U32) -> Track:
   +h = Land.h(q, x, y)
   +pc = {Piece{x, y, h, 5, (v .&. 3 : U32)} : Piece}
-  Track{[pc], False{}, [], Pose{x, y, h, (v .&. 3 : U32)}, Piece.exit(pc), 0, 0}
+  Track{[pc], False{}, [], Pose{x, y, h, (v .&. 3 : U32)}, Piece.exit(pc), Cfg.new(), 0}
 
 def Build.track(ok: Bool, +q: Q, +trk: +List<Track>, +tool: U32, +x: U32, +y: U32,
   +v: U32) -> +List<Track>:
@@ -3136,7 +3177,8 @@ def TrackOp.ok(+q: Q, +trk: Track, +cash: U32, +op: U32) -> Bool:
   +add = Piece.adds(op) && shut && (n > 0 : U32) && Bool.not(Track.closed(trk)) && plat
     && Track.room(q, Track.end(trk), op) && Build.can_pay(cash, Piece.cost(op))
   +del = U32.is_eq(op, 7) && shut && (n > 1 : U32)
-  add || del || U32.is_eq(op, 8)
+  +set = (op >= 16 : U32) && (op < 24 : U32) && shut
+  add || del || set || U32.is_eq(op, 8)
 
 # a piece costs its price; taking one off gives half of its price back
 def TrackOp.ledger(ok: Bool, +op: U32, +last: U32) -> +List<Txn>:
@@ -3175,11 +3217,30 @@ def Track.toggle.go(open: Bool, +ps: +List<Piece>, bs: +List<Slot>, +s: Pose,
       +n = len32(Piece, ps)
       +shut = {Track{ps, False{}, [], s, e, cfg, stats} : Track}
       +ok = Track.closed(shut)
-      Track{ps, ok, Bool.pick(+List<Slot>, ok, Blocks.make(U32.to_nat(n), 0, n, 0), []), s, e, cfg, stats}
+      +want = Cfg.trains(cfg)
+      Track{ps, ok, Bool.pick(+List<Slot>, ok, Blocks.make(U32.to_nat(n), 0, n, 0, sel(U32.is_eq(want, 0), 99, want)), []), s, e, cfg, stats}
 
 def Track.toggle(t: Track) -> Track:
   Track{+ps, open, bs, +s, +e, +cfg, +stats} = t
   Track.toggle.go(open, ps, bs, s, e, cfg, stats)
+
+# changing a setting closes the coaster (it is closed already: see TrackOp.ok)
+def Track.setcfg(t: Track, +op: U32) -> Track:
+  Track{+ps, open, bs, +s, +e, +cfg, +stats} = t
+  Track{ps, False{}, [], s, e, Cfg.set(cfg, op, Track.most(len32(Piece, ps))), stats}
+
+# every coaster's type, two bits each (coaster k at bits 2k), for drawing
+def Track.cfg(t: Track) -> U32:
+  Track{pieces, open, blocks, start, end, cfg, stats} = t
+  cfg
+
+def Tracks.types(+ts: +List<Track>, +k: U32) -> U32:
+  match ts:
+    case []:
+      0
+    case t <> rest:
+      +t2 = t
+      ((Cfg.type(Track.cfg(t2)) << (U32.to_nat((k * 2 : U32)))) .|. Tracks.types(rest, (k + 1 : U32)) : U32)
 
 def Track.edit(t: Track, +op: U32) -> Track:
   Track{+ps, open, bs, +s, +e, +cfg, +stats} = t
@@ -3191,7 +3252,8 @@ def Track.edit(t: Track, +op: U32) -> Track:
 def Track.op(+t: Track, +op: U32, ok: Bool) -> Track:
   match ok:
     case True{}:
-      Bool.pick(Track, U32.is_eq(op, 8), Track.toggle(t), Track.edit(t, op))
+      Bool.pick(Track, U32.is_eq(op, 8), Track.toggle(t),
+        Bool.pick(Track, (op >= 16 : U32), Track.setcfg(t, op), Track.edit(t, op)))
     case False{}:
       t
 
