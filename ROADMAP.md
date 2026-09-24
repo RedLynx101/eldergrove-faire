@@ -136,8 +136,8 @@ Spikes, in order:
 ## Laws
 Proven: money_conserved, headcount_conserved, needs_bounded, coaster_on_circuit, no_collisions,
 save_load_roundtrip, capacity_respected, riders_conserved.
-Planned (M4): board_only_when_loading, ride_until_unloading, seats_unique, purchase_is_transfer,
-prices_bounded.
+Proven in M4 so far: board_only_when_loading, ride_until_unloading, seats_unique.
+Planned (M4): purchase_is_transfer, prices_bounded.
 Proof maintenance rule: keep the code field-wise (each park field updated by its own function) so
 existing proofs survive new features.
 

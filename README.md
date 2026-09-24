@@ -92,9 +92,9 @@ coaster per park for now (the Wyrm Coaster comes pre-built).
 8. **riders_conserved**: nobody leaves the park from a ride: a guest riding at the start of a tick is still in the park after it.
 9. **board_only_when_loading**: the boarding plan seats guests only on rides that are loading (a cycling ride between runs, the coaster's train standing in the station after unloading, or a shop).
 10. **ride_until_unloading**: a rider stays aboard until their ride unloads.
+11. **seats_unique**: the boarding plan never gives one seat to two guests.
 
 Laws 1-4 quantify over every possible `Park.step` (tick, build, track edit),
 so they hold for anything a player or the clock can do.
-Laws 7-10 hold for every possible input to the boarding plan and to a
-rider's tick. Not yet proven: that no two guests are planned into the same
-seat (the plan skips taken seats, but no law checks it).
+Laws 7-11 hold for every possible input to the boarding plan and to a
+rider's tick.

@@ -740,18 +740,34 @@ def bit8(+n: U32) -> U32:
 def Seat.has(+f: U32, +b: U32) -> Bool:
   Bool.not(U32.is_eq((f .&. b : U32), 0))
 
-# seat k if it is free (f: the free seats) and below cap, else `rest`
-def Seat.pick(+f: U32, +cap: U32, +k: U32, +rest: U32) -> U32:
-  sel(Seat.has(f, bit8(k)) && U32.is_lt(k, cap), k, rest)
+type Board is Data:
+  Board{gid: U32, ride: U32, seat: U32}
 
-def Seat.first(+f: U32, +cap: U32) -> U32:
-  Seat.pick(f, cap, 0, Seat.pick(f, cap, 1, Seat.pick(f, cap, 2, Seat.pick(f, cap, 3,
-    Seat.pick(f, cap, 4, Seat.pick(f, cap, 5, Seat.pick(f, cap, 6, Seat.pick(f, cap, 7,
-    NONE()))))))))
+def Board.at(b: Board, +r: U32, +s: U32) -> Bool:
+  Board{g, ride, seat} = b
+  U32.is_eq(ride, r) && U32.is_eq(seat, s)
 
-# the lowest free seat below cap (m: the seats taken), or NONE
-def Seat.free(+m: U32, +cap: U32) -> U32:
-  Seat.first((m .^. 255 : U32), cap)
+# whether the plan already gave seat s of ride r to someone
+def Boards.taken(+bs: +List<Board>, +r: U32, +s: U32) -> Bool:
+  match bs:
+    case []:
+      False{}
+    case b <> rest:
+      Board.at(b, r, s) || Boards.taken(rest, r, s)
+
+# seat k of ride r if no rider sits there (f: the seats free of riders), it
+# is below cap, and the plan (acc) hasn't handed it out yet; else `rest`
+def Seat.pick(+f: U32, +acc: +List<Board>, +r: U32, +cap: U32, +k: U32, +rest: U32) -> U32:
+  sel(Seat.has(f, bit8(k)) && (U32.is_lt(k, cap) && Bool.not(Boards.taken(acc, r, k))), k, rest)
+
+def Seat.first(+f: U32, +acc: +List<Board>, +r: U32, +cap: U32) -> U32:
+  Seat.pick(f, acc, r, cap, 0, Seat.pick(f, acc, r, cap, 1, Seat.pick(f, acc, r, cap, 2,
+    Seat.pick(f, acc, r, cap, 3, Seat.pick(f, acc, r, cap, 4, Seat.pick(f, acc, r, cap, 5,
+    Seat.pick(f, acc, r, cap, 6, Seat.pick(f, acc, r, cap, 7, NONE()))))))))
+
+# the lowest free seat of ride r below cap (m: the seats riders hold), or NONE
+def Seat.free(+m: U32, +acc: +List<Board>, +r: U32, +cap: U32) -> U32:
+  Seat.first((m .^. 255 : U32), acc, r, cap)
 
 # the coaster's station: whether it runs, and the train loading there
 type Stn is Data:
@@ -871,9 +887,6 @@ def Occ.fill(+gs: +List<Guest>, +rs: +List<Ride>, +sid: U32, +tab: +List<U32>)
 
 def Occ.table(+gs: +List<Guest>, +rs: +List<Ride>, +stn: Stn) -> +List<U32>:
   Occ.fill(gs, rs, Stn.id(stn), Tab.zero(len32(Ride, rs), []))
-
-type Board is Data:
-  Board{gid: U32, ride: U32, seat: U32}
 
 def Board.bit(b: Board, +r: U32) -> U32:
   Board{g, ride, +seat} = b
@@ -1108,8 +1121,7 @@ def Boards.try(want: Bool, +g: Guest, +occ: +List<U32>, +rs: +List<Ride>,
     case True{}:
       +r = Guest.tgt(g)
       +k = Ride.kind(Rides.get(rs, r))
-      +m = (Tab.at(occ, r) .|. Boards.mask(acc, r, 0) : U32)
-      Boards.put(Seat.free(m, Ride.seats(k)), Guest.id(g), r, acc)
+      Boards.put(Seat.free(Tab.at(occ, r), acc, r, Ride.seats(k)), Guest.id(g), r, acc)
     case False{}:
       acc
 

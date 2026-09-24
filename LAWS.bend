@@ -152,3 +152,29 @@ law ride_until_unloading:
   for u: {C.Ride.unloading(C.Rides.get(rs, C.Guest.tgt(g)), stn, C.Guest.dir(g), C.Guest.tmr(g))
     == False{} : Bool}
   {C.Guest.st(C.Guest.step(g, q, rs, t, plan, stn, qs)) == 1 : U32}
+
+# 11. SEATS. The boarding plan never gives one seat to two guests: no two of
+# its boards name the same ride and seat.
+def taken(+bs: +List<C.Board>, +r: U32, +s: U32) -> Bool:
+  match bs:
+    case []:
+      False{}
+    case b <> rest:
+      C.Board{g, ride, seat} = b
+      (U32.is_eq(ride, r) && U32.is_eq(seat, s)) || taken(rest, r, s)
+
+def distinct(+bs: +List<C.Board>) -> Bool:
+  match bs:
+    case []:
+      True{}
+    case b <> rest:
+      C.Board{g, ride, seat} = b
+      Bool.not(taken(rest, ride, seat)) && distinct(rest)
+
+law seats_unique:
+  for +gs: List<&2, C.Guest>
+  for +occ: List<&2, U32>
+  for +q: C.Q
+  for +rs: List<&2, C.Ride>
+  for +stn: C.Stn
+  {distinct(C.Boards.plan(gs, occ, q, rs, stn, [])) == True{} : Bool}
