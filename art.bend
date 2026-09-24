@@ -143,23 +143,49 @@ def Art.ground(+ter: U32, +n: U32, +edge: U32, +wx: U32, +wy: U32, +t: U32)
     case _:
       Art.grass(n, edge)
 
+def Art.flag(+u: U32, +v: U32, +seed: U32) -> U32:
+  +off = sel(U32.is_eq(((v >> 3n) .&. 1 : U32), 1), 4, 0)
+  +uu = (u + off : U32)
+  +joint = U32.is_eq((uu .&. 7 : U32), 0) || U32.is_eq((v .&. 7 : U32), 0)
+  +c = (hash(((uu >> 3n) + seed * 5 : U32), ((v >> 3n) + seed : U32)) .&. 3 : U32)
+  sel(joint, 6970184, sel(U32.is_eq(c, 0), 10125936, sel(U32.is_eq(c, 1), 9468520, 10783352)))
+
+def Art.open_edge(+nb: U32, +u: U32, +v: U32, +w: U32) -> Bool:
+  (U32.is_eq((nb .&. 1 : U32), 0) && (u < w : U32)) || (U32.is_eq((nb .&. 2 : U32), 0) && (u + w > 15 : U32))
+    || (U32.is_eq((nb .&. 4 : U32), 0) && (v < w : U32)) || (U32.is_eq((nb .&. 8 : U32), 0) && (v + w > 15 : U32))
+
+def Art.paving(+obj: U32, +u: U32, +v: U32, +seed: U32, +nb: U32) -> U32:
+  match obj:
+    case 7:
+      Art.flag(u, v, seed)
+    case _:
+      sel(Art.open_edge(nb, u, v, 2), shade(Art.cobble(u, v, seed), 176), Art.cobble(u, v, seed))
+
+# foam where water meets land (the edges whose neighbour is not water)
+def Art.foam(+nb: U32, +u: U32, +v: U32, +t: U32, +c: U32) -> U32:
+  +band = Art.open_edge(nb, u, v, 2)
+  +edge = Art.open_edge(nb, u, v, 1)
+  +ripple = U32.is_eq((((u + v + (t >> 3n)) >> 1n) .&. 1 : U32), 0)
+  sel(edge, 14676463, sel(band && ripple, 10406879, c))
+
 def Art.surface(paved: Bool, +ter: U32, +u: U32, +v: U32, +wx: U32, +wy: U32,
-  +t: U32) -> U32:
+  +t: U32, +obj: U32, +nb: U32) -> U32:
   match paved:
     case True{}:
-      Art.cobble(u, v, ((wx - u + v) >> 4n : U32))
+      Art.paving(obj, u, v, ((wx - u + v) >> 4n : U32), nb)
     case False{}:
       +n = hash(wx, wy)
       +edge = sel((u < 1 : U32) || (v < 1 : U32), 272, sel((u > 14 : U32) || (v > 14 : U32), 236, 256))
-      Art.ground(ter, n, edge, wx, wy, t)
+      +g = Art.ground(ter, n, edge, wx, wy, t)
+      sel(U32.is_eq(ter, 2), Art.foam(nb, u, v, t, g), g)
 
 def Art.top(outline: Bool, +ter: U32, +obj: U32, +u: U32, +v: U32, +wx: U32,
-  +wy: U32, +t: U32) -> U32:
+  +wy: U32, +t: U32, +nb: U32) -> U32:
   match outline:
     case True{}:
       16769126
     case False{}:
-      Art.surface(U32.is_eq(obj, 1) || U32.is_eq(obj, 5), ter, u, v, wx, wy, t)
+      Art.surface(U32.is_eq(obj, 1) || U32.is_eq(obj, 5) || U32.is_eq(obj, 7), ter, u, v, wx, wy, t, obj, nb)
 
 def Art.faces(onl: Bool, onr: Bool, +dl: U32, +dr: U32, +le: U32, +re: U32,
   +px: U32, +py: U32, +wild: Bool) -> U32:
@@ -173,11 +199,11 @@ def Art.faces(onl: Bool, onr: Bool, +dl: U32, +dr: U32, +le: U32, +re: U32,
 
 def Art.block.go(top: Bool, +x: U32, +y: U32, +dl: U32, +dr: U32, +ter: U32,
   +obj: U32, +hov: U32, +wx: U32, +wy: U32, +t: U32, +px: U32, +py: U32,
-  +u: U32, +v: U32) -> U32:
+  +u: U32, +v: U32, +nb: U32) -> U32:
   match top:
     case True{}:
       +outline = U32.is_eq(hov, 1) && ((u < 1 : U32) || (v < 1 : U32) || (u > 14 : U32) || (v > 14 : U32))
-      Art.top(outline, ter, obj, u, v, (wx + (px - x) : U32), (wy + (py - y) : U32), t)
+      Art.top(outline, ter, obj, u, v, (wx + (px - x) : U32), (wy + (py - y) : U32), t, nb)
     case False{}:
       +lx = (px - (x - 16) : U32)
       +le = (y + 8 + (lx >> 1n) : U32)
@@ -187,14 +213,36 @@ def Art.block.go(top: Bool, +x: U32, +y: U32, +dl: U32, +dr: U32, +ter: U32,
         (rx < 16 : U32) && (py >= re : U32) && (py < re + dr : U32), dl, dr, le, re,
         px, py, U32.is_eq(ter, 4))
 
+# queue railings: posts at the corners and a rope 4 px up along each edge
+# that joins nothing
+def Art.rails.go(on: Bool, +x: U32, +y: U32, +nb: U32, +px: U32, +py: U32) -> U32:
+  match on:
+    case True{}:
+      +X = (px - x : U32)
+      +Y = ((py + 4 - y) * 2 : U32)
+      +u = iso_u(X, Y)
+      +v = iso_v(X, Y)
+      +in = (u < 17 : U32) && (v < 17 : U32)
+      +rope = in && Art.open_edge(nb, u, v, 1)
+      +cx = sabs(X)
+      +post = (U32.is_eq(X, 0) && (between((py - y : U32), (0 - 6 : U32), 0) && ((nb .&. 5 : U32) < 5 : U32)
+          || between((py - y : U32), 10, 16) && ((nb .&. 10 : U32) < 10 : U32)))
+        || U32.is_eq(cx, 16) && between((py - y : U32), 2, 8)
+      +knob = post && (U32.is_eq((py - y : U32), (0 - 6 : U32)) || U32.is_eq((py - y : U32), 10)
+        || U32.is_eq((py - y : U32), 2))
+      sel(knob, 14725184, sel(post, 7031339, sel(rope, sel(U32.is_eq(((u + v) .&. 1 : U32), 0), 8011680, 5582448), TR())))
+    case False{}:
+      TR()
+
 def Art.block(+x: U32, +y: U32, +dl: U32, +dr: U32, +ter: U32, +obj: U32,
-  +hov: U32, +wx: U32, +wy: U32, +t: U32, +px: U32, +py: U32) -> U32:
+  +hov: U32, +wx: U32, +wy: U32, +t: U32, +px: U32, +py: U32, +nb: U32) -> U32:
   +X = (px - x : U32)
   +Y = ((py - y) * 2 : U32)
   +u = iso_u(X, Y)
   +v = iso_v(X, Y)
-  Art.block.go((u < 16 : U32) && (v < 16 : U32), x, y, dl, dr, ter, obj, hov,
-    wx, wy, t, px, py, u, v)
+  over(Art.rails.go(U32.is_eq(obj, 7), x, y, nb, px, py),
+    Art.block.go((u < 16 : U32) && (v < 16 : U32), x, y, dl, dr, ter, obj, hov,
+      wx, wy, t, px, py, u, v, nb))
 
 # Trees (anchored at the tile centre)
 # -----------------------------------
@@ -866,6 +914,10 @@ def Art.icon_pic(+tool: U32, +cx: U32, +cy: U32, +t: U32) -> U32:
     case 10:
       +wave = (sabs((cy - wsin((cx * 20 : U32), 5) : U32)) <= 1 : U32) && (sabs(cx) <= 8 : U32)
       sel(wave, 13120044, TR())
+    case 11:
+      +posts = (U32.is_eq(sabs(cx), 6) && between(cy, (0 - 5 : U32), 4))
+      +rope = between(cx, (0 - 6 : U32), 6) && U32.is_eq(cy, (0 - 2 + (sabs(cx) >> 2n) : U32))
+      sel(posts, 7031339, sel(rope, 8011680, sel(Art.dia(cx, (cy - 4 : U32)), 10125936, TR())))
     case _:
       TR()
 def Art.icon(+tool: U32, +on: U32, +dx: U32, +dy: U32, +t: U32) -> U32:

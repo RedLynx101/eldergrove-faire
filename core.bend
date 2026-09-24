@@ -85,6 +85,9 @@ def OBJ_GATE() -> U32:
 def OBJ_TRACK() -> U32:
   6
 
+def OBJ_QUEUE() -> U32:
+  7
+
 def GATE_X() -> U32:
   32
 
@@ -149,15 +152,25 @@ def Q.place(bx: Bool, by: Bool, n: Q, a: Q, b: Q, c: Q, d: Q) -> Q:
 def Q.bit(+x: U32, +m: U32) -> Bool:
   Bool.not(U32.is_eq((x .&. m : U32), 0))
 
-def Q.get(+d: Nat, +q: Q, +x: U32, +y: U32, +m: U32) -> Tile:
-  match d q:
-    case _ QL{t}:
+# (bx, by: this level's bits of x and y; descending into just the one child
+# keeps lookups free of reference-count work on the other three)
+def Q.find(+d: Nat, +q: Q, bx: Bool, by: Bool, +x: U32, +y: U32, +m: U32) -> Tile:
+  match d q bx by:
+    case _ QL{t} _ _:
       t
-    case 0n QN{a, b, c, e}:
+    case 0n QN{a, b, c, e} _ _:
       Tile{0, 0, 0, 0, 0}
-    case 1n+p QN{a, b, c, e}:
-      Q.get(p, Q.pick(Q.bit(x, m), Q.bit(y, m), a, b, c, e), x, y,
-        (m >> 1n : U32))
+    case 1n+p QN{a, b, c, e} False{} False{}:
+      Q.find(p, a, Q.bit(x, (m >> 1n : U32)), Q.bit(y, (m >> 1n : U32)), x, y, (m >> 1n : U32))
+    case 1n+p QN{a, b, c, e} True{} False{}:
+      Q.find(p, b, Q.bit(x, (m >> 1n : U32)), Q.bit(y, (m >> 1n : U32)), x, y, (m >> 1n : U32))
+    case 1n+p QN{a, b, c, e} False{} True{}:
+      Q.find(p, c, Q.bit(x, (m >> 1n : U32)), Q.bit(y, (m >> 1n : U32)), x, y, (m >> 1n : U32))
+    case 1n+p QN{a, b, c, e} True{} True{}:
+      Q.find(p, e, Q.bit(x, (m >> 1n : U32)), Q.bit(y, (m >> 1n : U32)), x, y, (m >> 1n : U32))
+
+def Q.get(+d: Nat, +q: Q, +x: U32, +y: U32, +m: U32) -> Tile:
+  Q.find(d, q, Q.bit(x, m), Q.bit(y, m), x, y, m)
 
 def Q.set(+d: Nat, +q: Q, +x: U32, +y: U32, +m: U32, t: Tile) -> Q:
   match d q:
@@ -174,8 +187,15 @@ def Q.set(+d: Nat, +q: Q, +x: U32, +y: U32, +m: U32, t: Tile) -> Q:
 def inmap(+x: U32, +y: U32) -> Bool:
   ((x < 64) && (y < 64) : U32)
 
+def Land.get.go(in: Bool, +q: Q, +x: U32, +y: U32) -> Tile:
+  match in:
+    case True{}:
+      Q.get(6n, q, x, y, 32)
+    case False{}:
+      Tile{0, 4, 0, 0, 0}
+
 def Land.get(+q: Q, +x: U32, +y: U32) -> Tile:
-  Bool.pick(Tile, inmap(x, y), Q.get(6n, q, x, y, 32), Tile{0, 4, 0, 0, 0})
+  Land.get.go(inmap(x, y), q, x, y)
 
 def Land.set(+q: Q, +x: U32, +y: U32, t: Tile) -> Q:
   Q.set(6n, q, x, y, 32, t)
@@ -186,11 +206,37 @@ def Land.h(+q: Q, +x: U32, +y: U32) -> U32:
 def Land.obj(+q: Q, +x: U32, +y: U32) -> U32:
   Tile.obj(Land.get(q, x, y))
 
-# a guest may step onto a path or the gate at the same height
-def Land.walk(+q: Q, +x: U32, +y: U32, +h: U32) -> Bool:
+def Land.qn(+q: Q, +x: U32, +y: U32) -> U32:
+  sel(U32.is_eq(Land.obj(q, x, y), 7), 1, 0)
+
+def Land.rn(+q: Q, +x: U32, +y: U32) -> U32:
+  sel(U32.is_eq(Land.obj(q, x, y), 3), 1, 0)
+
+# a queue's free end: a lone queue tile, or a line's last tile away from
+# the ride (checked only when needed: stepping onto a queue from outside it)
+def Land.qend(need: Bool, +q: Q, +x: U32, +y: U32) -> Bool:
+  match need:
+    case True{}:
+      +x1 = (x + 1 : U32)
+      +x0 = (x - 1 : U32)
+      +y1 = (y + 1 : U32)
+      +y0 = (y - 1 : U32)
+      +n = (Land.qn(q, x1, y) + Land.qn(q, x0, y) + Land.qn(q, x, y1) + Land.qn(q, x, y0) : U32)
+      +r = (Land.rn(q, x1, y) + Land.rn(q, x0, y) + Land.rn(q, x, y1) + Land.rn(q, x, y0) : U32)
+      U32.is_eq(n, 0) || U32.is_eq(n, 1) && U32.is_eq(r, 0)
+    case False{}:
+      True{}
+
+# a guest may step onto a path or the gate at the same height; onto a
+# queue tile only when heading for a ride (qok), and from outside the queue
+# (fq false) only at its free end. 0: blocked, 1: path, 2: queue
+def Land.step(+q: Q, +x: U32, +y: U32, +h: U32, +qok: Bool, +fq: Bool) -> U32:
   +t = Land.get(q, x, y)
   +o = Tile.obj(t)
-  inmap(x, y) && (U32.is_eq(o, 1) || U32.is_eq(o, 5)) && U32.is_eq(Tile.h(t), h)
+  +isq = U32.is_eq(o, 7)
+  +ok = inmap(x, y) && U32.is_eq(Tile.h(t), h)
+    && (U32.is_eq(o, 1) || U32.is_eq(o, 5) || qok && isq && Land.qend(isq && Bool.not(fq), q, x, y))
+  sel(ok, sel(isq, 2, 1), 0)
 
 # Map generation: the starting land of Eldergrove
 # -----------------------------------------------
@@ -241,10 +287,13 @@ def Gen.inner(+x: U32, +y: U32) -> Tile:
   +gate = U32.is_eq(x, GATE_X()) && U32.is_eq(y, GATE_Y())
   +tree = Bool.not(Gen.near_path(x, y)) && Bool.not(Gen.clear(x, y))
     && Bool.not(Gen.lake(x, y)) && U32.is_eq((r .&. 7 : U32), 0)
+  +queue = in_rect(x, y, 34, 27, 34, 29) || in_rect(x, y, 33, 27, 33, 27)
+    || in_rect(x, y, 31, 38, 31, 39)
   Bool.pick(Tile, gate, Tile{1, 1, 5, 0, 0},
+    Bool.pick(Tile, queue, Tile{h, 1, 7, 0, 0},
     Bool.pick(Tile, Gen.lake(x, y), Tile{0, 2, 0, 0, 0},
       Bool.pick(Tile, Gen.is_path(x, y), Tile{h, 1, 1, 0, 0},
-        Bool.pick(Tile, tree, Gen.tree(x, y, h, r), Tile{h, 0, 0, 0, 0}))))
+        Bool.pick(Tile, tree, Gen.tree(x, y, h, r), Tile{h, 0, 0, 0, 0})))))
 
 def Gen.outer(+x: U32, +y: U32) -> Tile:
   +r = hash(x, y)
@@ -450,35 +499,51 @@ def dy_of(+d: U32) -> U32:
 # heading d, within n more steps (never turning straight back). A branch
 # that dead-ends away from the target is worthless (99999), so guests stop
 # walking into dead-end spurs. `ok`: whether (i, j) can be walked at all.
-def Guest.reach(+n: Nat, ok: Bool, +q: Q, +i: U32, +j: U32, +h: U32, +d: U32,
-  +tx: U32, +ty: U32) -> U32:
-  match n ok:
-    case _ False{}:
+def Guest.arr(+i: U32, +j: U32, +tx: U32, +ty: U32, +lim: U32) -> Bool:
+  ((absd(i, tx) + absd(j, ty)) <= lim : U32)
+
+# (arr: (i, j) is already within lim of the target, so the search stops)
+def Guest.reach(+n: Nat, ok: Bool, arr: Bool, +q: Q, +i: U32, +j: U32, +h: U32, +d: U32,
+  +tx: U32, +ty: U32, +qok: Bool, +fq: Bool, +lim: U32) -> U32:
+  match n ok arr:
+    case _ False{} _:
       99999
-    case 0n True{}:
+    case _ True{} True{}:
       (absd(i, tx) + absd(j, ty) : U32)
-    case 1n+p True{}:
+    case 0n True{} False{}:
+      (absd(i, tx) + absd(j, ty) : U32)
+    case 1n+p True{} False{}:
       +back = ((d + 2) .&. 3 : U32)
       +i1 = (i + 1 : U32)
       +i0 = (i - 1 : U32)
       +j1 = (j + 1 : U32)
       +j0 = (j - 1 : U32)
-      +r0 = Guest.reach(p, Bool.not(U32.is_eq(back, 0)) && Land.walk(q, i1, j, h), q, i1, j, h, 0, tx, ty)
-      +r1 = Guest.reach(p, Bool.not(U32.is_eq(back, 1)) && Land.walk(q, i, j1, h), q, i, j1, h, 1, tx, ty)
-      +r2 = Guest.reach(p, Bool.not(U32.is_eq(back, 2)) && Land.walk(q, i0, j, h), q, i0, j, h, 2, tx, ty)
-      +r3 = Guest.reach(p, Bool.not(U32.is_eq(back, 3)) && Land.walk(q, i, j0, h), q, i, j0, h, 3, tx, ty)
+      +c0 = Land.step(q, i1, j, h, qok, fq)
+      +r0 = Guest.reach(p, Bool.not(U32.is_eq(back, 0)) && Bool.not(U32.is_eq(c0, 0)),
+        Guest.arr(i1, j, tx, ty, lim), q, i1, j, h, 0, tx, ty, qok, U32.is_eq(c0, 2), lim)
+      +c1 = Land.step(q, i, j1, h, qok, fq)
+      +r1 = Guest.reach(p, Bool.not(U32.is_eq(back, 1)) && Bool.not(U32.is_eq(c1, 0)),
+        Guest.arr(i, j1, tx, ty, lim), q, i, j1, h, 1, tx, ty, qok, U32.is_eq(c1, 2), lim)
+      +c2 = Land.step(q, i0, j, h, qok, fq)
+      +r2 = Guest.reach(p, Bool.not(U32.is_eq(back, 2)) && Bool.not(U32.is_eq(c2, 0)),
+        Guest.arr(i0, j, tx, ty, lim), q, i0, j, h, 2, tx, ty, qok, U32.is_eq(c2, 2), lim)
+      +c3 = Land.step(q, i, j0, h, qok, fq)
+      +r3 = Guest.reach(p, Bool.not(U32.is_eq(back, 3)) && Bool.not(U32.is_eq(c3, 0)),
+        Guest.arr(i, j0, tx, ty, lim), q, i, j0, h, 3, tx, ty, qok, U32.is_eq(c3, 2), lim)
       +best = U32.min(U32.min(r0, r1), U32.min(r2, r3))
       +d0 = (absd(i, tx) + absd(j, ty) : U32)
-      sel((d0 <= 1 : U32), d0, sel((best < 99999 : U32), U32.min(d0, best), 99999))
+      sel((best < 99999 : U32), U32.min(d0, best), 99999)
 
 # how much a guest likes stepping from tile (i, j) in direction d, heading
 # for tile (tx, ty): lower is better; 99999 when it cannot step there
 def Guest.score(+q: Q, +i: U32, +j: U32, +h: U32, +d: U32, +back: U32,
-  +tx: U32, +ty: U32, +r: U32) -> U32:
+  +tx: U32, +ty: U32, +r: U32, +qok: Bool, +fq: Bool, +lim: U32) -> U32:
   +ni = (i + dx_of(d) : U32)
   +nj = (j + dy_of(d) : U32)
-  +ok = Land.walk(q, ni, nj, h)
-  +v = Guest.reach(12n, ok, q, ni, nj, h, d, tx, ty)
+  +c = Land.step(q, ni, nj, h, qok, fq)
+  +ok = Bool.not(U32.is_eq(c, 0))
+  +v = Guest.reach(12n, ok, Guest.arr(ni, nj, tx, ty, lim), q, ni, nj, h, d, tx, ty, qok,
+    U32.is_eq(c, 2), lim)
   +pen = sel(U32.is_eq(d, back), 7, 0)
   +jit = (hash(r, d) .&. 7 : U32)
   sel(ok, sel((v >= 99999 : U32), (90000 + pen : U32), (v * 4 + pen + jit : U32)), 99999)
@@ -491,19 +556,19 @@ def min2(+sa: U32, +sb: U32) -> U32:
 
 # the direction to take at a tile centre (the current one if nothing works)
 def Guest.choose(+q: Q, +i: U32, +j: U32, +h: U32, +dir: U32, +tx: U32,
-  +ty: U32, +r: U32) -> U32:
+  +ty: U32, +r: U32, +qok: Bool, +fq: Bool, +lim: U32) -> U32:
   +back = ((dir + 2) .&. 3 : U32)
-  +s0 = Guest.score(q, i, j, h, 0, back, tx, ty, r)
-  +s1 = Guest.score(q, i, j, h, 1, back, tx, ty, r)
-  +s2 = Guest.score(q, i, j, h, 2, back, tx, ty, r)
-  +s3 = Guest.score(q, i, j, h, 3, back, tx, ty, r)
+  +s0 = Guest.score(q, i, j, h, 0, back, tx, ty, r, qok, fq, lim)
+  +s1 = Guest.score(q, i, j, h, 1, back, tx, ty, r, qok, fq, lim)
+  +s2 = Guest.score(q, i, j, h, 2, back, tx, ty, r, qok, fq, lim)
+  +s3 = Guest.score(q, i, j, h, 3, back, tx, ty, r, qok, fq, lim)
   +d01 = best2(0, s0, 1, s1)
   +d23 = best2(2, s2, 3, s3)
   +best = best2(d01, min2(s0, s1), d23, min2(s2, s3))
   sel((min2(min2(s0, s1), min2(s2, s3)) < 99999 : U32), best, dir)
 
-def Guest.can_step(+q: Q, +i: U32, +j: U32, +h: U32, +d: U32) -> Bool:
-  Land.walk(q, (i + dx_of(d) : U32), (j + dy_of(d) : U32), h)
+def Guest.can_step(+q: Q, +i: U32, +j: U32, +h: U32, +d: U32, +qok: Bool, +fq: Bool) -> Bool:
+  Bool.not(U32.is_eq(Land.step(q, (i + dx_of(d) : U32), (j + dy_of(d) : U32), h, qok, fq), 0))
 
 # which ride a guest heads for: the best-scoring open one they can afford
 # of the kind they want (0: any attraction)
@@ -539,10 +604,10 @@ def Guest.pick_if(need: Bool, +rs: +List<Ride>, +want: U32, +i: U32, +j: U32,
       NONE()
 
 def Guest.steer(now: Bool, +q: Q, +i: U32, +j: U32, +h: U32, +dir: U32,
-  +tx: U32, +ty: U32, +r: U32) -> U32:
+  +tx: U32, +ty: U32, +r: U32, +qok: Bool, +fq: Bool, +lim: U32) -> U32:
   match now:
     case True{}:
-      Guest.choose(q, i, j, h, dir, tx, ty, r)
+      Guest.choose(q, i, j, h, dir, tx, ty, r, qok, fq, lim)
     case False{}:
       dir
 
@@ -746,17 +811,128 @@ def Boards.seat(+bs: +List<Board>, +id: U32) -> U32:
     case b <> rest:
       sel(Board.is(b, id), Board.seat(b), Boards.seat(rest, id))
 
+# Queues, entrances and exits
+# ---------------------------
+# A queue tile beside a ride is its entrance: a ride with one boards only
+# guests standing in its queue. Riders get off onto a path tile beside the
+# ride (its exit). In a queue, a guest steps forward only when nobody is
+# within half a tile ahead, so lines form single file.
+
+def pk(+i: U32, +j: U32) -> U32:
+  (i * 64 + j : U32)
+
+# the n-th tile around a w x w footprint at (x, y), packed i * 64 + j
+def Ride.cand(+x: U32, +y: U32, +w: U32, +n: U32) -> U32:
+  match n:
+    case 0:
+      pk(x, (y - 1 : U32))
+    case 1:
+      pk((x + w : U32), y)
+    case 2:
+      pk(x, (y + w : U32))
+    case 3:
+      pk((x - 1 : U32), y)
+    case 4:
+      pk((x + w - 1 : U32), (y - 1 : U32))
+    case 5:
+      pk((x + w : U32), (y + w - 1 : U32))
+    case 6:
+      pk((x + w - 1 : U32), (y + w : U32))
+    case _:
+      pk((x - 1 : U32), (y + w - 1 : U32))
+
+def Land.obj_at(+q: Q, +e: U32) -> U32:
+  Land.obj(q, (e >> 6n : U32), (e .&. 63 : U32))
+
+def Ride.is_at(+q: Q, +x: U32, +y: U32, +w: U32, +n: U32, +o: U32) -> Bool:
+  U32.is_eq(Land.obj_at(q, Ride.cand(x, y, w, n)), o)
+
+# the ride's exit: the first path tile around it, or NONE
+def Ride.exit(+q: Q, r: Ride) -> U32:
+  Ride{kind, +x, +y, +w, h, price, open} = r
+  sel(Ride.is_at(q, x, y, w, 0, 1), Ride.cand(x, y, w, 0), sel(Ride.is_at(q, x, y, w, 1, 1), Ride.cand(x, y, w, 1),
+    sel(Ride.is_at(q, x, y, w, 2, 1), Ride.cand(x, y, w, 2), sel(Ride.is_at(q, x, y, w, 3, 1), Ride.cand(x, y, w, 3),
+    sel(Ride.is_at(q, x, y, w, 4, 1), Ride.cand(x, y, w, 4), sel(Ride.is_at(q, x, y, w, 5, 1), Ride.cand(x, y, w, 5),
+    sel(Ride.is_at(q, x, y, w, 6, 1), Ride.cand(x, y, w, 6), sel(Ride.is_at(q, x, y, w, 7, 1), Ride.cand(x, y, w, 7),
+    NONE()))))))))
+
+# the ride's entrance: the first queue tile beside it, or NONE
+def Ride.entr(+q: Q, r: Ride) -> U32:
+  Ride{kind, +x, +y, +w, h, price, open} = r
+  sel(Ride.is_at(q, x, y, w, 0, 7), Ride.cand(x, y, w, 0), sel(Ride.is_at(q, x, y, w, 1, 7), Ride.cand(x, y, w, 1),
+    sel(Ride.is_at(q, x, y, w, 2, 7), Ride.cand(x, y, w, 2), sel(Ride.is_at(q, x, y, w, 3, 7), Ride.cand(x, y, w, 3),
+    sel(Ride.is_at(q, x, y, w, 4, 7), Ride.cand(x, y, w, 4), sel(Ride.is_at(q, x, y, w, 5, 7), Ride.cand(x, y, w, 5),
+    sel(Ride.is_at(q, x, y, w, 6, 7), Ride.cand(x, y, w, 6), sel(Ride.is_at(q, x, y, w, 7, 7), Ride.cand(x, y, w, 7),
+    NONE()))))))))
+
+# every ride's entrance, computed once a tick
+def Rides.ents(+q: Q, +rs: +List<Ride>) -> +List<U32>:
+  match rs:
+    case []:
+      []
+    case r <> rest:
+      Ride.entr(q, r) <> Rides.ents(q, rest)
+
+# where queued guests stand, for the spacing rule: packed (x << 16) | y
+def Queue.put(on: Bool, +x: U32, +y: U32, +acc: +List<U32>) -> +List<U32>:
+  match on:
+    case True{}:
+      ((x << 16n : U32) .|. y : U32) <> acc
+    case False{}:
+      acc
+
+def Queue.add(g: Guest, +q: Q, +acc: +List<U32>) -> +List<U32>:
+  Guest{id, +x, +y, dir, +st, tgt, tmr, cash, hu, th, en, na, ha, lk} = g
+  Queue.put(U32.is_eq(st, 0) && U32.is_eq(Land.obj(q, (x >> 4n : U32), (y >> 4n : U32)), 7), x, y, acc)
+
+def Queue.list(+gs: +List<Guest>, +q: Q, +acc: +List<U32>) -> +List<U32>:
+  match gs:
+    case []:
+      acc
+    case g <> rest:
+      Queue.list(rest, q, Queue.add(g, q, acc))
+
+# someone in the queue within six units ahead (in direction d) of (x, y)
+def QP.ahead(+p: U32, +x: U32, +y: U32, +d: U32) -> Bool:
+  +px = (p >> 16n : U32)
+  +py = (p .&. 65535 : U32)
+  +fx = sel(U32.is_eq(d, 0), (px - x : U32), sel(U32.is_eq(d, 2), (x - px : U32),
+    sel(U32.is_eq(d, 1), (py - y : U32), (y - py : U32))))
+  +sx = sel(U32.is_eq((d .&. 1 : U32), 0), (py - y : U32), (px - x : U32))
+  ((fx - 1) < 6 : U32) && ((sx + 4) <= 8 : U32)
+
+# (hit carries the previous test, so the scan stops at the first match)
+def Queue.blocked(+qs: +List<U32>, hit: Bool, +x: U32, +y: U32, +d: U32) -> Bool:
+  match qs:
+    case []:
+      hit
+    case p <> rest:
+      match hit:
+        case True{}:
+          True{}
+        case False{}:
+          Queue.blocked(rest, QP.ahead(p, x, y, d), x, y, d)
+
+def Queue.wait(check: Bool, +qs: +List<U32>, +x: U32, +y: U32, +d: U32) -> Bool:
+  match check:
+    case True{}:
+      Queue.blocked(qs, False{}, x, y, d)
+    case False{}:
+      False{}
+
 # whether a walking guest is ready to board (or buy at) their target ride:
 # at its entrance, with the fare, and -- for the coaster -- a train loading
-def Guest.wants(g: Guest, +q: Q, +rs: +List<Ride>, +stn: Stn) -> Bool:
+def Guest.wants(g: Guest, +q: Q, +rs: +List<Ride>, +stn: Stn, +ents: +List<U32>) -> Bool:
   Guest{id, +x, +y, dir, +st, +tgt, tmr, +cash, hu, th, en, na, ha, lk} = g
   Stn{so, +sid, +sw} = stn
   +rd = Rides.get(rs, tgt)
   +coaster = U32.is_eq(Ride.kind(rd), 5)
+  +ent = Tab.at(ents, tgt)
   U32.is_eq(st, 0) && Bool.not(U32.is_eq(tgt, NONE())) && Guest.at_center(x, y)
     && Ride.is_open(rd) && U32.is_le(Ride.price(rd), cash)
     && U32.is_eq(Ride.dist(rd, (x >> 4n : U32), (y >> 4n : U32)), 1)
     && (Bool.not(coaster) || Bool.not(U32.is_eq(sid, NONE())) && (sw > 40 : U32))
+    && (U32.is_eq(ent, NONE()) || U32.is_eq(pk((x >> 4n : U32), (y >> 4n : U32)), ent))
 
 def Boards.put(+s: U32, +id: U32, +r: U32, +acc: +List<Board>) -> +List<Board>:
   Bool.pick(+List<Board>, U32.is_eq(s, NONE()), acc, Board{id, r, s} <> acc)
@@ -773,12 +949,12 @@ def Boards.try(want: Bool, +g: Guest, +occ: +List<U32>, +rs: +List<Ride>,
       acc
 
 def Boards.plan(+gs: +List<Guest>, +occ: +List<U32>, +q: Q, +rs: +List<Ride>,
-  +stn: Stn, +acc: +List<Board>) -> +List<Board>:
+  +stn: Stn, +ents: +List<U32>, +acc: +List<Board>) -> +List<Board>:
   match gs:
     case []:
       acc
     case g <> rest:
-      Boards.plan(rest, occ, q, rs, stn, Boards.try(Guest.wants(g, q, rs, stn), g, occ,
+      Boards.plan(rest, occ, q, rs, stn, ents, Boards.try(Guest.wants(g, q, rs, stn, ents), g, occ,
         rs, stn, acc))
 
 
@@ -798,17 +974,34 @@ def Guest.board(g: Guest, +rs: +List<Ride>, +seat: U32, +stn: Stn) -> Guest:
     sel(U32.is_eq(k, 3), sub0(th, 160), th), en,
     (na + Ride.thrill(k) : U32), (ha + Ride.fun(k) : U32), lk}
 
-# a rider gets off when the ride ends; a coaster rider when their train is
-# back in the station (or the coaster closes)
-def Guest.riding(g: Guest, +rs: +List<Ride>, +stn: Stn) -> Guest:
-  Guest{id, x, y, +dir, st, +tgt, +tmr, cash, hu, th, en, na, ha, lk} = g
+# a ride is over when its time runs out; for a coaster rider, when their
+# train is back in the station (or the coaster closes)
+def Guest.done(+tmr: U32, +dir: U32, +tgt: U32, +rs: +List<Ride>, +stn: Stn) -> Bool:
   Stn{+so, +sid, +sw} = stn
   +k = Ride.kind(Rides.get(rs, tgt))
   +coaster = U32.is_eq(k, 5)
   +back = coaster && U32.is_eq((dir >> 3n : U32), sid) && (sw > 100 : U32) && (tmr < 2800 : U32)
-  +done = (tmr <= 1 : U32) || back || coaster && U32.is_eq(so, 0) || U32.is_eq(k, 0)
-  Guest{id, x, y, sel(done, 0, dir), sel(done, 0, 1), sel(done, NONE(), tgt),
-    sel(done, 0, (tmr - 1 : U32)), cash, hu, th, en, na, ha, lk}
+  (tmr <= 1 : U32) || back || coaster && U32.is_eq(so, 0) || U32.is_eq(k, 0)
+
+# getting off: at the ride's exit (a shop's buyers stay where they stand)
+def Guest.off(done: Bool, +id: U32, +x: U32, +y: U32, +dir: U32, +tgt: U32, +tmr: U32,
+  +cash: U32, +hu: U32, +th: U32, +en: U32, +na: U32, +ha: U32, +lk: U32, +q: Q,
+  +rs: +List<Ride>) -> Guest:
+  match done:
+    case True{}:
+      +rd = Rides.get(rs, tgt)
+      +k = Ride.kind(rd)
+      +e = sel(U32.is_eq(k, 3) || U32.is_eq(k, 4), NONE(), Ride.exit(q, rd))
+      +out = Bool.not(U32.is_eq(e, NONE()))
+      Guest{id, sel(out, ((e >> 6n) * 16 + 8 : U32), x), sel(out, ((e .&. 63) * 16 + 8 : U32), y),
+        0, 0, NONE(), 0, cash, hu, th, en, na, ha, lk}
+    case False{}:
+      Guest{id, x, y, dir, 1, tgt, (tmr - 1 : U32), cash, hu, th, en, na, ha, lk}
+
+def Guest.riding(g: Guest, +q: Q, +rs: +List<Ride>, +stn: Stn) -> Guest:
+  Guest{+id, +x, +y, +dir, st, +tgt, +tmr, +cash, +hu, +th, +en, +na, +ha, +lk} = g
+  Guest.off(Guest.done(tmr, dir, tgt, rs, stn), id, x, y, dir, tgt, tmr, cash, hu, th,
+    en, na, ha, lk, q, rs)
 
 # needs drift a little every 16 ticks
 def Guest.needs(g: Guest, +t: U32) -> Guest:
@@ -824,7 +1017,8 @@ def Guest.needs(g: Guest, +t: U32) -> Guest:
 
 # walking: at a tile centre pick a target and a direction; move every
 # other tick
-def Guest.walk(g: Guest, +q: Q, +rs: +List<Ride>, +t: U32) -> Guest:
+def Guest.walk(g: Guest, +q: Q, +rs: +List<Ride>, +t: U32, +qs: +List<U32>,
+  +ents: +List<U32>) -> Guest:
   Guest{+id, +x, +y, +dir, +st, +tgt, +tmr, +cash, +hu, +th, +en, na, +ha,
     lk} = g
   +i = (x >> 4n : U32)
@@ -832,6 +1026,7 @@ def Guest.walk(g: Guest, +q: Q, +rs: +List<Ride>, +t: U32) -> Guest:
   +h = Land.h(q, i, j)
   +r = hash3(id, t, x)
   +ctr = Guest.at_center(x, y)
+  +onq = U32.is_eq(Land.obj(q, i, j), 7)
   +home = U32.is_eq(st, 2)
   # decide to go home
   +tired = ((ha < 50) || (en < 30) || (cash < 2) : U32)
@@ -845,16 +1040,26 @@ def Guest.walk(g: Guest, +q: Q, +rs: +List<Ride>, +t: U32) -> Guest:
   +pick = Guest.pick_if(needt, rs, want, i, j, cash, r)
   +giveup = U32.is_eq(tmr, 0) || Bool.not(U32.is_eq(st2, 0))
   +tgt2 = sel(needt, pick, sel(giveup, NONE(), tgt))
-  +tmr2 = sel(needt, 1500, sub0(tmr, 1))
+  +slow = onq && Bool.not(U32.is_eq(((t + id) .&. 3 : U32), 0))
+  +tmr2 = sel(needt, 1500, sel(slow, tmr, sub0(tmr, 1)))
   # steering
   +trd = Rides.get(rs, tgt2)
-  +tx = sel(home, GATE_X(), sel(U32.is_eq(tgt2, NONE()), i, Ride.cx(trd)))
-  +ty = sel(home, GATE_Y(), sel(U32.is_eq(tgt2, NONE()), j, Ride.cy(trd)))
+  # a ride with a queue is reached at its entrance, where its riders wait
+  +ent = Tab.at(ents, tgt2)
+  +queued = Bool.not(home) && Bool.not(U32.is_eq(tgt2, NONE())) && Bool.not(U32.is_eq(ent, NONE()))
+  +tx = sel(home, GATE_X(), sel(U32.is_eq(tgt2, NONE()), i, sel(queued, (ent >> 6n : U32), Ride.cx(trd))))
+  +ty = sel(home, GATE_Y(), sel(U32.is_eq(tgt2, NONE()), j, sel(queued, (ent .&. 63 : U32), Ride.cy(trd))))
+  +lim = sel(queued, 0, 1)
+  +there = queued && ctr && U32.is_eq(pk(i, j), ent)
+  +qok = onq || Bool.not(U32.is_eq(tgt2, NONE())) && U32.is_eq(st3, 0)
   +tick = U32.is_eq(((t + id) .&. 1 : U32), 0)
-  +dir2 = Guest.steer(ctr && tick, q, i, j, h, dir, tx, ty, r)
+  +dir2 = Guest.steer(ctr && tick && Bool.not(there), q, i, j, h, dir, tx, ty, r, qok, onq, lim)
+  +ahead = U32.is_eq(Land.obj(q, ((x + dx_of(dir2) * 8) >> 4n : U32), ((y + dy_of(dir2) * 8) >> 4n : U32)), 7)
   +go = tick
-    && (Bool.not(ctr) || Guest.can_step(q, i, j, h, dir2))
+    && (Bool.not(ctr) || Guest.can_step(q, i, j, h, dir2, qok, onq))
+    && Bool.not(there)
     && Bool.not(U32.is_eq(st3, 3))
+    && Bool.not(Queue.wait(tick && (onq || ahead), qs, x, y, dir2))
   +x2 = sel(go, (x + dx_of(dir2) : U32), x)
   +y2 = sel(go, (y + dy_of(dir2) : U32), y)
   Guest{id, x2, y2, dir2, st3, tgt2, tmr2, cash, hu, th, en, na, ha, lk}
@@ -864,32 +1069,33 @@ def Guest.st(g: Guest) -> U32:
   st
 
 def Guest.move.go(riding: Bool, boards: Bool, +g: Guest, +q: Q,
-  +rs: +List<Ride>, +t: U32, +plan: +List<Board>, +stn: Stn) -> Guest:
+  +rs: +List<Ride>, +t: U32, +plan: +List<Board>, +stn: Stn, +qs: +List<U32>,
+  +ents: +List<U32>) -> Guest:
   match riding boards:
     case True{} _:
-      Guest.riding(g, rs, stn)
+      Guest.riding(g, q, rs, stn)
     case False{} True{}:
       Guest.board(g, rs, Boards.seat(plan, Guest.id(g)), stn)
     case False{} False{}:
-      Guest.walk(g, q, rs, t)
+      Guest.walk(g, q, rs, t, qs, ents)
 
 def Guest.move(+g: Guest, +q: Q, +rs: +List<Ride>, +t: U32, +plan: +List<Board>,
-  +stn: Stn) -> Guest:
+  +stn: Stn, +qs: +List<U32>, +ents: +List<U32>) -> Guest:
   Guest.move.go(U32.is_eq(Guest.st(g), 1), Boards.has(plan, Guest.id(g)), g, q, rs, t,
-    plan, stn)
+    plan, stn, qs, ents)
 
 # a guest's whole tick; the final clamp keeps every stat in 0..255
 def Guest.step(+g: Guest, +q: Q, +rs: +List<Ride>, +t: U32, +plan: +List<Board>,
-  +stn: Stn) -> Guest:
-  Guest.clamp(Guest.needs(Guest.move(g, q, rs, t, plan, stn), t))
+  +stn: Stn, +qs: +List<U32>, +ents: +List<U32>) -> Guest:
+  Guest.clamp(Guest.needs(Guest.move(g, q, rs, t, plan, stn, qs, ents), t))
 
 def Guests.step(+gs: +List<Guest>, +q: Q, +rs: +List<Ride>, +t: U32,
-  +plan: +List<Board>, +stn: Stn) -> +List<Guest>:
+  +plan: +List<Board>, +stn: Stn, +qs: +List<U32>, +ents: +List<U32>) -> +List<Guest>:
   match gs:
     case []:
       []
     case g <> rest:
-      Guest.step(g, q, rs, t, plan, stn) <> Guests.step(rest, q, rs, t, plan, stn)
+      Guest.step(g, q, rs, t, plan, stn, qs, ents) <> Guests.step(rest, q, rs, t, plan, stn, qs, ents)
 
 def Guests.put(keep: Bool, g: Guest, +gs: +List<Guest>) -> +List<Guest>:
   match keep:
@@ -1183,8 +1389,9 @@ type Out is Data:
 def Park.tick(p: Park) -> Out:
   Park{+map, +guests, +rides, +track, cash, +time, +nid} = p
   +stn = Track.stn(track)
-  +plan = Boards.plan(guests, Occ.table(guests, rides, stn), map, rides, stn, [])
-  +moved = Guests.step(guests, map, rides, time, plan, stn)
+  +plan = Boards.plan(guests, Occ.table(guests, rides, stn), map, rides, stn, Rides.ents(map, rides), [])
+  +moved = Guests.step(guests, map, rides, time, plan, stn, Queue.list(guests, map, []),
+    Rides.ents(map, rides))
   +arr = Guests.arrivals(guests, rides, time, nid)
   +led = Ledger.tick(guests, rides, time, plan)
   Out{Park{map, List.append(&2, Guest, arr, Guests.stay(moved)), rides,
@@ -1224,6 +1431,8 @@ def Build.cost(+tool: U32) -> U32:
       0
     case 10:
       40
+    case 11:
+      12
     case _:
       Ride.cost((tool - 4 : U32))
 
@@ -1246,7 +1455,9 @@ def Build.legal.go(+tool: U32, +q: Q, +trk: Track, +x: U32, +y: U32, +o: U32,
     case 4:
       empty && dry
     case 9:
-      U32.is_eq(o, 1) || U32.is_eq(o, 2) || U32.is_eq(o, 3)
+      U32.is_eq(o, 1) || U32.is_eq(o, 2) || U32.is_eq(o, 3) || U32.is_eq(o, 7)
+    case 11:
+      empty && dry
     case 10:
       empty && dry && U32.is_eq(len32(Piece, Track.pieces(trk)), 0)
     case _:
@@ -1321,6 +1532,8 @@ def Build.land.go(+tool: U32, +q: Q, +rs: +List<Ride>, +x: U32, +y: U32,
       Build.demolish(q, rs, x, y)
     case 10:
       Land.set(q, x, y, Tile{h, ter, 6, (5 + (v .&. 3) * 8 : U32), h})
+    case 11:
+      Land.set(q, x, y, Tile{h, 1, 7, 0, 0})
     case _:
       Land.ride(q, (tool - 4 : U32), x, y, len32(Ride, rs))
 

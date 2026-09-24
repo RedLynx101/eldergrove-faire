@@ -36,6 +36,7 @@ Dev modes:
 | Arrow keys | Scroll |
 | Click / drag | Use the tool on a tile (or pick a tool in the bar) |
 | 1 - 9, 0 | Path, raise land, lower land (to water), enchanted tree, Dragon Carousel, Arcane Spire, Potion Stall, Troll Tavern, demolish, Wyrm Coaster |
+| U | Queue line (12 gold a tile) |
 | R | Next tree kind (oak, moonpine, glowcap, crystal) / coaster direction |
 | Space | Pause; `+` / `-` speed (up to 3x) |
 | F5 / F9 | Save / load `eldergrove.sav` |
@@ -44,6 +45,12 @@ Dev modes:
 Guests ride visibly: carousel and spire hold 8 riders, shops serve 4 at a
 time, and each coaster train seats 6. Coaster riders board the train loading
 in the station and stay aboard for the whole circuit.
+
+Queue lines (U): a queue tile beside a ride is its entrance. Once a ride has
+one, guests board only from the entrance, so they walk the line single file;
+they can join a line only at its free end (the tile away from the ride), and
+riders leave onto a path tile beside the ride. Rope rails close every other
+side of the line.
 
 Coaster tool (0): `Enter` opens or closes the coaster; while closed, `W`
 ahead, `A`/`D` turn, `Q` up, `Z` down, `L` lift hill, `Backspace` removes the

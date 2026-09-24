@@ -27,7 +27,7 @@ def B() -> U32:
 
 type Dr is Data:
   DBlock{x: U32, y: U32, dl: U32, dr: U32, ter: U32, obj: U32, hov: U32,
-    wx: U32, wy: U32}
+    wx: U32, wy: U32, nb: U32}
   DTree{x: U32, y: U32, v: U32, n: U32}
   DRide{x: U32, y: U32, k: U32, ra: U32, rb: U32}
   DGate{x: U32, y: U32}
@@ -44,8 +44,8 @@ def ov(+x0: U32, +y0: U32, +x1: U32, +y1: U32, +bx: U32, +by: U32, +s: U32)
 
 def Dr.hits(d: Dr, +bx: U32, +by: U32, +s: U32) -> Bool:
   match d:
-    case DBlock{+x, +y, +dl, +dr, ter, obj, hov, wx, wy}:
-      ov((x - 16 : U32), y, (x + 16 : U32), (y + 17 + U32.max(dl, dr) : U32), bx, by, s)
+    case DBlock{+x, +y, +dl, +dr, ter, obj, hov, wx, wy, nb}:
+      ov((x - 16 : U32), (y - 7 : U32), (x + 17 : U32), (y + 17 + U32.max(dl, dr) : U32), bx, by, s)
     case DTree{+x, +y, v, n}:
       ov((x - 13 : U32), (y - 40 : U32), (x + 14 : U32), (y + 6 : U32), bx, by, s)
     case DRide{+x, +y, k, ra, rb}:
@@ -67,8 +67,8 @@ def Dr.hits(d: Dr, +bx: U32, +by: U32, +s: U32) -> Bool:
 
 def Dr.shade(d: Dr, +px: U32, +py: U32, +t: U32) -> U32:
   match d:
-    case DBlock{x, y, dl, dr, ter, obj, hov, wx, wy}:
-      A.Art.block(x, y, dl, dr, ter, obj, hov, wx, wy, t, px, py)
+    case DBlock{x, y, dl, dr, ter, obj, hov, wx, wy, nb}:
+      A.Art.block(x, y, dl, dr, ter, obj, hov, wx, wy, t, px, py, nb)
     case DTree{x, y, v, n}:
       A.Art.tree(v, (px - x : U32), (py - y : U32), n, t)
     case DRide{x, y, k, ra, rb}:
@@ -126,8 +126,8 @@ def first(+xs: +List<Dr>, done: Bool, +c: U32, +px: U32, +py: U32, +t: U32)
 # a fresh copy from the fields, so no drawable is shared between lists
 def Dr.cp(d: Dr) -> Dr:
   match d:
-    case DBlock{x, y, dl, dr, ter, obj, hov, wx, wy}:
-      DBlock{x, y, dl, dr, ter, obj, hov, wx, wy}
+    case DBlock{x, y, dl, dr, ter, obj, hov, wx, wy, nb}:
+      DBlock{x, y, dl, dr, ter, obj, hov, wx, wy, nb}
     case DTree{x, y, v, n}:
       DTree{x, y, v, n}
     case DRide{x, y, k, ra, rb}:
@@ -422,6 +422,32 @@ def obj_dr(+t: C.Tile, +i: U32, +j: U32, +sx: U32, +sy: U32,
   C.Tile{+h, ter, +obj, +a, +b} = t
   obj_dr.go(obj, a, b, h, i, j, sx, sy, C.Ride.kind(C.Rides.get(rs, a)), rt)
 
+# which neighbours a path or queue joins (paths, queues, the gate, rides),
+# or which neighbours of water are water: bit 1 i-1, 2 i+1, 4 j-1, 8 j+1
+# mode 1: a path, joined by paths, rides, the gate, queues and track;
+# 2: water's edge; 3: inside a queue line, open only along the line and to
+# its ride; 4: a queue's free end, open to paths as well
+def joins(+mode: U32, +q: C.Q, +i: U32, +j: U32) -> Bool:
+  +t = C.Land.get(q, i, j)
+  +o = C.Tile.obj(t)
+  +water = U32.is_eq(C.Tile.ter(t), 2) || Bool.not(C.inmap(i, j))
+  +line = U32.is_eq(o, 7) || U32.is_eq(o, 3)
+  +path = line || U32.is_eq(o, 1) || U32.is_eq(o, 5) || U32.is_eq(o, 6)
+  U32.is_eq(mode, 2) && water || U32.is_eq(mode, 3) && line
+    || (U32.is_eq(mode, 1) || U32.is_eq(mode, 4)) && path
+
+def nb.go(+mode: U32, +q: C.Q, +i: U32, +j: U32) -> U32:
+  match mode:
+    case 0:
+      15
+    case _:
+      (sel(joins(mode, q, (i - 1 : U32), j), 1, 0) + sel(joins(mode, q, (i + 1 : U32), j), 2, 0)
+        + sel(joins(mode, q, i, (j - 1 : U32)), 4, 0) + sel(joins(mode, q, i, (j + 1 : U32)), 8, 0) : U32)
+
+def nbmask(+q: C.Q, +i: U32, +j: U32, +obj: U32, +ter: U32) -> U32:
+  +qm = sel(U32.is_eq(obj, 7), sel(C.Land.qend(U32.is_eq(obj, 7), q, i, j), 4, 3), 0)
+  nb.go(sel(U32.is_eq(obj, 1), 1, sel((qm > 0 : U32), qm, sel(U32.is_eq(ter, 2), 2, 0))), q, i, j)
+
 def face(+h: U32, +nh: U32, +edge: Bool) -> U32:
   sel(edge, (h * 8 + 6 : U32), sel((h > nh : U32), ((h - nh) * 8 : U32), 0))
 
@@ -435,7 +461,7 @@ def push_tile(+q: C.Q, +rs: +List<C.Ride>, +gs: RT, +i: U32, +j: U32,
   +dr = face(h, C.Land.h(q, (i + 1 : U32), j), U32.is_eq(i, 63))
   +blk = {DBlock{sx, sy, dl, dr, C.Tile.ter(t), C.Tile.obj(t),
     sel(U32.is_eq(hov, (i * 64 + j : U32)), 1, 0), (16 * i - 16 * j : U32),
-    (8 * i + 8 * j : U32)} : Dr}
+    (8 * i + 8 * j : U32), nbmask(q, i, j, C.Tile.obj(t), C.Tile.ter(t))} : Dr}
   List.append(&2, Dr, obj_dr(t, i, j, sx, sy, rs, gs), blk <> acc)
 
 def row(+n: Nat, +i: U32, +k: U32, +q: C.Q, +rs: +List<C.Ride>, +gs: RT,
@@ -626,8 +652,10 @@ def tool_name(+t: U32) -> String:
       "TROLL TAVERN  400*"
     case 9:
       "DEMOLISH"
-    case _:
+    case 10:
       "WYRM COASTER  40* A PIECE"
+    case _:
+      "QUEUE LINE  12*"
 
 def msg_text(+m: U32) -> String:
   match m:
@@ -719,14 +747,14 @@ def hud(+p: C.Park, +ui: UI, +hov: U32) -> +List<Dr>:
     text("MONTH " ++ U32.show(month) ++ " DAY " ++ U32.show(day), (B() + 300 : U32), (B() + 3 : U32), 15261888,
     text(Bool.pick(String, U32.is_eq(spd, 0), "PAUSED", Bool.pick(String, U32.is_eq(spd, 1), ">", Bool.pick(String, U32.is_eq(spd, 2), ">>", ">>>"))),
       (B() + 480 : U32), (B() + 3 : U32), 16766282,
-    text(tool_name(tool), (B() + 250 : U32), (B() + 302 : U32), 16777215,
-    text(msg_text(msg), (B() + 250 : U32), (B() + 310 : U32), 16766282,
+    text(tool_name(tool), (B() + 274 : U32), (B() + 302 : U32), 16777215,
+    text(msg_text(msg), (B() + 274 : U32), (B() + 310 : U32), 16766282,
     text("INCOME " ++ money(inc), (B() + 410 : U32), (B() + 3 : U32), 11468718,
     text(U32.show(fps) ++ " FPS", (B() + 470 : U32), (B() + 310 : U32), 8421504, []))))))))))
   +bars = {DRect{B(), B(), 512, 11, 1973802} <> DRect{B(), (B() + 11 : U32), 512, 1, 13148232}
     <> DRect{B(), (B() + 291 : U32), 512, 1, 13148232}
     <> DRect{B(), (B() + 292 : U32), 512, 28, 1973802} <> [] : +List<Dr>}
-  List.append(&2, Dr, top, icons(10n, 1, tool, coaster_help(tool, hover_info(p, hov, bars))))
+  List.append(&2, Dr, top, icons(11n, 1, tool, coaster_help(tool, hover_info(p, hov, bars))))
 
 type Game is Data:
   Game{park: C.Park, ui: UI}
@@ -838,7 +866,7 @@ def on_key(+c: U32, +down: Bool, +ui: UI, +q: C.Q) -> EV:
   +kb = key_bit(c)
   +keys2 = sel(down, (keys .|. kb : U32), (keys .&. (4294967295 - kb) : U32))
   +digit = (c >= 48 : U32) && (c <= 57 : U32) && down
-  +tool2 = sel(digit, sel(U32.is_eq(c, 48), 10, (c - 48 : U32)), tool)
+  +tool2 = sel(digit, sel(U32.is_eq(c, 48), 10, (c - 48 : U32)), sel(down && U32.is_eq(c, 117), 11, tool))
   +var2 = sel(down && U32.is_eq(c, 114), (var + 1 : U32), var)
   +sp2 = sel(down && U32.is_eq(c, 32), sel(U32.is_eq(sp, 0), 1, 0),
     sel(down && (U32.is_eq(c, 61) || U32.is_eq(c, 43)), U32.min((sp + 1 : U32), 3),
@@ -874,7 +902,7 @@ def on_mouse(+x: U32, +y: U32, +button: U32, +down: Bool, +ui: UI, +q: C.Q) -> E
   +ui2 = {UI{cx, cy, keys, lx, ly, sel(down && U32.is_eq(button, 0), 1, 0), tool, var, sp, msg, fr, inc, 99999, io, fps, tl} : UI}
   +bar = (ly >= 292 : U32)
   +slot = ((lx - 4) / 24 + 1 : U32)
-  +pickt = down && bar && (slot >= 1 : U32) && (slot <= 10 : U32)
+  +pickt = down && bar && (slot >= 1 : U32) && (slot <= 11 : U32)
   +click = down && U32.is_eq(button, 0) && Bool.not(bar)
   +hov = pick(q, ui2)
   +ui3 = UI.with_tool(UI.with_last(ui2, sel(click, hov, 99999)), sel(pickt, slot, tool))
