@@ -10,6 +10,7 @@ import Base
 import ./core.bend as C
 import ./art.bend as A
 import ./font.bend as F
+import ./sound.bend as Z
 import ./save.bend as S
 
 def sel(c: Bool, a: U32, b: U32) -> U32:
@@ -739,6 +740,14 @@ def msg_text(+m: U32) -> String:
       "REPAID 1000 GOLD"
     case 10:
       "THE BANK SAYS NO"
+    case 11:
+      "MUSIC ON  (M)"
+    case 12:
+      "MUSIC OFF  (M)"
+    case 13:
+      "SOUNDS ON  (N)"
+    case 14:
+      "SOUNDS OFF  (N)"
     case _:
       ""
 
@@ -1361,7 +1370,7 @@ def win_act(+p: C.Park, +arg: U32, +code: U32) -> +List<C.Act>:
 
 # a ride setting; opening the coaster goes through its track
 type Game is Data:
-  Game{park: C.Park, ui: UI, wm: WM}
+  Game{park: C.Park, ui: UI, wm: WM, snd: Z.Snd}
 
 def Dyn.is_below(+d: Dyn, +k: U32) -> Bool:
   (Dyn.key(d) < k : U32)
@@ -1389,7 +1398,7 @@ def dyn_from(+ds: +List<Dyn>, +k: U32) -> +List<Dyn>:
       dyn_put(Bool.not(Dyn.is_below(d, k)), d, dyn_from(rest, k))
 
 def scene(+g: Game) -> +List<Dr>:
-  Game{+p, +ui, +wm} = g
+  Game{+p, +ui, +wm, snd} = g
   C.Park{+map, +guests, +rides, +track, cash, +time, nid, fin} = p
   C.Track{+ps, open, +bs, st, en} = track
   UI{+camx, +camy, keys, mx, my, md, tool, var, sp, msg, fr, inc, last, io, fps, tl} = ui
@@ -1406,7 +1415,7 @@ def scene(+g: Game) -> +List<Dr>:
   List.append(&2, Dr, wins_dr(WM.wins(wm), p, hud(p, ui, hov)), List.append(&2, Dr, hi, lo))
 
 def Game.park(g: Game) -> C.Park:
-  Game{p, ui, wm} = g
+  Game{p, ui, wm, snd} = g
   p
 
 def frame(+g: Game) -> Image:
@@ -1467,7 +1476,7 @@ def build_act(+q: C.Q, +ui: UI) -> +List<C.Act>:
     [C.Build{tool, (hov >> 6n : U32), (hov .&. 63 : U32), var}], [])
 
 def on_key(+c: U32, +down: Bool, +ui: UI, +wm: WM, +q: C.Q) -> EV:
-  UI{cx, cy, +keys, mx, my, md, +tool, +var, +sp, msg, fr, inc, last, +io, fps, tl} = ui
+  UI{cx, cy, +keys, mx, my, md, +tool, +var, +sp, +msg, fr, inc, last, +io, fps, tl} = ui
   WM{+ws, +dg, +gx, +gy} = wm
   # Esc closes the front window; with none open, it quits
   +esc = down && U32.is_eq(c, 27)
@@ -1477,14 +1486,18 @@ def on_key(+c: U32, +down: Bool, +ui: UI, +wm: WM, +q: C.Q) -> EV:
   +digit = (c >= 48 : U32) && (c <= 57 : U32) && down
   +tool2 = sel(digit, sel(U32.is_eq(c, 48), 10, (c - 48 : U32)), sel(down && U32.is_eq(c, 117), 11,
     sel(down && U32.is_eq(c, 105), 12, tool)))
-  +var2 = sel(down && U32.is_eq(c, 114), (var + 1 : U32), var)
+  # M: music on or off (var bit 16); N: effects on or off (bit 17)
+  +var2 = (sel(down && U32.is_eq(c, 114), (var + 1 : U32), var)
+    .^. sel(down && U32.is_eq(c, 109), 65536, 0) .^. sel(down && U32.is_eq(c, 110), 131072, 0) : U32)
   +sp2 = sel(down && U32.is_eq(c, 32), sel(U32.is_eq(sp, 0), 1, 0),
     sel(down && (U32.is_eq(c, 61) || U32.is_eq(c, 43)), U32.min((sp + 1 : U32), 3),
       sel(down && U32.is_eq(c, 45), U32.max(C.sub0(sp, 1), 1), sp)))
   +op = track_op(c)
   +tact = down && U32.is_eq(tool, 10) && (op < 99 : U32)
   +io2 = sel(down && U32.is_eq(c, 63240), 1, sel(down && U32.is_eq(c, 63244), 2, io))
-  EV{UI{cx, cy, keys2, mx, my, md, tool2, var2, sp2, msg, fr, inc, last, io2, fps, tl},
+  +msg2 = sel(down && U32.is_eq(c, 109), sel(U32.is_eq((var2 .&. 65536 : U32), 0), 11, 12),
+    sel(down && U32.is_eq(c, 110), sel(U32.is_eq((var2 .&. 131072 : U32), 0), 13, 14), msg))
+  EV{UI{cx, cy, keys2, mx, my, md, tool2, var2, sp2, msg2, fr, inc, last, io2, fps, tl},
     WM{Bool.pick(+List<Win>, esc && haswin, Wins.drop(ws, 0),
       Bool.pick(+List<Win>, down && U32.is_eq(c, 112), Wins.open(ws, 2, 0, 150, 40),
       Bool.pick(+List<Win>, down && U32.is_eq(c, 102), Wins.open(ws, 3, 0, 140, 30), ws))), dg, gx, gy},
@@ -1733,9 +1746,57 @@ def cam(+keys: U32, +v: U32, +minus: U32, +plus: U32) -> U32:
   +pl = Bool.not(U32.is_eq((keys .&. plus : U32), 0))
   U32.min(U32.max(sel(m, (v - 8 : U32), sel(pl, (v + 8 : U32), v)), 200), 1900)
 
-def step_game.go(+p: C.Park, +ui: UI, +wm: WM, +acts: +List<C.Act>, quit: Bool)
-  -> Maybe<Game>:
-  UI{+cx, +cy, +keys, mx, my, md, tool, var, +sp, +msg, +fr, +inc, last, io, fps, tl} = ui
+# Sound events: what changed this frame, for the synthesizer (see Z.Snd.cue)
+def Rides.started(+a: +List<C.Ride>, +b: +List<C.Ride>) -> U32:
+  match a b:
+    case Con{r0, ra} Con{r1, rb}:
+      +k = C.Ride.kind(r1)
+      +go = Bool.not(U32.is_eq(C.Ride.ph(r0), 1)) && U32.is_eq(C.Ride.ph(r1), 1)
+      (sel(go, sel(U32.is_eq(k, 1), 2, sel(U32.is_eq(k, 2), 4, 0)), 0) .|. Rides.started(ra, rb) : U32)
+    case _ _:
+      0
+
+# the coaster: its fastest train (0..255) | a train climbing a lift hill << 8
+def Snd.slot(sl: C.Slot, +ps: +List<C.Piece>, +acc: U32) -> U32:
+  match sl:
+    case C.Free{a, n, st}:
+      acc
+    case C.Held{+a, n, st, t}:
+      C.Train{id, +prog, +speed, wait} = t
+      +k = C.Piece.kind(C.Pieces.get(ps, (a + (prog >> 8n) : U32)))
+      +roar = U32.min((speed * 255 / 90 : U32), 255)
+      +lift = U32.is_eq(k, 6) && (speed > 0 : U32)
+      (U32.max((acc .&. 255 : U32), roar) .|. (acc .&. 256) .|. sel(lift, 256, 0) : U32)
+
+def Snd.slots(+ss: +List<C.Slot>, +ps: +List<C.Piece>, +acc: U32) -> U32:
+  match ss:
+    case []:
+      acc
+    case sl <> rest:
+      Snd.slots(rest, ps, Snd.slot(sl, ps, acc))
+
+def snd_word(+p0: C.Park, +p1: C.Park, +inc0: U32, +inc1: U32, +msg0: U32, +msg1: U32,
+  +clicked: Bool, +var: U32) -> U32:
+  C.Park{m0, g0, +rs0, t0, c0, +time0, n0, f0} = p0
+  C.Park{m1, +gs1, +rs1, +tr1, c1, +time1, n1, f1} = p1
+  C.Track{+ps, open, +ss, st, en} = tr1
+  +fresh = Bool.not(U32.is_eq(msg1, msg0))
+  +coin = (inc1 > inc0 : U32) || fresh && (U32.is_eq(msg1, 8) || U32.is_eq(msg1, 9))
+  +thud = fresh && U32.is_eq(msg1, 1)
+  +buzz = fresh && (U32.is_eq(msg1, 2) || U32.is_eq(msg1, 10))
+  +go = Rides.started(rs0, rs1)
+  +bell = Bool.not(U32.is_eq((go .&. 2 : U32), 0)) || fresh && U32.is_eq(msg1, 6)
+  +whoosh = Bool.not(U32.is_eq((go .&. 4 : U32), 0))
+  +chime = Bool.not(U32.is_eq((time0 / 3600 : U32), (time1 / 3600 : U32)))
+  +crowd = U32.min((C.len32(C.Guest, gs1) / 3 : U32), 255)
+  +tr = Snd.slots(ss, ps, 0)
+  (sel(coin, 1, 0) .|. sel(clicked, 2, 0) .|. sel(thud, 4, 0) .|. sel(buzz, 8, 0) .|. sel(bell, 16, 0)
+    .|. sel(whoosh, 32, 0) .|. sel(chime, 64, 0) .|. (crowd << 8n) .|. ((tr .&. 255) << 16n)
+    .|. (((tr >> 8n) .&. 1) << 24n) .|. (((var >> 16n) .&. 3) << 25n) : U32)
+
+def step_game.go(+p: C.Park, +ui: UI, +wm: WM, +acts: +List<C.Act>, quit: Bool,
+  snd: Z.Snd, +clicked: Bool) -> Maybe<Game>:
+  UI{+cx, +cy, +keys, mx, my, md, tool, +var, +sp, +msg, +fr, +inc, last, io, fps, tl} = ui
   +r1 = apply(acts, p, msg, inc)
   +r2 = ticks(U32.to_nat(sp), Res.park(r1), Res.inc(r1))
   +time = C.Park.time(Res.park(r2))
@@ -1744,12 +1805,21 @@ def step_game.go(+p: C.Park, +ui: UI, +wm: WM, +acts: +List<C.Act>, quit: Bool)
   +ui2 = {UI{cam(keys, cx, 4, 8), cam(keys, cy, 1, 2), keys, mx, my, md, tool,
     var, sp, sel(U32.is_eq(Res.msg(r1), msg), m2, Res.msg(r1)), (fr + 1 : U32),
     sel(newmonth, 0, Res.inc(r2)), last, io, fps, tl} : UI}
-  Bool.pick(Maybe<Game>, quit, None{}, Some{Game{Res.park(r2), ui2, wm}})
+  +word = snd_word(p, Res.park(r2), inc, Res.inc(r2), msg, Res.msg(r1), clicked, var)
+  Bool.pick(Maybe<Game>, quit, None{}, Some{Game{Res.park(r2), ui2, wm, Z.Snd.cue(snd, word)}})
+
+def UI.tool(u: UI) -> U32:
+  UI{cx, cy, keys, mx, my, md, tool, var, sp, msg, fr, inc, last, io, fps, tl} = u
+  tool
 
 def step_game(+g: Game, events: List<Event>) -> Maybe<Game>:
-  Game{+p, +ui, +wm} = g
+  Game{+p, +ui, +wm, snd} = g
   +ev = on_events(events, ui, wm, p, [], False{})
-  step_game.go(p, EV.ui(ev), EV.wm(ev), EV.acts(ev), EV.quit(ev))
+  # a click: an act, a window opened or closed, or another tool
+  +clicked = Bool.not(U32.is_eq(C.len32(C.Act, EV.acts(ev)), 0))
+    || Bool.not(U32.is_eq(C.len32(Win, WM.wins(EV.wm(ev))), C.len32(Win, WM.wins(wm))))
+    || Bool.not(U32.is_eq(UI.tool(EV.ui(ev)), UI.tool(ui)))
+  step_game.go(p, EV.ui(ev), EV.wm(ev), EV.acts(ev), EV.quit(ev), snd, clicked)
 
 # The starting park
 # -----------------
@@ -1770,7 +1840,7 @@ def start_acts() -> List<C.Act>:
 def Game.new() -> Game:
   +p0 = C.Park.run(start_acts(), C.Park.new())
   +p1 = C.Park.run(coaster_acts(), p0)
-  Game{p1, UI.new(), WM.new()}
+  Game{p1, UI.new(), WM.new(), Z.Snd.new()}
 
 # The app
 # -------
@@ -1787,8 +1857,8 @@ def UI.clock(u: UI, +now: Nat) -> UI:
     sel(due, (32000 / U32.max(dt, 1) : U32), fps), Bool.pick(Nat, due, now, tl)}
 
 def Game.clock(g: Game, +now: Nat) -> Game:
-  Game{p, ui, wm} = g
-  Game{p, UI.clock(ui, now), wm}
+  Game{p, ui, wm, snd} = g
+  Game{p, UI.clock(ui, now), wm, snd}
 
 def Game.clock_m(m: Maybe<Game>, +now: Nat) -> Maybe<Game>:
   match m:
@@ -1798,7 +1868,7 @@ def Game.clock_m(m: Maybe<Game>, +now: Nat) -> Maybe<Game>:
       Some{Game.clock(g, now)}
 
 def Game.fps(g: Game) -> U32:
-  Game{p, ui, wm} = g
+  Game{p, ui, wm, snd} = g
   UI{cx, cy, keys, mx, my, md, tool, var, sp, msg, fr, inc, last, io, fps, tl} = ui
   sel(U32.is_eq((fr .&. 127 : U32), 1), fps, 0)
 
@@ -1837,11 +1907,11 @@ def UI.done(u: UI, +m: U32) -> UI:
   UI{cx, cy, keys, mx, my, md, tool, var, sp, m, fr, inc, last, 0, fps, tl}
 
 def Game.done(g: Game, +m: U32) -> Game:
-  Game{p, ui, wm} = g
-  Game{p, UI.done(ui, m), wm}
+  Game{p, ui, wm, snd} = g
+  Game{p, UI.done(ui, m), wm, snd}
 
 def Game.io(g: Game) -> U32:
-  Game{p, ui, wm} = g
+  Game{p, ui, wm, snd} = g
   UI.io(ui)
 
 def SAVE_PATH() -> String:
@@ -1867,8 +1937,8 @@ def load.got(m: Maybe<&2, C.Park>, g: Game) -> Maybe<Game>:
     case None{}:
       Some{Game.done(g, 5)}
     case Some{p}:
-      Game{old, ui, wm} = g
-      Some{Game{p, UI.done(ui, 4), WM.new()}}
+      Game{old, ui, wm, snd} = g
+      Some{Game{p, UI.done(ui, 4), WM.new(), snd}}
 
 def load.bytes(res: Result<&1, &1, U32 & String, List<&2, U32>>, g: Game)
   -> Maybe<Game>:
@@ -1995,10 +2065,10 @@ def UI.cam(u: UI, +x: U32, +y: U32) -> UI:
 
 # win: a window to show (kind * 256 + arg; 0 for none)
 def shot.go(g: Game, path: String, n: Nat, +tool: U32, +cx: U32, +cy: U32, +win: U32) -> IO(Unit):
-  Game{+p, ui, wm} = g
+  Game{+p, ui, wm, snd} = g
   +p2 = Res.park(ticks(n, p, 0))
   +ws = Bool.pick(+List<Win>, U32.is_eq(win, 0), [], [Win{(win >> 8n : U32), 300, 40, (win .&. 255 : U32)}])
-  +g2 = {Game{p2, UI.cam(UI.with_tool(UI.at(ui, 256, 150), tool), cx, cy), WM{ws, 0, 0, 0}} : Game}
+  +g2 = {Game{p2, UI.cam(UI.with_tool(UI.at(ui, 256, 150), tool), cx, cy), WM{ws, 0, 0, 0}, snd} : Game}
   shot.write(path, bytes(163840n, frame(g2), 163839, []))
 
 def shot(path: String, n: Nat, +tool: U32, +cx: U32, +cy: U32, +win: U32) -> IO(Unit):
@@ -2053,14 +2123,14 @@ def crowd.go(+n: Nat, +id: U32, +t: U32, +acc: +List<C.Guest>) -> +List<C.Guest>
       crowd.go(k, (id + 1 : U32), t, C.Guest.new(id, (t + id * 7 : U32), 0) <> acc)
 
 def crowd(g: Game, +n: U32) -> Game:
-  Game{p, ui, wm} = g
+  Game{p, ui, wm, snd} = g
   C.Park{map, guests, rides, track, cash, +time, +nid, fin} = p
   Game{C.Park{map, crowd.go(U32.to_nat(n), nid, time, guests), rides, track, cash, time,
-    (nid + n : U32), fin}, ui, wm}
+    (nid + n : U32), fin}, ui, wm, snd}
 
 def warm(g: Game, +n: Nat) -> Game:
-  Game{+p, +ui, wm} = g
-  Game{Res.park(ticks(n, p, 0)), ui, wm}
+  Game{+p, +ui, wm, snd} = g
+  Game{Res.park(ticks(n, p, 0)), ui, wm, snd}
 
 def is_bench(+args: +List<String>) -> Bool:
   match args:
@@ -2101,17 +2171,44 @@ def Loop.pure(old: Image, +g: Game, evs: List<Event>) -> Nx:
 def Loop.compute(old: Image, g: Game, evs: List<Event>) -> IO(Nx):
   IO.bind(Unit, Nx, IO.pure(Unit, Unit{}), u => IO.pure(Nx, Loop.pure(old, g, evs)))
 
-def Loop.again(m: Maybe<Game>, window: Window, shown: Image, events: List<Event>,
-  img: Image, rest: Window -> Game -> Image -> List<Event> -> Image -> IO(Unit))
+# the next samples, and the game with the synthesizer's state after them
+def Game.sound.go(pr: Z.Snd & List<&2, F32>, p: C.Park, ui: UI, wm: WM) -> Game & List<&2, F32>:
+  (s2, xs) = pr
+  (Game{p, ui, wm, s2}, xs)
+
+def Game.sound(g: Game) -> Game & List<&2, F32>:
+  Game{p, ui, wm, snd} = g
+  Game.sound.go(Z.Snd.render(snd), p, ui, wm)
+
+def Game.heard(g: Game, +q: U32) -> Game:
+  Game{p, ui, wm, snd} = g
+  Game{p, ui, wm, Z.Snd.heard(snd, q)}
+
+def Loop.heard(r: Audio & U32, window: Window, g: Game, img: Image, events: List<Event>,
+  shown: Image, rest: Window -> Audio -> Game -> Image -> List<Event> -> Image -> IO(Unit))
+  -> IO(Unit):
+  (au, q) = r
+  rest(window, au, Game.heard(g, q), img, events, shown)
+
+def Loop.play(pr: Game & List<&2, F32>, window: Window, au: Audio, img: Image, events: List<Event>,
+  shown: Image, rest: Window -> Audio -> Game -> Image -> List<Event> -> Image -> IO(Unit))
+  -> IO(Unit):
+  (g, xs) = pr
+  do IO<Unit>:
+    r : Audio & U32 <- Z.Snd.write(au, xs)
+    Loop.heard(r, window, g, img, events, shown, rest)
+
+def Loop.again(m: Maybe<Game>, window: Window, au: Audio, shown: Image, events: List<Event>,
+  img: Image, rest: Window -> Audio -> Game -> Image -> List<Event> -> Image -> IO(Unit))
   -> IO(Unit):
   match m:
     case None{}:
       Window.close(window)
     case Some{g}:
-      rest(window, g, img, events, shown)
+      Loop.play(Game.sound(g), window, au, img, events, shown, rest)
 
-def Loop.after.go(m: Maybe<Game>, window: Window, shown: Image, events: List<Event>,
-  img: Image, rest: Window -> Game -> Image -> List<Event> -> Image -> IO(Unit))
+def Loop.after.go(m: Maybe<Game>, window: Window, au: Audio, shown: Image, events: List<Event>,
+  img: Image, rest: Window -> Audio -> Game -> Image -> List<Event> -> Image -> IO(Unit))
   -> IO(Unit):
   match m:
     case None{}:
@@ -2120,15 +2217,15 @@ def Loop.after.go(m: Maybe<Game>, window: Window, shown: Image, events: List<Eve
       do IO<Unit>:
         now : Nat <- IO.now()
         m2 : Maybe<Game> <- Game.io_m(Game.clock_m(Some{g}, now))
-        Loop.again(m2, window, shown, events, img, rest)
+        Loop.again(m2, window, au, shown, events, img, rest)
 
-def Loop.after(shown: Window & Image & List<Event>, nx: Nx,
-  rest: Window -> Game -> Image -> List<Event> -> Image -> IO(Unit)) -> IO(Unit):
+def Loop.after(shown: Window & Image & List<Event>, nx: Nx, au: Audio,
+  rest: Window -> Audio -> Game -> Image -> List<Event> -> Image -> IO(Unit)) -> IO(Unit):
   (window, simg, events) = shown
   Nx{m, img} = nx
-  Loop.after.go(m, window, simg, events, img, rest)
+  Loop.after.go(m, window, au, simg, events, img, rest)
 
-def Loop.go(fuel: Nat, window: Window, g: Game, img: Image, evs: List<Event>,
+def Loop.go(fuel: Nat, window: Window, au: Audio, g: Game, img: Image, evs: List<Event>,
   old: Image) -> IO(Unit):
   match fuel:
     case 0n:
@@ -2138,13 +2235,14 @@ def Loop.go(fuel: Nat, window: Window, g: Game, img: Image, evs: List<Event>,
         chan : Chan(Nx) <- IO.fork(Nx, Loop.compute(old, g, evs))
         shown : Window & Image & List<Event> <- Win.frame(window, img)
         nx : Nx <- IO.join(Nx, chan)
-        Loop.after(shown, nx, w => g2 => i2 => e2 => o2 => Loop.go(f, w, g2, i2, e2, o2))
+        Loop.after(shown, nx, au, w => a => g2 => i2 => e2 => o2 => Loop.go(f, w, a, g2, i2, e2, o2))
 
 def Loop.run(g: Game) -> IO(Unit):
   +g2 = g
   do IO<Unit>:
     window : Window <- IO.try(Window, Window.open("Eldergrove Faire", 1024, 640))
-    Loop.go(U32.to_nat(4294967295), window, g2, frame(g2), [], Pix{0})
+    au : Audio <- Z.Snd.open(22050)
+    Loop.go(U32.to_nat(4294967295), window, au, g2, frame(g2), [], Pix{0})
 
 def is_arg(+args: +List<String>, s: String) -> Bool:
   match args:
@@ -2153,14 +2251,27 @@ def is_arg(+args: +List<String>, s: String) -> Bool:
     case a <> rest:
       String.eq(a, s)
 
+def wav.write(path: String, +bytes: +List<U32>) -> IO(Unit):
+  do IO<Unit>:
+    f : File <- IO.try(File, File.open(path, "w"))
+    r : File & Result<&1, &1, U32 & String, Unit> <- File.write_bytes(f, bytes)
+    close_pair(r)
+
+def run.live(wav: Bool, +args: +List<String>) -> IO(Unit):
+  match wav:
+    case True{}:
+      wav.write(nth(args, 1), Z.Wav.file((arg_or(nth(args, 2), 10) * 22050 : U32)))
+    case False{}:
+      Loop.run(Bool.pick(Game, is_arg(args, "--live"),
+        warm(crowd(Game.new(), arg_or(nth(args, 1), 0)), arg_nat(nth(args, 2))), Game.new()))
+
 def run(go: Bool, +args: +List<String>) -> IO(Unit):
   match go:
     case True{}:
       shot(nth(args, 1), arg_nat(nth(args, 2)), arg_u32(nth(args, 3)),
         arg_or(nth(args, 4), 930), arg_or(nth(args, 5), 880), arg_or(nth(args, 6), 0))
     case False{}:
-      Loop.run(Bool.pick(Game, is_arg(args, "--live"),
-        warm(crowd(Game.new(), arg_or(nth(args, 1), 0)), arg_nat(nth(args, 2))), Game.new()))
+      run.live(is_arg(args, "--wav"), args)
 
 def share(xs: List<String>) -> +List<String>:
   match xs:
@@ -2251,7 +2362,7 @@ def ui.click(+x: U32, +y: U32, +b: U32) -> List<Event>:
   [Mouse{(x * 2 : U32), (y * 2 : U32), b, True{}}, Mouse{(x * 2 : U32), (y * 2 : U32), b, False{}}]
 
 def ui.report(g: Game) -> String:
-  Game{+p, ui, +wm} = g
+  Game{+p, ui, +wm, snd} = g
   +r0 = C.Rides.get(C.Park.rides(p), 0)
   "windows " ++ U32.show(C.len32(Win, WM.wins(wm))) ++ " (front kind " ++ U32.show(Win.kind(Wins.get(WM.wins(wm), 0))) ++ "), carousel price " ++ U32.show(C.Ride.price(r0))
     ++ ", open " ++ U32.show(C.Ride.open_flag(r0)) ++ ", max wait " ++ U32.show(C.Ride.wmax(r0))
