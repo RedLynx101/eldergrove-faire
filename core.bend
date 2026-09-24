@@ -229,18 +229,48 @@ def Land.qend(need: Bool, +q: Q, +x: U32, +y: U32) -> Bool:
     case False{}:
       True{}
 
+# Every queue tile's `a` is 1 at a free end, 0 elsewhere; worked out again
+# after each build or track edit (they can change which tiles are ends)
+def Land.fix.go(isq: Bool, +q: Q, +x: U32, +y: U32, +t: Tile) -> Q:
+  match isq:
+    case True{}:
+      Tile{+h, +ter, obj, a, +b} = t
+      Land.set(q, x, y, Tile{h, ter, 7, sel(Land.qend(True{}, q, x, y), 1, 0), b})
+    case False{}:
+      q
+
+def Land.fix.row(+n: Nat, +x: U32, +y: U32, +q: Q) -> Q:
+  match n:
+    case 0n:
+      q
+    case 1n+m:
+      +t = Land.get(q, x, y)
+      Land.fix.row(m, (x + 1 : U32), y, Land.fix.go(U32.is_eq(Tile.obj(t), 7), q, x, y, t))
+
+def Land.fix.rows(+n: Nat, +y: U32, +q: Q) -> Q:
+  match n:
+    case 0n:
+      q
+    case 1n+m:
+      Land.fix.rows(m, (y + 1 : U32), Land.fix.row(64n, 0, y, q))
+
+def Land.fix(+q: Q) -> Q:
+  Land.fix.rows(64n, 0, q)
+
 # a guest may step onto a path or the gate at the same height -- from a
 # queue (fq) only at its free end (fe) -- and onto a queue tile only when
 # heading for a ride (qok), from outside it only at its free end.
-# 0: blocked, 1: path, 2: queue
+# 0: blocked, 1: path, 2: queue, 3: a queue's free end (a queue tile's `a`
+# says so; see Land.fix)
 def Land.step(+q: Q, +x: U32, +y: U32, +h: U32, +qok: Bool, +fq: Bool, +fe: Bool) -> U32:
   +t = Land.get(q, x, y)
   +o = Tile.obj(t)
   +isq = U32.is_eq(o, 7)
+  +end = isq && U32.is_eq(Tile.a(t), 1)
   +ok = inmap(x, y) && U32.is_eq(Tile.h(t), h)
     && ((U32.is_eq(o, 1) || U32.is_eq(o, 5)) && (Bool.not(fq) || fe)
-      || qok && isq && Land.qend(isq && Bool.not(fq), q, x, y))
-  sel(ok, sel(isq, 2, 1), 0)
+      || qok && isq && (fq || end))
+  sel(ok, sel(isq, sel(end, 3, 2), 1), 0)
 
 # Map generation: the starting land of Eldergrove
 # -----------------------------------------------
@@ -651,20 +681,20 @@ def Guest.reach(+n: Nat, ok: Bool, arr: Bool, +q: Q, +i: U32, +j: U32, +h: U32, 
       +j0 = (j - 1 : U32)
       +c0 = Land.step(q, i1, j, h, qok, fq, fe)
       +r0 = Guest.reach(p, Bool.not(U32.is_eq(back, 0)) && Bool.not(U32.is_eq(c0, 0)),
-        Guest.arr(i1, j, tx, ty, lim), q, i1, j, h, 0, tx, ty, qok, U32.is_eq(c0, 2),
-        Land.qend(U32.is_eq(c0, 2), q, i1, j), lim)
+        Guest.arr(i1, j, tx, ty, lim), q, i1, j, h, 0, tx, ty, qok,
+        U32.is_eq(c0, 2) || U32.is_eq(c0, 3), Bool.not(U32.is_eq(c0, 2)), lim)
       +c1 = Land.step(q, i, j1, h, qok, fq, fe)
       +r1 = Guest.reach(p, Bool.not(U32.is_eq(back, 1)) && Bool.not(U32.is_eq(c1, 0)),
-        Guest.arr(i, j1, tx, ty, lim), q, i, j1, h, 1, tx, ty, qok, U32.is_eq(c1, 2),
-        Land.qend(U32.is_eq(c1, 2), q, i, j1), lim)
+        Guest.arr(i, j1, tx, ty, lim), q, i, j1, h, 1, tx, ty, qok,
+        U32.is_eq(c1, 2) || U32.is_eq(c1, 3), Bool.not(U32.is_eq(c1, 2)), lim)
       +c2 = Land.step(q, i0, j, h, qok, fq, fe)
       +r2 = Guest.reach(p, Bool.not(U32.is_eq(back, 2)) && Bool.not(U32.is_eq(c2, 0)),
-        Guest.arr(i0, j, tx, ty, lim), q, i0, j, h, 2, tx, ty, qok, U32.is_eq(c2, 2),
-        Land.qend(U32.is_eq(c2, 2), q, i0, j), lim)
+        Guest.arr(i0, j, tx, ty, lim), q, i0, j, h, 2, tx, ty, qok,
+        U32.is_eq(c2, 2) || U32.is_eq(c2, 3), Bool.not(U32.is_eq(c2, 2)), lim)
       +c3 = Land.step(q, i, j0, h, qok, fq, fe)
       +r3 = Guest.reach(p, Bool.not(U32.is_eq(back, 3)) && Bool.not(U32.is_eq(c3, 0)),
-        Guest.arr(i, j0, tx, ty, lim), q, i, j0, h, 3, tx, ty, qok, U32.is_eq(c3, 2),
-        Land.qend(U32.is_eq(c3, 2), q, i, j0), lim)
+        Guest.arr(i, j0, tx, ty, lim), q, i, j0, h, 3, tx, ty, qok,
+        U32.is_eq(c3, 2) || U32.is_eq(c3, 3), Bool.not(U32.is_eq(c3, 2)), lim)
       +best = U32.min(U32.min(r0, r1), U32.min(r2, r3))
       +d0 = (absd(i, tx) + absd(j, ty) : U32)
       sel((best < 99999 : U32), U32.min(d0, best), 99999)
@@ -678,7 +708,7 @@ def Guest.score(+q: Q, +i: U32, +j: U32, +h: U32, +d: U32, +back: U32,
   +c = Land.step(q, ni, nj, h, qok, fq, fe)
   +ok = Bool.not(U32.is_eq(c, 0))
   +v = Guest.reach(12n, ok, Guest.arr(ni, nj, tx, ty, lim), q, ni, nj, h, d, tx, ty, qok,
-    U32.is_eq(c, 2), Land.qend(U32.is_eq(c, 2), q, ni, nj), lim)
+    U32.is_eq(c, 2) || U32.is_eq(c, 3), Bool.not(U32.is_eq(c, 2)), lim)
   +pen = sel(U32.is_eq(d, back), 7, 0)
   +jit = (hash(r, d) .&. 7 : U32)
   sel(ok, sel((v >= 99999 : U32), (90000 + pen : U32), (v * 4 + pen + jit : U32)), 99999)
@@ -1312,10 +1342,11 @@ def Guest.walk(g: Guest, +q: Q, +rs: +List<Ride>, +t: U32, +qs: +List<U32>) -> G
     +lk, +mind} = g
   +i = (x >> 4n : U32)
   +j = (y >> 4n : U32)
-  +h = Land.h(q, i, j)
+  +here = Land.get(q, i, j)
+  +h = Tile.h(here)
   +r = hash3(id, t, x)
   +ctr = Guest.at_center(x, y)
-  +onq = U32.is_eq(Land.obj(q, i, j), 7)
+  +onq = U32.is_eq(Tile.obj(here), 7)
   +home = U32.is_eq(st, 2)
   # decide to go home
   +tired = ((ha < 50) || (en < 30) || (cash < 2) : U32)
@@ -1352,7 +1383,7 @@ def Guest.walk(g: Guest, +q: Q, +rs: +List<Ride>, +t: U32, +qs: +List<U32>) -> G
   +qok = onq || queued && U32.is_eq(st3, 0)
   +tick = U32.is_eq(((t + id) .&. 1 : U32), 0)
   # in a queue, a guest may step off only at its free end
-  +fe = Land.qend(onq, q, i, j)
+  +fe = Bool.not(onq) || U32.is_eq(Tile.a(here), 1)
   +dir2 = Guest.steer(ctr && tick && Bool.not(there), q, i, j, h, dir, tx, ty, r, qok, onq, fe, lim)
   +ahead = U32.is_eq(Land.obj(q, ((x + dx_of(dir2) * 8) >> 4n : U32), ((y + dy_of(dir2) * 8) >> 4n : U32)), 7)
   +go = tick
@@ -1489,6 +1520,14 @@ def Qlen.fill(+gs: +List<Guest>, +q: Q, +tab: +List<U32>) -> +List<U32>:
     case g <> rest:
       Qlen.fill(rest, q, Qlen.add(g, q, tab))
 
+# counted every 16 ticks (then the rides keep their last count)
+def Qlen.fill_if(now: Bool, +gs: +List<Guest>, +q: Q, +n: U32) -> +List<U32>:
+  match now:
+    case True{}:
+      Qlen.fill(gs, q, Tab.zero(n, []))
+    case False{}:
+      []
+
 def Seat.count(+m: U32) -> U32:
   ((m .&. 1) + ((m >> 1n) .&. 1) + ((m >> 2n) .&. 1) + ((m >> 3n) .&. 1)
     + ((m >> 4n) .&. 1) + ((m >> 5n) .&. 1) + ((m >> 6n) .&. 1) + ((m >> 7n) .&. 1) : U32)
@@ -1553,23 +1592,23 @@ def Ride.rating(+k: U32, +ps: +List<Piece>) -> U32:
 # 7 entry fees, 8 loans taken, 9 loans repaid, 10 loan interest
 
 def Ride.tick(r: Ride, +idx: U32, +q: Q, +ps: +List<Piece>, +occ: +List<U32>,
-  +plan: +List<Board>, +qt: +List<U32>) -> Ride:
-  Ride{+kind, +x, +y, +w, h, +price, open, +ph, +tm, ent, ex, qlen, +wmin, +wmax, +total, +earned, born, rate} = r
+  +plan: +List<Board>, +qt: +List<U32>, +fresh: Bool) -> Ride:
+  Ride{+kind, +x, +y, +w, h, +price, open, +ph, +tm, ent, ex, +qlen, +wmin, +wmax, +total, +earned, born, rate} = r
   +n = Seat.count((Tab.at(occ, idx) .|. Boards.mask(plan, idx, 0) : U32))
   +nb = Boards.count(plan, idx, 0)
   +go = (n > 0 : U32) && (tm >= wmin : U32) && ((n >= Ride.seats(kind) : U32) || (tm >= wmax : U32))
   +ph2 = sel(Ride.cycles(kind), Ride.next_ph(ph, tm, go, Ride.duration(kind)), 0)
   Ride{kind, x, y, w, h, price, open, ph2, sel(Ride.cycles(kind), Ride.next_tm(ph, ph2, tm, n), 0),
-    Ride.door(kind, q, ps, x, y, w, 7), Ride.door(kind, q, ps, x, y, w, 1), Tab.at(qt, idx),
+    Ride.door(kind, q, ps, x, y, w, 7), Ride.door(kind, q, ps, x, y, w, 1), sel(fresh, Tab.at(qt, idx), qlen),
     wmin, wmax, (total + nb : U32), (earned + nb * price : U32), born, Ride.rating(kind, ps)}
 
 def Rides.tick(+rs: +List<Ride>, +idx: U32, +q: Q, +ps: +List<Piece>, +occ: +List<U32>,
-  +plan: +List<Board>, +qt: +List<U32>) -> +List<Ride>:
+  +plan: +List<Board>, +qt: +List<U32>, +fresh: Bool) -> +List<Ride>:
   match rs:
     case []:
       []
     case r <> rest:
-      Ride.tick(r, idx, q, ps, occ, plan, qt) <> Rides.tick(rest, (idx + 1 : U32), q, ps, occ, plan, qt)
+      Ride.tick(r, idx, q, ps, occ, plan, qt, fresh) <> Rides.tick(rest, (idx + 1 : U32), q, ps, occ, plan, qt, fresh)
 
 # The coaster's ratings from its track: turns and drops thrill, height
 # thrills most, length adds a little; a track that isn't a circuit yet has
@@ -1609,15 +1648,18 @@ def Ride.cat(+k: U32) -> U32:
     case _:
       1
 
-def Ledger.sales(+gs: +List<Guest>, +rs: +List<Ride>, +plan: +List<Board>)
-  -> +List<Txn>:
-  match gs:
+# a board is a sale: the price of its ride (the same Guest.fee its guest pays)
+def Board.sale(b: Board, +rs: +List<Ride>) -> Txn:
+  Board{g, +ride, seat} = b
+  +rd = Rides.get(rs, ride)
+  Gain{Ride.cat(Ride.kind(rd)), Ride.price(rd)}
+
+def Ledger.sales(+plan: +List<Board>, +rs: +List<Ride>) -> +List<Txn>:
+  match plan:
     case []:
       []
-    case g <> rest:
-      Ledger.put(Boards.has(plan, Guest.id(g)),
-        Gain{Ride.cat(Ride.kind(Rides.get(rs, Guest.tgt(g)))), Guest.fee(g, rs)},
-        Ledger.sales(rest, rs, plan))
+    case b <> rest:
+      Board.sale(b, rs) <> Ledger.sales(rest, rs)
 
 def Ledger.upkeep(+rs: +List<Ride>) -> +List<Txn>:
   match rs:
@@ -1643,7 +1685,7 @@ def Ledger.tick(+gs: +List<Guest>, +rs: +List<Ride>, +t: U32, +plan: +List<Board
   +fees = (narr * U32.min(Fin.fee(f), 40) : U32)
   +interest = (Fin.loan(f) / 80 : U32)
   Ledger.put(Bool.not(U32.is_eq(fees, 0)), Gain{7, fees},
-    List.append(&2, Txn, Ledger.sales(gs, rs, plan),
+    List.append(&2, Txn, Ledger.sales(plan, rs),
       Bool.pick(+List<Txn>, monthly,
         Ledger.put(Bool.not(U32.is_eq(interest, 0)), Spend{10, interest}, Ledger.upkeep(rs)), [])))
 
@@ -1957,7 +1999,8 @@ def Park.tick(p: Park) -> Out:
   +arr = Guests.arrivals(guests, rides, time, nid, fin)
   +led = Ledger.tick(guests, rides, time, plan, len32(Guest, arr), fin)
   Out{Park{map, List.append(&2, Guest, arr, Guests.stay(moved)),
-    Rides.tick(rides, 0, map, Track.pieces(track), occ, plan, Qlen.fill(guests, map, Tab.zero(len32(Ride, rides), []))),
+    Rides.tick(rides, 0, map, Track.pieces(track), occ, plan,
+      Qlen.fill_if(U32.is_eq((time .&. 15 : U32), 0), guests, map, len32(Ride, rides)), U32.is_eq((time .&. 15 : U32), 0)),
     Track.tick(track), Ledger.apply(led, cash), (time + 1 : U32),
     (nid + len32(Guest, arr) : U32), Fin.tick(fin, time, guests, rides)}, led, arr, Guests.left(moved)}
 
@@ -2155,7 +2198,7 @@ def Park.build(p: Park, +tool: U32, +x: U32, +y: U32, +v: U32) -> Out:
   Park{+map, guests, +rides, +track, +cash, +time, nid, fin} = p
   +ok = Build.ok(map, track, cash, tool, x, y)
   +led = Build.ledger(ok, map, rides, tool, x, y)
-  Out{Park{Build.map(ok, map, rides, tool, x, y, v), guests,
+  Out{Park{Land.fix(Build.map(ok, map, rides, tool, x, y, v)), guests,
     Build.rides(ok, map, rides, tool, x, y, time), Build.track(ok, map, track, tool,
     x, y, v), Ledger.apply(led, cash), time, nid, fin}, led, [], []}
 
@@ -2286,7 +2329,7 @@ def Park.track_op(p: Park, +op: U32) -> Out:
   +ok = TrackOp.ok(map, track, cash, op)
   +led = TrackOp.ledger(ok, op)
   +trk2 = Track.op(track, op, ok)
-  Out{Park{TrackOp.map(ok, map, track, op), guests,
+  Out{Park{Land.fix(TrackOp.map(ok, map, track, op)), guests,
     Rides.coaster(rides, sel(Track.open(trk2), 1, 0)), trk2,
     Ledger.apply(led, cash), time, nid, fin}, led, [], []}
 
@@ -2362,7 +2405,7 @@ def Park.step(p: Park, a: Act) -> Out:
   Out.book(Park.step0(p, a))
 
 def Park.new() -> Park:
-  Park{Q.build(6n, 0, 0), [], [], Track.empty(), 30000, 0, 1, Fin.new()}
+  Park{Land.fix(Q.build(6n, 0, 0)), [], [], Track.empty(), 30000, 0, 1, Fin.new()}
 
 def Out.park(o: Out) -> Park:
   Out{p, l, ar, de} = o

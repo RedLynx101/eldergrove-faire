@@ -843,9 +843,8 @@ def Art.spire(+dx: U32, +dy: U32, +t: U32, +ra: U32, +rb: U32, +st: U32) -> U32:
   +backr = over(r3, over(r4, over(r5, over(r6, TR()))))
   +glint = Bool.not(orb) && ell(dx, (dy + 70 : U32), 9, 8)
     && U32.is_eq((hash((dx + 64 : U32), ((dy + 128) + (t >> 3n) : U32)) .&. 31 : U32), 0)
-  over(sel(core, 16777215, sel(orb, 12122367, sel(glint, 15794175, TR()))),
-    over(frontr, over(front, over(sel(rune && opaque(tower), 6287592, tower),
-      over(backr, over(back, base))))))
+  over(frontr, over(front, over(sel(core, 16777215, sel(orb, 12122367, sel(glint, 15794175, TR()))),
+    over(sel(rune && opaque(tower), 6287592, tower), over(backr, over(back, base))))))
 
 def Art.potion(+dx: U32, +dy: U32, +t: U32) -> U32:
   +booth = Art.box(dx, dy, 0, 9, 9, 13144154, 10512954, 8015402)

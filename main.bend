@@ -457,40 +457,64 @@ def nb.go(+mode: U32, +q: C.Q, +i: U32, +j: U32) -> U32:
       (sel(joins(mode, q, (i - 1 : U32), j), 1, 0) + sel(joins(mode, q, (i + 1 : U32), j), 2, 0)
         + sel(joins(mode, q, i, (j - 1 : U32)), 4, 0) + sel(joins(mode, q, i, (j + 1 : U32)), 8, 0) : U32)
 
-def nbmask(+q: C.Q, +i: U32, +j: U32, +obj: U32, +ter: U32) -> U32:
-  +qm = sel(U32.is_eq(obj, 7), sel(C.Land.qend(U32.is_eq(obj, 7), q, i, j), 4, 3), 0)
+def nbmask(+q: C.Q, +i: U32, +j: U32, +obj: U32, +ter: U32, +a: U32) -> U32:
+  +qm = sel(U32.is_eq(obj, 7), sel(U32.is_eq(a, 1), 4, 3), 0)
   nb.go(sel(U32.is_eq(obj, 1), 1, sel((qm > 0 : U32), qm, sel(U32.is_eq(ter, 2), 2, 0))), q, i, j)
 
 # Entrance and exit arches: each ride's door tiles, packed tile << 4 | 1
 # (entrance) or 2 (exit)
-def Arches.put(+e: U32, +k: U32, +acc: +List<U32>) -> +List<U32>:
-  Bool.pick(+List<U32>, U32.is_eq(e, C.NONE()), acc, ((e << 4n) .|. k : U32) <> acc)
+# Entrance and exit arches, worked out once a frame: each ride's door tiles,
+# packed tile << 8 | side << 4 | kind (1 entrance, 2 exit). The side is the
+# door tile's edge toward the ride: 0 i-1, 1 i+1, 2 j-1, 3 j+1.
+def Door.side(+e: U32, +x: U32, +y: U32, +w: U32) -> U32:
+  +ei = (e >> 6n : U32)
+  +ej = (e .&. 63 : U32)
+  sel((ei < x : U32), 1, sel((ei >= x + w : U32), 0, sel((ej < y : U32), 3, 2)))
 
-def Arches.of(+rs: +List<C.Ride>) -> +List<U32>:
+# the coaster's doors stand beside one of its station pieces
+def Coaster.side(+ps: +List<C.Piece>, +e: U32) -> U32:
+  match ps:
+    case []:
+      0
+    case p <> rest:
+      C.Piece{+x, +y, z, +kind, dir} = p
+      +ei = (e >> 6n : U32)
+      +ej = (e .&. 63 : U32)
+      +st = U32.is_eq(kind, 5)
+      sel(st && U32.is_eq(x, (ei + 1 : U32)) && U32.is_eq(y, ej), 1,
+        sel(st && U32.is_eq(x, (ei - 1 : U32)) && U32.is_eq(y, ej), 0,
+        sel(st && U32.is_eq(y, (ej + 1 : U32)) && U32.is_eq(x, ei), 3,
+        sel(st && U32.is_eq(y, (ej - 1 : U32)) && U32.is_eq(x, ei), 2, Coaster.side(rest, e)))))
+
+def Arches.put(+e: U32, +side: U32, +k: U32, +acc: +List<U32>) -> +List<U32>:
+  Bool.pick(+List<U32>, U32.is_eq(e, C.NONE()), acc, ((e << 8n) .|. (side << 4n) .|. k : U32) <> acc)
+
+def Arches.side(+r: C.Ride, +ps: +List<C.Piece>, +e: U32) -> U32:
+  Bool.pick(U32, U32.is_eq(C.Ride.kind(r), 5), Coaster.side(ps, e), Door.side(e, C.Ride.cx(r), C.Ride.cy(r), C.Ride.wd(r)))
+
+def Arches.of(+rs: +List<C.Ride>, +ps: +List<C.Piece>) -> +List<U32>:
   match rs:
     case []:
       []
     case r <> rest:
       +r2 = r
-      Arches.put(C.Ride.ent(r2), 1, Arches.put(C.Ride.ex(r2), 2, Arches.of(rest)))
+      +en = C.Ride.ent(r2)
+      +ex = C.Ride.ex(r2)
+      Arches.put(en, Arches.side(r2, ps, en), 1, Arches.put(ex, Arches.side(r2, ps, ex), 2, Arches.of(rest, ps)))
 
+# the arch on tile e: side << 4 | kind, or 0
 def Arches.find(+ar: +List<U32>, +e: U32) -> U32:
   match ar:
     case []:
       0
     case a <> rest:
-      sel(U32.is_eq((a >> 4n : U32), e), (a .&. 15 : U32), Arches.find(rest, e))
+      sel(U32.is_eq((a >> 8n : U32), e), (a .&. 255 : U32), Arches.find(rest, e))
 
-def is_ride_side(+q: C.Q, +i: U32, +j: U32) -> Bool:
-  +o = C.Land.obj(q, i, j)
-  U32.is_eq(o, 3) || U32.is_eq(o, 6)
-
-# the arch stands on the edge toward the ride: 0 i-1, 1 i+1, 2 j-1, 3 j+1
-def arch_side(on: Bool, +q: C.Q, +i: U32, +j: U32) -> U32:
+# only paths and queues carry arches
+def Arches.find_if(on: Bool, +ar: +List<U32>, +e: U32) -> U32:
   match on:
     case True{}:
-      sel(is_ride_side(q, (i - 1 : U32), j), 0, sel(is_ride_side(q, (i + 1 : U32), j), 1,
-        sel(is_ride_side(q, i, (j - 1 : U32)), 2, 3)))
+      Arches.find(ar, e)
     case False{}:
       0
 
@@ -500,8 +524,8 @@ def face(+h: U32, +nh: U32, +edge: Bool) -> U32:
 def push_tile(+q: C.Q, +rs: +List<C.Ride>, +gs: RT, +ar: +List<U32>, +i: U32, +j: U32,
   +camx: U32, +camy: U32, +hov: U32, +acc: +List<Dr>) -> +List<Dr>:
   +t = C.Land.get(q, i, j)
-  +ak = Arches.find(ar, (i * 64 + j : U32))
-  +arch = ((ak << 6n) .|. (arch_side(Bool.not(U32.is_eq(ak, 0)), q, i, j) << 4n) : U32)
+  +ak = Arches.find_if(U32.is_eq(C.Tile.obj(t), 1) || U32.is_eq(C.Tile.obj(t), 7), ar, (i * 64 + j : U32))
+  +arch = (((ak .&. 15) << 6n) .|. (((ak >> 4n) .&. 3) << 4n) : U32)
   +h = C.Tile.h(t)
   +sx = scr_x(i, j, camx)
   +sy = scr_y(i, j, h, camy)
@@ -509,7 +533,7 @@ def push_tile(+q: C.Q, +rs: +List<C.Ride>, +gs: RT, +ar: +List<U32>, +i: U32, +j
   +dr = face(h, C.Land.h(q, (i + 1 : U32), j), U32.is_eq(i, 63))
   +blk = {DBlock{sx, sy, dl, dr, C.Tile.ter(t), C.Tile.obj(t),
     sel(U32.is_eq(hov, (i * 64 + j : U32)), 1, 0), (16 * i - 16 * j : U32),
-    (8 * i + 8 * j : U32), (nbmask(q, i, j, C.Tile.obj(t), C.Tile.ter(t)) .|. arch : U32)} : Dr}
+    (8 * i + 8 * j : U32), (nbmask(q, i, j, C.Tile.obj(t), C.Tile.ter(t), C.Tile.a(t)) .|. arch : U32)} : Dr}
   List.append(&2, Dr, obj_dr(t, i, j, sx, sy, rs, gs), blk <> acc)
 
 def row(+n: Nat, +i: U32, +k: U32, +q: C.Q, +rs: +List<C.Ride>, +gs: RT, +ar: +List<U32>,
@@ -1408,7 +1432,7 @@ def scene(+g: Game) -> +List<Dr>:
   +dyn = trains_dyn(bs, ps, U32.max(total, 1), camx, camy, rt,
     guests_dyn(guests, map, rides, camx, camy, time, []))
   +sorted = List.sort(~Dyn, ~Dyn.le, dyn)
-  +ar = Arches.of(rides)
+  +ar = Arches.of(rides, ps)
   # the back and front halves of the map are built in parallel
   hi lo = diags(63n, 64, map, rides, rt, ar, camx, camy, hov, dyn_from(sorted, 64), [])
     diags(64n, 0, map, rides, rt, ar, camx, camy, hov, dyn_below(sorted, 64), [])
