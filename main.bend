@@ -92,19 +92,19 @@ def Dr.hits(d: Dr, +bx: U32, +by: U32, +s: U32, +t: U32) -> Bool:
 def Dr.shade.go(d: Dr, +sx: U32, +sy: U32, +px: U32, +py: U32, +t: U32) -> U32:
   match d:
     case DBlock{x, y, dl, dr, ter, obj, hov, wx, wy, nb}:
-      A.Art.block(x, y, dl, dr, ter, obj, hov, wx, wy, t, px, py, nb)
+      A.Light.apply(A.Art.block(x, y, dl, dr, ter, obj, hov, wx, wy, t, px, py, nb), t, sx, sy)
     case DTree{x, y, v, n}:
-      A.Art.tree(v, (px - x : U32), (py - y : U32), n, t)
+      A.Light.apply(A.Art.tree(v, (px - x : U32), (py - y : U32), n, t), t, sx, sy)
     case DRide{x, y, k, ra, rb, st}:
-      A.Art.ride(k, (px - x : U32), (py - y : U32), t, ra, rb, st)
+      A.Light.apply(A.Art.ride(k, (px - x : U32), (py - y : U32), t, ra, rb, st), t, sx, sy)
     case DGate{x, y}:
-      A.Art.gate((px - x : U32), (py - y : U32), t)
+      A.Light.apply(A.Art.gate((px - x : U32), (py - y : U32), t), t, sx, sy)
     case DTrack{x, y, code, zr}:
-      A.Art.track(x, y, code, zr, t, px, py)
+      A.Light.apply(A.Art.track(x, y, code, zr, t, px, py), t, sx, sy)
     case DGuest{x, y, look, ph}:
-      A.Art.guest((px - x : U32), (py - y : U32), look, ph)
+      A.Light.apply(A.Art.guest((px - x : U32), (py - y : U32), look, ph), t, sx, sy)
     case DCar{x, y, d, lead, rd}:
-      A.Art.car((px - x : U32), (py - y : U32), d, lead, rd)
+      A.Light.apply(A.Art.car((px - x : U32), (py - y : U32), d, lead, rd), t, sx, sy)
     case DGhost{x, y, k}:
       A.Art.ghost(k, px, py, x, y, t)
     case DGlyph{x, y, bits, col}:
@@ -2657,6 +2657,7 @@ def step_game.go(+p: C.Park, +ui: UI, +wm: WM, +acts: +List<C.Act>, quit: Bool,
   +bk = Rides.broke(C.Park.rides(p), C.Park.rides(Res.park(r2)))
   +word = (snd_word(p, Res.park(r2), inc, Res.inc(r2), msg, Res.msg(r1), clicked, var)
     .|. (Opt.vol(opt, 4n) << 27n) .|. (Opt.vol(opt, 6n) << 29n)
+    .|. sel(A.Art.rain(C.Park.time(Res.park(r2))), 2147483648, 0)
     .|. sel((bk >= 100 : U32) && (bk < 110 : U32), 8, sel((bk >= 110 : U32), 16, 0)) : U32)
   Bool.pick(Maybe<Game>, quit, None{}, Some{Game{Res.park(r2), UI.said(ui2, bk), wm, Z.Snd.cue(snd, word)}})
 

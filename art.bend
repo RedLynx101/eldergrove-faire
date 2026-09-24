@@ -148,6 +148,46 @@ def Art.cliff(+d: U32, +px: U32, +left: Bool, +wild: Bool) -> U32:
 # the ground block: top face (terrain, path, hover outline) and cliff faces
 # dl/dr px down. wx, wy: world-screen position of the top vertex. Each stage
 # dispatches with a match, so a pixel only pays for the branch it takes.
+# Day and night, rain: a day lasts 2048 ticks (dusk from 1152, night from
+# 1408, dawn from 1792); some days rain (the same test the park uses).
+# Colours marked with bit 25 glow: night and rain leave them bright.
+def E(+c: U32) -> U32:
+  (c .|. 33554432 : U32)
+
+def Art.night(+t: U32) -> U32:
+  +p = (t .&. 2047 : U32)
+  sel((p < 1152 : U32), 0, sel((p < 1408 : U32), (p - 1152 : U32), sel((p < 1792 : U32), 256, (2047 - p : U32))))
+
+def Art.rain(+t: U32) -> Bool:
+  ((hash((t >> 11n : U32), 99) .&. 7) < 2 : U32)
+
+def Light.tint(+c: U32, +kr: U32, +kg: U32, +kb: U32) -> U32:
+  (((((c >> 16n) .&. 255) * kr) >> 8n << 16n) .|. (((((c >> 8n) .&. 255) * kg) >> 8n) << 8n) .|. (((c .&. 255) * kb) >> 8n) : U32)
+
+def Light.drop(+sx: U32, +sy: U32, +t: U32) -> Bool:
+  +fall = (sy + t * 7 : U32)
+  +col = (sx + (sy >> 2n) : U32)
+  ((fall .&. 7) < 3 : U32) && U32.is_eq((hash(col, (fall >> 3n : U32)) .&. 31 : U32), 0)
+
+def Light.go(on: Bool, +c: U32, +n: U32, +wet: Bool, +t: U32, +sx: U32, +sy: U32) -> U32:
+  match on:
+    case True{}:
+      +glow = Bool.not(U32.is_eq((c .&. 33554432 : U32), 0))
+      +k = sel(wet, 205, 256)
+      +kr = (((256 - ((n * 160) >> 8n)) * k) >> 8n : U32)
+      +kg = (((256 - ((n * 140) >> 8n)) * k) >> 8n : U32)
+      +kb = (((256 - ((n * 70) >> 8n)) * k) >> 8n : U32)
+      sel(wet && Light.drop(sx, sy, t), sel(Bool.not(U32.is_eq(n, 0)), 6320776, 11587808),
+        sel(glow, (c .&. 16777215 : U32), Light.tint(c, kr, kg, kb)))
+    case False{}:
+      (c .&. 16777215 : U32)
+
+# a world pixel under the sky of the moment
+def Light.apply(+c: U32, +t: U32, +sx: U32, +sy: U32) -> U32:
+  +n = Art.night(t)
+  +wet = Art.rain(t)
+  sel(opaque(c), Light.go(Bool.not(U32.is_eq(n, 0)) || wet, c, n, wet, t, sx, sy), c)
+
 def Art.ground(+ter: U32, +n: U32, +edge: U32, +wx: U32, +wy: U32, +t: U32)
   -> U32:
   match ter:
@@ -159,7 +199,8 @@ def Art.ground(+ter: U32, +n: U32, +edge: U32, +wx: U32, +wy: U32, +t: U32)
       Art.wild(n, edge)
     case _:
       +tuft = U32.is_eq((hash((wx >> 2n : U32), (wy >> 2n : U32)) .&. 31 : U32), 0)
-      over(Art.tuft(tuft, (wx .&. 3 : U32), (wy .&. 3 : U32)), Art.grass(n, edge, U32.is_eq((wy .&. 1 : U32), 0)))
+      +fly = (Art.night(t) > 160 : U32) && U32.is_eq((hash(((wx >> 1n) + (t >> 5n) * 7 : U32), (wy >> 1n : U32)) .&. 1023 : U32), 0)
+      sel(fly, E(13168752), over(Art.tuft(tuft, (wx .&. 3 : U32), (wy .&. 3 : U32)), Art.grass(n, edge, U32.is_eq((wy .&. 1 : U32), 0))))
 
 def Art.flag(+u: U32, +v: U32, +seed: U32) -> U32:
   +off = sel(U32.is_eq(((v >> 3n) .&. 1 : U32), 1), 4, 0)
@@ -363,9 +404,9 @@ def Art.lamp(+X: U32, +Y: U32, +t: U32, +broke: Bool) -> U32:
   +frame = box && (U32.is_eq(X, (0 - 1 : U32)) || U32.is_eq(X, 2) || U32.is_eq(Y, (0 - 24 : U32)) || U32.is_eq(Y, (0 - 19 : U32)))
   +cap = between(X, 0, 1) && U32.is_eq(Y, (0 - 25 : U32)) || U32.is_eq(Y, (0 - 26 : U32)) && U32.is_eq(X, 0)
   +flick = U32.is_eq((hash((t >> 3n : U32), 5) .&. 3 : U32), 0)
-  +glow = sel(broke, sel(U32.is_eq(((X + Y) .&. 1 : U32), 0), 3750986, 5263440), sel(flick, 16771216, 16767072))
+  +glow = sel(broke, sel(U32.is_eq(((X + Y) .&. 1 : U32), 0), 3750986, 5263440), E(sel(flick, 16771216, 16767072)))
   +arm = U32.is_eq(Y, (0 - 18 : U32)) && between(X, (0 - 1 : U32), 2)
-  sel(cap || frame || arm, 2631720, sel(box, sel(U32.is_eq(Y, (0 - 22 : U32)) && U32.is_eq(X, 0) && Bool.not(broke), 16777184, glow),
+  sel(cap || frame || arm, 2631720, sel(box, sel(U32.is_eq(Y, (0 - 22 : U32)) && U32.is_eq(X, 0) && Bool.not(broke), E(16777184), glow),
     sel(foot, 2631720, sel(post, sel(U32.is_eq(X, 0), 4210756, 2631720), TR()))))
 
 def Art.prop(+k: U32, +full: Bool, +broke: Bool, +x: U32, +y: U32, +px: U32, +py: U32, +t: U32) -> U32:
@@ -379,7 +420,16 @@ def Art.prop(+k: U32, +full: Bool, +broke: Bool, +x: U32, +y: U32, +px: U32, +py
     case _:
       TR()
 
-def Art.block(+x: U32, +y: U32, +dl: U32, +dr: U32, +ter: U32, +obj: U32,
+def Art.pool(on: Bool, +c: U32, +x: U32, +y: U32, +px: U32, +py: U32, +t: U32) -> U32:
+  match on:
+    case True{}:
+      +lit = ell((px - x : U32), (py - (y + 7) : U32), 13, 7)
+      +warm = ((U32.min((((c >> 16n) .&. 255) + 70 : U32), 255) << 16n) .|. (U32.min((((c >> 8n) .&. 255) + 45 : U32), 255) << 8n) .|. (c .&. 255) : U32)
+      sel(lit && opaque(c), E(Light.tint(warm, (140 + (((256 - Art.night(t)) * 85) >> 8n) : U32), (130 + (((256 - Art.night(t)) * 85) >> 8n) : U32), 110)), c)
+    case False{}:
+      c
+
+def Art.block.face(+x: U32, +y: U32, +dl: U32, +dr: U32, +ter: U32, +obj: U32,
   +hov: U32, +wx: U32, +wy: U32, +t: U32, +px: U32, +py: U32, +nb: U32) -> U32:
   +X = (px - x : U32)
   +Y = ((py - y) * 2 : U32)
@@ -397,6 +447,11 @@ def Art.block(+x: U32, +y: U32, +dl: U32, +dr: U32, +ter: U32, +obj: U32,
 # Leaves and caps are shaded as small lit volumes (light from the top
 # left): a highlight rim, three body tones with dithered edges, a deep
 # outline on the shadowed side, and a soft ground shadow under each tree.
+
+def Art.block(+x: U32, +y: U32, +dl: U32, +dr: U32, +ter: U32, +obj: U32,
+  +hov: U32, +wx: U32, +wy: U32, +t: U32, +px: U32, +py: U32, +nb: U32) -> U32:
+  Art.pool(U32.is_eq(((nb >> 16n) .&. 3 : U32), 3) && U32.is_eq((nb .&. 524288 : U32), 0) && (Art.night(t) > 96 : U32),
+    Art.block.face(x, y, dl, dr, ter, obj, hov, wx, wy, t, px, py, nb), x, y, px, py, t)
 
 def Art.checker(+x: U32, +y: U32) -> Bool:
   U32.is_eq(((x + y) .&. 1 : U32), 0)
@@ -1058,7 +1113,7 @@ def Art.item(+it: U32, +x: U32, +y: U32) -> U32:
       # a wisp on a string, glowing and bobbing
       +string = U32.is_eq(x, 0) && between(y, 0, 5)
       +orb = ell(x, (y - 7 : U32), 1, 1)
-      sel(orb, sel(U32.is_eq(x, 0) && U32.is_eq(y, 7), 16777215, 6352127), sel(string, 12632256, TR()))
+      sel(orb, E(sel(U32.is_eq(x, 0) && U32.is_eq(y, 7), 16777215, 6352127)), sel(string, 12632256, TR()))
     case 4:
       # an enchanted ice: a wafer cone, a pink scoop
       +cone = U32.is_eq(x, 0) && between(y, 0, 1)
@@ -1318,7 +1373,7 @@ def Art.carousel(+dx: U32, +dy: U32, +t: U32, +ra: U32, +rb: U32, +st: U32) -> U
   +lamp = lampy && val && (U32.is_eq(m, 3) || U32.is_eq(m, 4))
   +lit = U32.is_eq(((((dx + 256) >> 3n) + (t >> 4n)) .&. 1 : U32), 0)
   +valc = sel(U32.is_eq((((dx + 256) >> 3n) .&. 1 : U32), 0), 8077216, 15253568)
-  +valance = sel(lamp, sel(lit, 16775360, 13148232), sel(val, sel(Bool.not(ell(dx, (dy + 31 - deep : U32), 28, 14)), shade(valc, 150), valc), TR()))
+  +valance = sel(lamp, sel(lit, E(16775360), 13148232), sel(val, sel(Bool.not(ell(dx, (dy + 31 - deep : U32), 28, 14)), shade(valc, 150), valc), TR()))
   over(valance, over(canopy, over(sel(flagp, 14737632, sel(flag, 13643824, TR())),
     over(fronts, over(sel(pole, 14725184, sel(posts, 14725184, TR())), over(backs,
       sel(top, sel(plank, 8014378, 11565637), sel(side, 7031338, TR()))))))))
@@ -1361,7 +1416,7 @@ def Art.spire(+dx: U32, +dy: U32, +t: U32, +ra: U32, +rb: U32, +st: U32) -> U32:
   +backr = over(r3, over(r4, over(r5, over(r6, TR()))))
   +glint = Bool.not(orb) && ell(dx, (dy + 70 : U32), 9, 8)
     && U32.is_eq((hash((dx + 64 : U32), ((dy + 128) + (t >> 3n) : U32)) .&. 31 : U32), 0)
-  over(frontr, over(front, over(sel(core, 16777215, sel(orb, 12122367, sel(glint, 15794175, TR()))),
+  over(frontr, over(front, over(sel(core, E(16777215), sel(orb, E(12122367), sel(glint, E(15794175), TR()))),
     over(sel(rune && opaque(tower), 6287592, tower), over(backr, over(back, base))))))
 
 def Art.potion(+dx: U32, +dy: U32, +t: U32) -> U32:
@@ -1460,7 +1515,7 @@ def Art.wisp1(+dx: U32, +dy: U32, +ox: U32, +top: U32, +c: U32, +t: U32, +ph: U3
   +orb = ell((dx - ox : U32), (dy - oy : U32), 2, 2)
   +core = U32.is_eq(dx, ox) && U32.is_eq(dy, oy)
   +string = U32.is_eq(dx, ox) && sle((oy + 2 : U32), dy) && sle(dy, (0 - 8 : U32))
-  sel(core, 16777215, sel(orb, c, sel(string, 12632256, TR())))
+  sel(core, E(16777215), sel(orb, E(c), sel(string, 12632256, TR())))
 
 def Art.wisps(+dx: U32, +dy: U32, +t: U32) -> U32:
   +cart = Art.box(dx, dy, (0 - 2 : U32), 8, 6, 11567184, 9067056, 7031338)
@@ -1543,7 +1598,7 @@ def Art.wheel(+dx: U32, +dy: U32, +t: U32, +ra: U32, +rb: U32, +st: U32) -> U32:
   +g7 = Art.wheel.gon(dx, dy, (a0 + 224 : U32), Art.code(ra, rb, 7))
   +gons = over(g0, over(g1, over(g2, over(g3, over(g4, over(g5, over(g6, g7)))))))
   +frame = sel(hub, sel(U32.is_eq(dx, 0) && U32.is_eq(hy, 0), 16777215, 14725184),
-    sel(rim, sel(lit, 16766282, 6320595), sel(legs, 5913120, sel(inner, 12092939, sel(spoke, 11053224, TR())))))
+    sel(rim, sel(lit, E(16766282), E(6320595)), sel(legs, 5913120, sel(inner, 12092939, sel(spoke, 11053224, TR())))))
   over(gons, over(frame, base))
 
 # The Griffin Swing: a griffin-headed ship on a long arm, swinging higher
@@ -1635,7 +1690,7 @@ def Art.whirl(+dx: U32, +dy: U32, +t: U32, +ra: U32, +rb: U32, +st: U32) -> U32:
   +b1 = Art.whirl.rider(dx, dy, 0, (by - 2 : U32), inv, Art.code(ra, rb, 5))
   +b2 = Art.whirl.rider(dx, dy, 6, (by - 2 : U32), inv, Art.code(ra, rb, 6))
   +base = Art.box(dx, dy, 0, 14, 3, 7035000, 5919584, 4870480)
-  over(sel(spark, sel(U32.is_eq((t .&. 8 : U32), 0), 16777215, 12623103), TR()),
+  over(sel(spark, E(sel(U32.is_eq((t .&. 8 : U32), 0), 16777215, 12623103)), TR()),
     over(sel(rim, 14725184, sel(bench, 4860000, TR())), over(f0, over(f1, over(f2, over(f3,
     over(b0, over(b1, over(b2, over(sel(starl || starr, 16766282, sel(rod, 11053224, sel(axle, 14725184, TR()))),
     over(pl, over(pr, base))))))))))))
@@ -1731,9 +1786,9 @@ def Art.crypt(+dx: U32, +dy: U32, +t: U32, +ra: U32, +rb: U32, +st: U32) -> U32:
   +carts = sel(U32.is_eq(ph, 1), TR(),
     over(Art.cart(dx, dy, (0 - 8 : U32), 6, Art.code(ra, rb, 0), Art.code(ra, rb, 1), Art.code(ra, rb, 2), Art.code(ra, rb, 3)),
       Art.cart(dx, dy, 12, 11, Art.code(ra, rb, 4), Art.code(ra, rb, 5), Art.code(ra, rb, 6), Art.code(ra, rb, 7))))
-  over(carts, over(sel(flame, 7864234, sel(torch, 3811866, TR())),
-    over(sel(orb, 7864234, sel(spire, 2894404, sel(roof, roofc, TR()))),
-    sel(door, sel(glow, 3448136, 1579032), sel(win, sel(glow, 7864234, 1579032), sel(course, shade(walls, 170), walls))))))
+  over(carts, over(sel(flame, E(7864234), sel(torch, 3811866, TR())),
+    over(sel(orb, E(7864234), sel(spire, 2894404, sel(roof, roofc, TR()))),
+    sel(door, sel(glow, E(3448136), 1579032), sel(win, sel(glow, E(7864234), 1579032), sel(course, shade(walls, 170), walls))))))
 
 # The Golem Bumpers: stone golem cars bumping about an arena with a glowing
 # grid; parked in a row between rides
@@ -1743,7 +1798,7 @@ def Art.golem.go(near: Bool, +ex: U32, +ey: U32, +code: U32, +hue: U32) -> U32:
       +car = ell(ex, ey, 5, 3)
       +top = ell(ex, (ey + 1 : U32), 4, 2)
       +eye = U32.is_eq(ey, 0) && U32.is_eq(sabs(ex), 2)
-      over(sel(eye, hue, TR()), over(Art.rider(ex, (ey - 1 : U32), code), sel(top, 10132122, sel(car, 7039866, TR()))))
+      over(sel(eye, E(hue), TR()), over(Art.rider(ex, (ey - 1 : U32), code), sel(top, 10132122, sel(car, 7039866, TR()))))
     case False{}:
       TR()
 
@@ -1762,7 +1817,7 @@ def Art.bumpers(+dx: U32, +dy: U32, +t: U32, +ra: U32, +rb: U32, +st: U32) -> U3
   +rim = (d <= 30 : U32) && Bool.not(floor)
   +rimside = Bool.not(floor) && Bool.not(rim) && ((ax + 2 * sabs((dy + 0 : U32))) <= 30 : U32) && sle((0 - 2 : U32), dy)
   +post = (U32.is_eq(dx, 0) && between(dy, (0 - 24 : U32), (0 - 17 : U32)))
-  +lamp = U32.is_eq(dx, 0) && U32.is_eq(dy, (0 - 25 : U32))
+  +lamp = U32.is_eq(dx, 0) && U32.is_eq(dy, (0 - 25 : U32)) && Bool.not(U32.is_eq(Art.night(t), 0))
   +g0 = Art.golem(dx, dy, sel(run, wsin((tm * 3 : U32), 16), (0 - 15 : U32)), sel(run, (0 - 2 + wsin((tm * 2 + 20 : U32), 7) : U32), (0 - 2 : U32)), Art.code(ra, rb, 0), 7864234)
   +g1 = Art.golem(dx, dy, sel(run, wsin((tm * 2 + 90 : U32), 16), (0 - 5 : U32)), sel(run, (0 - 2 + wsin((tm * 3 + 60 : U32), 7) : U32), (0 - 7 : U32)), Art.code(ra, rb, 1), 16748640)
   +g2 = Art.golem(dx, dy, sel(run, wsin((tm * 4 + 30 : U32), 15), 5), sel(run, (0 - 2 + wsin((tm * 2 + 150 : U32), 7) : U32), (0 - 7 : U32)), Art.code(ra, rb, 2), 6352127)
@@ -1772,7 +1827,7 @@ def Art.bumpers(+dx: U32, +dy: U32, +t: U32, +ra: U32, +rb: U32, +st: U32) -> U3
   +g6 = Art.golem(dx, dy, sel(run, wsin((tm * 3 + 60 : U32), 13), 5), sel(run, (0 - 2 + wsin((tm * 4 + 180 : U32), 5) : U32), 9), Art.code(ra, rb, 6), 16748640)
   +g7 = Art.golem(dx, dy, sel(run, wsin((tm * 2 + 240 : U32), 13), 15), sel(run, (0 - 2 + wsin((tm * 3 + 200 : U32), 5) : U32), 4), Art.code(ra, rb, 7), 6352127)
   +cars = over(g0, over(g1, over(g2, over(g3, over(g4, over(g5, over(g6, g7)))))))
-  over(cars, over(sel(lamp, sel(run, 16766282, 9079434), sel(post, 3158064, TR())),
+  over(cars, over(sel(lamp, E(16766282), sel(post, 3158064, TR())),
     sel(rim, 9079446, sel(rimside, 6316656, sel(grid, sel(run, 5277842, 4216950), sel(floor, 3162714, TR()))))))
 
 # The Hedge Labyrinth: hedges four pixels high on a two-tile square, a gilt

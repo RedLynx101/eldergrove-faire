@@ -133,6 +133,13 @@ Small design decisions made while working, listed here so they can be revisited.
 - The starter park gets a bridge across the lake joining the north and middle paths, and a stepped path up
   the hill to a griffin statue.
 
+- **Day and night** run on their own clock: a day is 2048 ticks (about 34 seconds at normal speed), with
+  dusk, night and dawn in its last 44%. Night tints the world blue and dark; lanterns, ride lights, wisps,
+  the crypt's windows and fireflies glow (colours carry a glow bit that the tint leaves alone), and each
+  lantern lights a pool of ground. The interface is never tinted. Night doesn't change the simulation.
+- **Rain** falls on one day in four (a hash of the day number): streaks over the world, an overcast tint, a
+  hiss in the ambience, and half the usual arrivals.
+
 ## Done: M1, the vertical slice
 Isometric fantasy map, paths, terrain editing, 4 enchanted tree kinds, Dragon Carousel, Arcane Spire, Potion
 Stall, Troll Tavern, pre-built Wyrm Coaster with block signals and a track editor, guests with needs and
@@ -292,7 +299,7 @@ Spikes, in order:
   tool. A bridge tool raises paths over water, lower paths and track, on supports that match the theme. The
   land stays terraced (no slopes).
 
-## M7: Structure
+## M7: Structure (in progress: day, night and rain done)
 - Scenarios with goals and awards, alongside sandbox mode (a main menu to choose).
 - Research that unlocks rides over time.
 - Weather and a day/night cycle, with lanterns and fireflies at night.

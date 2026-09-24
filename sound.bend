@@ -851,14 +851,15 @@ def Amb.at(+t: U32, +lvl: U32) -> U32:
   +rush = vnoise(t, 4n, (roar * 8 : U32))
   +c = (t % 1800 : U32)
   +clack = sel(lift && (c < 160 : U32), noise(t, ((160 - c) * 22 : U32)), 0)
-  (murmur + rush + clack : U32)
+  +rain = sel(U32.is_eq(((lvl >> 23n) .&. 1 : U32), 1), vnoise(t, 2n, 900), 0)
+  (murmur + rush + clack + rain : U32)
 
 # The synthesizer's state
 # -----------------------
 # t: samples made so far; q: frames queued at the last write; one start
 # (+1) per effect; lvl: crowd | roar << 8 | lift << 16 | music off << 17 |
 # effects off << 18 | music volume << 19 | effects volume << 21 (0 silent .. 3
-# full; each step down halves)
+# full; each step down halves) | raining << 23
 
 type Snd is Data:
   Snd{t: U32, q: U32, coin: U32, click: U32, thud: U32, buzz: U32, bell: U32,
@@ -938,7 +939,7 @@ def Snd.cue(s: Snd, +w: U32) -> Snd:
     Snd.start(Snd.bit(w, 4n), t, bell, 15000), Snd.start(Snd.bit(w, 5n), t, whoosh, 22050),
     Snd.start(Snd.bit(w, 6n), t, chime, 12000),
     (((w >> 8n) .&. 255) .|. (((w >> 16n) .&. 255) << 8n) .|. (((w >> 24n) .&. 7) << 16n)
-      .|. (((w >> 27n) .&. 15) << 19n) : U32)}
+      .|. (((w >> 27n) .&. 15) << 19n) .|. (((w >> 31n) .&. 1) << 23n) : U32)}
 
 # Playing
 # -------
