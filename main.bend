@@ -54,8 +54,9 @@ def Dr.hits(d: Dr, +bx: U32, +by: U32, +s: U32) -> Bool:
       ov((x - 20 : U32), (y - 48 : U32), (x + 20 : U32), (y + 6 : U32), bx, by, s)
     case DTrack{+x, +y, code, +zr}:
       ov((x - 16 : U32), (y - zr * 8 - 12 : U32), (x + 17 : U32), (y + 17 : U32), bx, by, s)
-    case DGuest{+x, +y, look, ph}:
-      ov((x - 3 : U32), (y - 14 : U32), (x + 4 : U32), (y + 1 : U32), bx, by, s)
+    case DGuest{+x, +y, +look, ph}:
+      +top = sel(U32.is_eq(((look >> 20n) .&. 7 : U32), 0), 15, 27)
+      ov((x - 5 : U32), (y - top : U32), (x + 7 : U32), (y + 1 : U32), bx, by, s)
     case DCar{+x, +y, d, lead, rd}:
       ov((x - 10 : U32), (y - 19 : U32), (x + 11 : U32), (y + 6 : U32), bx, by, s)
     case DGlyph{+x, +y, bits, col}:
@@ -535,7 +536,7 @@ def shopping(+st: U32, +tgt: U32, +rs: +List<C.Ride>) -> Bool:
 
 def guest_dyn(+g: C.Guest, +q: C.Q, +rs: +List<C.Ride>, +camx: U32, +camy: U32,
   +t: U32, +acc: +List<Dyn>) -> +List<Dyn>:
-  C.Guest{+id, +x, +y, dir, +st, +tgt, tmr, cash, hu, th, en, na, ha, +lk} = g
+  C.Guest{+id, +x, +y, +dir, +st, +tgt, tmr, cash, +hu, +th, +en, +na, +ha, +lk} = g
   +i = (x >> 4n : U32)
   +j = (y >> 4n : U32)
   +h = C.Land.h(q, i, j)
@@ -544,7 +545,14 @@ def guest_dyn(+g: C.Guest, +q: C.Q, +rs: +List<C.Ride>, +camx: U32, +camy: U32,
   +walker = U32.is_eq(st, 0) || U32.is_eq(st, 2) || shopping(st, tgt, rs)
   +vis = (sx + 8 > B() : U32) && (sx < B() + 520 : U32) && (sy + 4 > B() : U32)
     && (sy < B() + 340 : U32) && walker
-  Bool.pick(+List<Dyn>, vis, Dyn{(i + j : U32), DGuest{sx, sy, lk, (t + id : U32)}} <> acc, acc)
+  # the drawn look: outfit, carried item, stepping (bits 0-9, 16-17, 24),
+  # facing (12-13), and now and then a thought (20-22)
+  +mood = sel((na > 120 : U32), 3, sel((hu > 170 : U32), 1, sel((th > 170 : U32), 2,
+    sel((en < 50 : U32), 4, sel((ha < 70 : U32), 5, sel((ha > 215 : U32), 6, 0))))))
+  +think = U32.is_eq((((t + id * 37) >> 6n) .&. 15 : U32), 0)
+  +keep = sel(U32.is_eq(st, 1), 197631, 16974847)
+  +look = ((lk .&. keep) .|. ((dir .&. 3) << 12n) .|. (sel(think, mood, 0) << 20n) : U32)
+  Bool.pick(+List<Dyn>, vis, Dyn{(i + j : U32), DGuest{sx, sy, look, (t + id : U32)}} <> acc, acc)
 
 def guests_dyn(+gs: +List<C.Guest>, +q: C.Q, +rs: +List<C.Ride>, +camx: U32,
   +camy: U32, +t: U32, +acc: +List<Dyn>) -> +List<Dyn>:

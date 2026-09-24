@@ -472,7 +472,7 @@ def Guest.raw(+id: U32, +t: U32) -> Guest:
   +r = hash(id, t)
   Guest{id, (GATE_X() * 16 + 8 : U32), (GATE_Y() * 16 + 8 : U32),
     3, 0, NONE(), 0, (40 + (r .&. 127) : U32), (r >> 7n .&. 63 : U32),
-    (r >> 13n .&. 63 : U32), (190 + (r >> 19n .&. 63) : U32), 0, 200, r}
+    (r >> 13n .&. 63 : U32), (190 + (r >> 19n .&. 63) : U32), 0, 200, (r .&. 1023 : U32)}
 
 def Guest.new(+id: U32, +t: U32) -> Guest:
   Guest.clamp(Guest.raw(id, t))
@@ -974,11 +974,12 @@ def Guest.board(g: Guest, +rs: +List<Ride>, +seat: U32, +stn: Stn) -> Guest:
   +rd = Rides.get(rs, tgt)
   +k = Ride.kind(rd)
   +coaster = U32.is_eq(k, 5)
+  +item = sel(U32.is_eq(k, 3), 65536, sel(U32.is_eq(k, 4), 131072, 0))
   Guest{id, x, y, sel(coaster, (Stn.id(stn) * 8 + seat : U32), seat), 1, tgt,
     sel(coaster, 3000, Ride.duration(k)), sub0(cash, Ride.price(rd)),
     sel(U32.is_eq(k, 4), sub0(hu, 160), hu),
     sel(U32.is_eq(k, 3), sub0(th, 160), th), en,
-    (na + Ride.thrill(k) : U32), (ha + Ride.fun(k) : U32), lk}
+    (na + Ride.thrill(k) : U32), (ha + Ride.fun(k) : U32), ((lk .&. 4294770687) .|. item : U32)}
 
 # a ride is over when its time runs out; for a coaster rider, when their
 # train is back in the station (or the coaster closes)
@@ -1026,7 +1027,7 @@ def Guest.needs(g: Guest, +t: U32) -> Guest:
 def Guest.walk(g: Guest, +q: Q, +rs: +List<Ride>, +t: U32, +qs: +List<U32>,
   +ents: +List<U32>) -> Guest:
   Guest{+id, +x, +y, +dir, +st, +tgt, +tmr, +cash, +hu, +th, +en, na, +ha,
-    lk} = g
+    +lk} = g
   +i = (x >> 4n : U32)
   +j = (y >> 4n : U32)
   +h = Land.h(q, i, j)
@@ -1068,7 +1069,9 @@ def Guest.walk(g: Guest, +q: Q, +rs: +List<Ride>, +t: U32, +qs: +List<U32>,
     && Bool.not(Queue.wait(tick && (onq || ahead), qs, x, y, dir2))
   +x2 = sel(go, (x + dx_of(dir2) : U32), x)
   +y2 = sel(go, (y + dy_of(dir2) : U32), y)
-  Guest{id, x2, y2, dir2, st3, tgt2, tmr2, cash, hu, th, en, na, ha, lk}
+  +finish = U32.is_eq(((r >> 8n) .&. 1023 : U32), 0)
+  +lk2 = (sel(finish, (lk .&. 4277993471 : U32), (lk .&. 4278190079 : U32)) .|. sel(go, 16777216, 0) : U32)
+  Guest{id, x2, y2, dir2, st3, tgt2, tmr2, cash, hu, th, en, na, ha, lk2}
 
 def Guest.st(g: Guest) -> U32:
   Guest{id, x, y, dir, st, tgt, tmr, cash, hu, th, en, na, ha, lk} = g

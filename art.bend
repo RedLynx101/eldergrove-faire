@@ -85,12 +85,26 @@ def iso_v(+X: U32, +Y: U32) -> U32:
 # Terrain
 # -------
 
-def Art.grass(+n: U32, +edge: U32) -> U32:
+# a tuft of long grass in a 4 x 4 cell (x, y: position in the cell)
+def Art.tuft(on: Bool, +x: U32, +y: U32) -> U32:
+  match on:
+    case True{}:
+      +lite = U32.is_eq(y, 0) && U32.is_eq(x, 1) || U32.is_eq(y, 1) && (U32.is_eq(x, 0) || U32.is_eq(x, 2))
+      +mid = U32.is_eq(y, 1) && U32.is_eq(x, 1) || U32.is_eq(y, 2) && (x < 3 : U32)
+      +dark = U32.is_eq(y, 3) && (U32.is_eq(x, 1) || U32.is_eq(x, 2))
+      sel(lite, 8047936, sel(mid, 5411896, sel(dark, 2980914, TR())))
+    case False{}:
+      TR()
+
+def Art.grass(+n: U32, +edge: U32, +tip: Bool) -> U32:
   +f = (n .&. 255 : U32)
   +base = sel((f < 90 : U32), 5150266, sel((f < 200 : U32), 4626999, 5875263))
-  +flower = sel(U32.is_eq((n .&. 1023 : U32), 7), 15895224, sel(U32.is_eq((n .&. 1023 : U32), 19), 16179290,
-    sel(U32.is_eq((n .&. 1023 : U32), 31), 16053480, sel(U32.is_eq((n .&. 1023 : U32), 43), 9086207, TR()))))
-  over(flower, shade(base, edge))
+  +m = (n .&. 1023 : U32)
+  +bloom = sel(U32.is_eq(m, 7), 15895224, sel(U32.is_eq(m, 19), 16179290,
+    sel(U32.is_eq(m, 31), 16053480, sel(U32.is_eq(m, 43), 9086207, TR()))))
+  +flower = sel(opaque(bloom), sel(tip, bloom, 3707946), TR())
+  +blade = U32.is_eq((n .&. 28 : U32), 12) && ((n >> 10n .&. 3 : U32) < 3 : U32)
+  over(flower, shade(sel(blade, sel(tip, 7324480, 3509046), base), edge))
 
 def Art.wild(+n: U32, +edge: U32) -> U32:
   +f = (n .&. 255 : U32)
@@ -125,8 +139,11 @@ def Art.cliff(+d: U32, +px: U32, +left: Bool, +wild: Bool) -> U32:
     || U32.is_eq(((px + row * 3) .&. 7 : U32), 0)
   +stone = sel(wild, 7031342, 9076856)
   +c = sel(mortar, shade(stone, 170), stone)
-  +lip = U32.is_eq(d, 0)
-  sel(lip, sel(wild, 3104300, 4626999), sel(left, c, shade(c, 190)))
+  +turf = sel(wild, 3104300, 4626999)
+  +root = U32.is_eq(d, 2) && ((((px * 5) + 3) .&. 7 : U32) < 2 : U32)
+    || U32.is_eq(d, 3) && U32.is_eq((((px * 5) + 3) .&. 15 : U32), 0)
+  sel(U32.is_eq(d, 0), shade(turf, 300), sel(U32.is_eq(d, 1), shade(turf, 150),
+    sel(root, shade(turf, 120), sel(left, c, shade(c, 190)))))
 
 # the ground block: top face (terrain, path, hover outline) and cliff faces
 # dl/dr px down. wx, wy: world-screen position of the top vertex. Each stage
@@ -141,7 +158,8 @@ def Art.ground(+ter: U32, +n: U32, +edge: U32, +wx: U32, +wy: U32, +t: U32)
     case 4:
       Art.wild(n, edge)
     case _:
-      Art.grass(n, edge)
+      +tuft = U32.is_eq((hash((wx >> 2n : U32), (wy >> 2n : U32)) .&. 31 : U32), 0)
+      over(Art.tuft(tuft, (wx .&. 3 : U32), (wy .&. 3 : U32)), Art.grass(n, edge, U32.is_eq((wy .&. 1 : U32), 0)))
 
 def Art.flag(+u: U32, +v: U32, +seed: U32) -> U32:
   +off = sel(U32.is_eq(((v >> 3n) .&. 1 : U32), 1), 4, 0)
@@ -174,7 +192,7 @@ def Art.surface(paved: Bool, +ter: U32, +u: U32, +v: U32, +wx: U32, +wy: U32,
     case True{}:
       Art.paving(obj, u, v, ((wx - u + v) >> 4n : U32), nb)
     case False{}:
-      +n = hash(wx, wy)
+      +n = hash(wx, (wy >> 1n : U32))
       +edge = sel((u < 1 : U32) || (v < 1 : U32), 272, sel((u > 14 : U32) || (v > 14 : U32), 236, 256))
       +g = Art.ground(ter, n, edge, wx, wy, t)
       sel(U32.is_eq(ter, 2), Art.foam(nb, u, v, t, g), g)
@@ -472,7 +490,8 @@ def Art.dragon(+dx: U32, +dy: U32, +a: U32) -> U32:
   +head = between(ex, 2, 4) && between(ey, (0 - 4 : U32), (0 - 2 : U32))
   +wing = between(ex, (0 - 1 : U32), 1) && U32.is_eq(ey, (0 - 3 : U32))
   +pole = U32.is_eq(ex, 0) && between(ey, (0 - 10 : U32), 6)
-  sel(head, 4175450, sel(body, 3120973, sel(wing, 15253568, sel(pole, 14725184, TR()))))
+  +twist = U32.is_eq((((ey + 64) >> 1n) .&. 1 : U32), 0)
+  sel(head, 4175450, sel(body, 3120973, sel(wing, 15253568, sel(pole, sel(twist, 14725184, 16250848), TR()))))
 
 def Art.tunic(+k: U32) -> U32:
   match k:
@@ -504,39 +523,131 @@ def Art.skin(+k: U32) -> U32:
     case _:
       15781004
 
+# a thought bubble's picture (inner 7 x 5, x in -3..3, y in 0..4 upward)
+def Art.thought(+m: U32, +x: U32, +y: U32) -> U32:
+  match m:
+    case 1:
+      # hungry: a drumstick
+      +meat = ell((x + 1 : U32), (y - 3 : U32), 2, 1)
+      +bone = U32.is_eq(x, 1) && U32.is_eq(y, 1) || U32.is_eq(x, 2) && (y < 2 : U32) || U32.is_eq(x, 3) && U32.is_eq(y, 0)
+      sel(meat, 11037752, sel(bone, 15790304, TR()))
+    case 2:
+      # thirsty: a water drop
+      +drop = U32.is_eq(y, 4) && U32.is_eq(x, 0) || between(y, 1, 3) && (sabs(x) <= 1 : U32)
+        || U32.is_eq(y, 0) && U32.is_eq(x, 0)
+      sel(drop, sel(U32.is_eq(x, (0 - 1 : U32)) && U32.is_eq(y, 2), 12644607, 3712480), TR())
+    case 3:
+      # queasy: a green swirl
+      +ring = ell(x, (y - 2 : U32), 3, 2) && Bool.not(ell(x, (y - 2 : U32), 1, 1))
+      sel(ring && Bool.not(U32.is_eq(x, 3) && U32.is_eq(y, 2)), 5613632, sel(U32.is_eq(x, 0) && U32.is_eq(y, 2), 5613632, TR()))
+    case 4:
+      # tired: z z
+      +big = (U32.is_eq(y, 4) || U32.is_eq(y, 1)) && between(x, (0 - 3 : U32), 0)
+        || U32.is_eq(y, 3) && U32.is_eq(x, (0 - 1 : U32)) || U32.is_eq(y, 2) && U32.is_eq(x, (0 - 2 : U32))
+      +small = (U32.is_eq(y, 3) || U32.is_eq(y, 1)) && between(x, 2, 3) || U32.is_eq(y, 2) && U32.is_eq(x, 2)
+      sel(big || small, 4214960, TR())
+    case 5:
+      # cross: a storm cloud with a bolt
+      +cloud = ell((x + 1 : U32), (y - 3 : U32), 2, 1) || ell((x - 1 : U32), (y - 3 : U32), 2, 1)
+      +bolt = U32.is_eq(x, 0) && U32.is_eq(y, 1) || U32.is_eq(x, 1) && U32.is_eq(y, 0)
+      sel(bolt, 16766282, sel(cloud, 7368816, TR()))
+    case _:
+      # delighted: a heart
+      +heart = U32.is_eq(y, 4) && (sabs(x) >= 1 : U32) && (sabs(x) <= 2 : U32)
+        || U32.is_eq(y, 3) && (sabs(x) <= 2 : U32) || U32.is_eq(y, 2) && (sabs(x) <= 1 : U32)
+        || between(y, 0, 1) && U32.is_eq(x, 0)
+      sel(heart, sel(U32.is_eq(x, (0 - 1 : U32)) && U32.is_eq(y, 3), 16758725, 14163020), TR())
+
+def Art.bubble.go(on: Bool, +m: U32, +dx: U32, +h: U32) -> U32:
+  match on:
+    case True{}:
+      +ax = sabs(dx)
+      +box = (ax <= 5 : U32) && between(h, 17, 25) && Bool.not(U32.is_eq(ax, 5) && (U32.is_eq(h, 17) || U32.is_eq(h, 25)))
+      +rim = box && (U32.is_eq(ax, 5) || U32.is_eq(h, 17) || U32.is_eq(h, 25)
+        || U32.is_eq(ax, 4) && (U32.is_eq(h, 18) || U32.is_eq(h, 24)))
+      +tail = U32.is_eq(dx, 0) && U32.is_eq(h, 15) || U32.is_eq(dx, 1) && U32.is_eq(h, 16)
+      +pic = Art.thought(m, dx, (h - 19 : U32))
+      sel(rim || tail, 5263440, sel(box, over(sel((ax <= 3 : U32) && between(h, 19, 23), pic, TR()), 16316664), TR()))
+    case False{}:
+      TR()
+
+# what a guest carries in the leading hand (x: forward, y: up from the hand)
+def Art.item(+it: U32, +x: U32, +y: U32) -> U32:
+  match it:
+    case 1:
+      # a potion: glass bottle, cork
+      +glass = between(x, 0, 1) && between(y, 0, 1)
+      +neck = U32.is_eq(x, 0) && U32.is_eq(y, 2)
+      sel(neck, 9138758, sel(glass, sel(U32.is_eq(x, 0) && U32.is_eq(y, 1), 14200063, 9844944), TR()))
+    case 2:
+      # a tankard of ale with its foam
+      +mug = between(x, 0, 1) && between(y, 0, 1)
+      +foam = between(x, 0, 1) && U32.is_eq(y, 2)
+      +grip = U32.is_eq(x, 2) && U32.is_eq(y, 1)
+      sel(foam, 16316656, sel(mug, 14721072, sel(grip, 9127187, TR())))
+    case _:
+      TR()
+
+# a guest seen from the front (facing +x on screen: right, or mirrored) or
+# the back. look bits: 0-1 class, 4-6 tunic, 8-9 skin, 12-13 facing, 16-17
+# item, 20-22 thought, 24 stepping. Walking takes four frames: legs apart,
+# passing (body up a pixel), apart the other way, passing.
 def Art.guest(+dx: U32, +dy: U32, +look: U32, +t: U32) -> U32:
   +cls = (look .&. 3 : U32)
   +dw = U32.is_eq(cls, 3)
-  +h = (0 - dy : U32)
+  +face = ((look >> 12n) .&. 3 : U32)
+  +left = U32.is_eq(face, 1) || U32.is_eq(face, 2)
+  +backv = (face >= 2 : U32)
+  +walk = Bool.not(U32.is_eq((look .&. 16777216 : U32), 0))
+  +it = ((look >> 16n) .&. 3 : U32)
+  +fr = sel(walk, ((t >> 2n) .&. 3 : U32), 0)
+  +bob = sel(U32.is_eq((fr .&. 1 : U32), 1), 1, 0)
+  +h0 = (0 - dy : U32)
+  +h = (h0 - bob : U32)
+  +x = sel(left, (0 - dx : U32), dx)
   +sh = sel(dw, 2, 0)
   +tun = sel(U32.is_eq(cls, 0), 5913248, Art.tunic(((look >> 4n) .&. 7 : U32)))
   +skin = Art.skin(((look >> 8n) .&. 3 : U32))
-  +step = U32.is_eq(((t >> 3n) .&. 1 : U32), 1)
-  +legl = sel(step, (0 - 1 : U32), 0)
-  +legr = sel(step, 1, 0)
-  +legs = between(h, 0, (2 - (sh >> 1n) : U32)) && (U32.is_eq(dx, legl) || U32.is_eq(dx, (legr + 0 : U32)) || U32.is_eq(dx, (legl + 2 : U32)))
-  +body = between(h, (3 - (sh >> 1n) : U32), (6 - sh : U32)) && between(dx, (0 - 2 : U32), 2)
-  +belt = U32.is_eq(h, (4 - (sh >> 1n) : U32)) && between(dx, (0 - 2 : U32), 2)
-  +head = between(h, (7 - sh : U32), (9 - sh : U32)) && between(dx, (0 - 1 : U32), 1)
-  +eye = U32.is_eq(h, (8 - sh : U32)) && U32.is_eq(dx, 1)
+  +hair = sel(dw, 11559978, 6965290)
+  # legs: apart (frames 0, 2) or together (1, 3); the near leg is lighter
+  +legtop = (2 - (sh >> 1n) + bob : U32)
+  +apart = U32.is_eq((fr .&. 1 : U32), 0)
+  +legat = between(h0, 0, legtop) && (apart && (U32.is_eq(x, (0 - 1 : U32)) || U32.is_eq(x, 1))
+    || Bool.not(apart) && U32.is_eq(x, 0))
+  +near = U32.is_eq(fr, 2) && slt(x, 0) || Bool.not(U32.is_eq(fr, 2)) && Bool.not(slt(x, 0))
+  +legc = sel(near || Bool.not(walk), 3811866, 2628880)
+  +foot = U32.is_eq(h0, 0) && Bool.not(apart) && U32.is_eq(x, 1)
+  +body = between(h, (3 - (sh >> 1n) : U32), (6 - sh : U32)) && between(x, (0 - 2 : U32), 2)
+  +belt = U32.is_eq(h, (4 - (sh >> 1n) : U32)) && between(x, (0 - 2 : U32), 2)
+  # the leading hand swings with the stride (or holds the item still)
+  +hy = (4 - (sh >> 1n) : U32)
+  +hx = sel(opaque(Art.item(it, 0, 0)), 3, sel(walk && U32.is_eq(fr, 0), 3, sel(walk && U32.is_eq(fr, 2), (0 - 3 : U32), 3)))
+  +hand = U32.is_eq(x, hx) && U32.is_eq(h, hy) && (walk || Bool.not(U32.is_eq(it, 0)))
+  +held = Art.item(it, (x - 3 : U32), (h - hy - 1 : U32))
+  +head = between(h, (7 - sh : U32), (9 - sh : U32)) && between(x, (0 - 1 : U32), 1)
+  +eye = U32.is_eq(h, (8 - sh : U32)) && U32.is_eq(x, 1) && Bool.not(backv)
+  +headc = sel(backv, hair, skin)
   # hats
-  +wiz = U32.is_eq(cls, 0) && (between(h, 10, 10) && between(dx, (0 - 2 : U32), 2)
-    || U32.is_eq(h, 11) && between(dx, (0 - 1 : U32), 1)
-    || U32.is_eq(h, 12) && between(dx, (0 - 1 : U32), 0)
-    || U32.is_eq(h, 13) && U32.is_eq(dx, 0))
-  +star = U32.is_eq(cls, 0) && U32.is_eq(h, 11) && U32.is_eq(dx, 0)
-  +helm = U32.is_eq(cls, 1) && between(h, 8, 10) && between(dx, (0 - 1 : U32), 1)
-  +visor = U32.is_eq(cls, 1) && U32.is_eq(h, 8) && between(dx, 0, 1)
-  +plume = U32.is_eq(cls, 1) && between(h, 11, 12) && U32.is_eq(dx, 0)
-  +hood = U32.is_eq(cls, 2) && (between(h, 9, 10) && between(dx, (0 - 1 : U32), 1)
-    || U32.is_eq(dx, (0 - 2 : U32)) && between(h, 7, 9))
-  +ear = U32.is_eq(cls, 2) && U32.is_eq(dx, 2) && U32.is_eq(h, 8)
-  +beard = dw && between(h, 5, 6) && between(dx, (0 - 1 : U32), 1)
-  +cap = dw && between(h, 8, 9) && between(dx, (0 - 1 : U32), 1)
-  sel(star, 16766282, sel(wiz, 5913248, sel(visor, 3158064, sel(helm, 11581632,
+  +wiz = U32.is_eq(cls, 0) && (between(h, 10, 10) && between(x, (0 - 2 : U32), 2)
+    || U32.is_eq(h, 11) && between(x, (0 - 1 : U32), 1)
+    || U32.is_eq(h, 12) && between(x, (0 - 1 : U32), 0)
+    || U32.is_eq(h, 13) && U32.is_eq(x, (0 - 1 : U32)))
+  +star = U32.is_eq(cls, 0) && U32.is_eq(h, 11) && U32.is_eq(x, 0) && Bool.not(backv)
+  +helm = U32.is_eq(cls, 1) && between(h, 8, 10) && between(x, (0 - 1 : U32), 1)
+  +visor = U32.is_eq(cls, 1) && U32.is_eq(h, 8) && between(x, 0, 1) && Bool.not(backv)
+  +plume = U32.is_eq(cls, 1) && between(h, 11, 12) && U32.is_eq(x, 0)
+  +hood = U32.is_eq(cls, 2) && (between(h, 9, 10) && between(x, (0 - 1 : U32), 1)
+    || U32.is_eq(x, (0 - 2 : U32)) && between(h, 7, 9) || backv && head)
+  +ear = U32.is_eq(cls, 2) && U32.is_eq(x, 2) && U32.is_eq(h, 8)
+  +beard = dw && between(h, 5, 6) && between(x, (0 - 1 : U32), 1) && Bool.not(backv)
+  +cap = dw && between(h, 8, 9) && between(x, (0 - 1 : U32), 1)
+  +bub = Art.bubble.go(Bool.not(U32.is_eq(((look >> 20n) .&. 7 : U32), 0)) && (h0 >= 15 : U32),
+    ((look >> 20n) .&. 7 : U32), dx, h0)
+  over(bub, over(held, sel(hand, skin, sel(star, 16766282, sel(wiz, 5913248, sel(visor, 3158064, sel(helm, 11581632,
     sel(plume, 13643824, sel(hood, 3836474, sel(ear, skin, sel(cap, 12595248,
-    sel(beard, 11559978, sel(eye, 2105376, sel(head, skin, sel(belt, 4861466,
-    sel(body, tun, sel(legs, 3811866, TR()))))))))))))))
+    sel(beard, 11559978, sel(eye, 2105376, sel(head, headc, sel(belt, 4861466,
+    sel(body, sel(backv && U32.is_eq(x, 0) && U32.is_eq(cls, 0), shade(tun, 200), tun),
+    sel(legat, legc, sel(foot, legc, TR()))))))))))))))))))
 
 # Riders
 # ------
@@ -633,9 +744,18 @@ def Art.carousel(+dx: U32, +dy: U32, +t: U32, +ra: U32, +rb: U32) -> U32:
     over(sel(f6, TR(), c6), sel(f7, TR(), c7))))))))
   +posts = U32.is_eq(((dx + 256) .&. 15 : U32), 0) && between(dy, (0 - 30 : U32), (0 - 6 : U32))
     && (sabs(dx) < 26 : U32)
-  over(canopy, over(sel(flagp, 14737632, sel(flag, 13643824, TR())),
+  +m = ((dx + 256) .&. 7 : U32)
+  +deep = sel(U32.is_eq(m, 0) || U32.is_eq(m, 7), 1, sel(U32.is_eq(m, 1) || U32.is_eq(m, 6), 3, 4))
+  +rim0 = ell(dx, (dy + 30 : U32), 28, 14)
+  +val = Bool.not(rim0) && ell(dx, (dy + 30 - deep : U32), 28, 14) && sle((0 - 30 : U32), dy)
+  +lampy = Bool.not(rim0) && ell(dx, (dy + 29 : U32), 28, 14)
+  +lamp = lampy && val && (U32.is_eq(m, 3) || U32.is_eq(m, 4))
+  +lit = U32.is_eq(((((dx + 256) >> 3n) + (t >> 4n)) .&. 1 : U32), 0)
+  +valc = sel(U32.is_eq((((dx + 256) >> 3n) .&. 1 : U32), 0), 8077216, 15253568)
+  +valance = sel(lamp, sel(lit, 16775360, 13148232), sel(val, sel(Bool.not(ell(dx, (dy + 31 - deep : U32), 28, 14)), shade(valc, 150), valc), TR()))
+  over(valance, over(canopy, over(sel(flagp, 14737632, sel(flag, 13643824, TR())),
     over(fronts, over(sel(pole, 14725184, sel(posts, 14725184, TR())), over(backs,
-      sel(top, sel(plank, 8014378, 11565637), sel(side, 7031338, TR())))))))
+      sel(top, sel(plank, 8014378, 11565637), sel(side, 7031338, TR()))))))))
 
 def Art.sseat(+dx: U32, +dy: U32, +ringy: U32, +s: U32, +code: U32) -> U32:
   +a = (s * 32 + 16 : U32)
@@ -671,7 +791,9 @@ def Art.spire(+dx: U32, +dy: U32, +t: U32, +ra: U32, +rb: U32) -> U32:
   +r7 = Art.sseat(dx, dy, ringy, 7, Art.code(ra, rb, 7))
   +frontr = over(r0, over(r1, over(r2, over(r7, TR()))))
   +backr = over(r3, over(r4, over(r5, over(r6, TR()))))
-  over(sel(core, 16777215, sel(orb, 12122367, TR())),
+  +glint = Bool.not(orb) && ell(dx, (dy + 70 : U32), 9, 8)
+    && U32.is_eq((hash((dx + 64 : U32), ((dy + 128) + (t >> 3n) : U32)) .&. 31 : U32), 0)
+  over(sel(core, 16777215, sel(orb, 12122367, sel(glint, 15794175, TR()))),
     over(frontr, over(front, over(sel(rune && opaque(tower), 6287592, tower),
       over(backr, over(back, base))))))
 
@@ -685,11 +807,13 @@ def Art.potion(+dx: U32, +dy: U32, +t: U32) -> U32:
   +b2 = between(dx, (0 - 1 : U32), 0) && between(dy, (0 - 15 : U32), (0 - 11 : U32))
   +b3 = between(dx, 3, 4) && between(dy, (0 - 14 : U32), (0 - 11 : U32))
   +sign = between(dx, (0 - 4 : U32), 4) && between(dy, (0 - 25 : U32), (0 - 20 : U32))
+  +frame = sign && (U32.is_eq(sabs(dx), 4) || U32.is_eq(dy, (0 - 25 : U32)) || U32.is_eq(dy, (0 - 20 : U32)))
+  +hang = U32.is_eq(sabs(dx), 3) && between(dy, (0 - 19 : U32), (0 - 17 : U32))
   +star = U32.is_eq(dx, 0) && between(dy, (0 - 24 : U32), (0 - 21 : U32))
     || between(dx, (0 - 1 : U32), 1) && U32.is_eq(dy, (0 - 23 : U32))
   +bub = U32.is_eq((hash((dx + 64 : U32), ((dy + 64 + (t >> 3n)) : U32)) .&. 31 : U32), 0)
     && between(dx, (0 - 2 : U32), 2) && between(dy, (0 - 30 : U32), (0 - 26 : U32))
-  over(sel(bub, 12648447, TR()), over(sel(star, 16766282, sel(sign, 6961312, TR())),
+  over(sel(bub, 12648447, TR()), over(sel(star, 16766282, sel(frame, 6961706, sel(sign, 6961312, sel(hang, 3813162, TR())))),
     over(awning, over(sel(b1, 14168128, sel(b2, 4176000, sel(b3, 4215008, TR()))),
       over(sel(post, 6961706, TR()), booth)))))
 
@@ -711,8 +835,17 @@ def Art.tavern(+dx: U32, +dy: U32, +t: U32) -> U32:
   +sm = (t .&. 63 : U32)
   +smoke = ell((dx - 6 : U32), (dy + 33 + (sm >> 2n) : U32), 2, 2)
     || ell((dx - 7 : U32), (dy + 38 + (sm >> 3n) : U32), 1, 1)
-  over(sel(smoke, 13421772, TR()), over(sel(chim, 8016192, TR()),
-    sel(roof, roofc, sel(door, 5913120, wallc))))
+  +arm = between(dx, 9, 16) && U32.is_eq(dy, (0 - 17 : U32)) || U32.is_eq(dx, 10) && U32.is_eq(dy, (0 - 16 : U32))
+  +chain = (U32.is_eq(dx, 12) || U32.is_eq(dx, 15)) && U32.is_eq(dy, (0 - 16 : U32))
+  +board = between(dx, 11, 16) && between(dy, (0 - 15 : U32), (0 - 9 : U32))
+  +edge = board && (U32.is_eq(dx, 11) || U32.is_eq(dx, 16) || U32.is_eq(dy, (0 - 15 : U32)) || U32.is_eq(dy, (0 - 9 : U32)))
+  +mug = between(dx, 13, 14) && between(dy, (0 - 12 : U32), (0 - 11 : U32))
+  +foam = between(dx, 13, 14) && U32.is_eq(dy, (0 - 13 : U32))
+  +grip = U32.is_eq(dx, 15) && U32.is_eq(dy, (0 - 12 : U32))
+  +signc = sel(edge, 5913120, sel(foam, 16316656, sel(mug, 14721072, sel(grip, 14721072, 9127187))))
+  over(sel(arm || chain, 3158064, sel(board, signc, TR())),
+    over(sel(smoke, 13421772, TR()), over(sel(chim, 8016192, TR()),
+    sel(roof, roofc, sel(door, 5913120, wallc)))))
 
 def Art.ride(+k: U32, +dx: U32, +dy: U32, +t: U32, +ra: U32, +rb: U32) -> U32:
   match k:
