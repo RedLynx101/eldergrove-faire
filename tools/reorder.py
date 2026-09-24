@@ -52,6 +52,5 @@ def visit(i):
 
 for i in range(len(blocks)):
     visit(i)
-open(path, 'w', newline='
-').write(head + ''.join(blocks[i] if blocks[i].endswith('\n') else blocks[i] + '\n' for i in out))
+open(path, 'w', newline='\n').write(head + ''.join(blocks[i] if blocks[i].endswith('\n') else blocks[i] + '\n' for i in out))
 print('reordered', path)
