@@ -618,11 +618,11 @@ def rt_ws(+xs: List<&2, U32>, +rest: List<&2, U32>, +st: List<&2, S.Item>)
 def rt_fin(+f: C.Fin, +rest: List<&2, U32>, +st: List<&2, S.Item>)
   -> {S.dec(S.Enc.fin(f, rest), st) == S.dec(rest, S.IF{f} <> st) : List<&2, S.Item>}:
   match f:
-    case C.Fin{fee, loan, rating, now, last, hist}:
-      +r14 = {14 <> fee <> loan <> rating <> rest : List<&2, U32>}
+    case C.Fin{fee, loan, rating, now, last, hist, res}:
+      +r14 = {14 <> fee <> loan <> rating <> res <> rest : List<&2, U32>}
       +rh = S.Enc.ws(hist, r14)
       +rl = S.Enc.ws(last, rh)
-      +lhs = S.dec(S.Enc.fin(C.Fin{fee, loan, rating, now, last, hist}, rest), st)
+      +lhs = S.dec(S.Enc.fin(C.Fin{fee, loan, rating, now, last, hist, res}, rest), st)
       %rt_ws(hist, r14, S.IW{last} <> S.IW{now} <> st) : {lhs == _ : List<&2, S.Item>}
       %rt_ws(last, rh, S.IW{now} <> st) : {lhs == _ : List<&2, S.Item>}
       %rt_ws(now, rl, st) : {lhs == _ : List<&2, S.Item>}
@@ -1000,10 +1000,10 @@ def build_ok(+ok: Bool, +q: C.Q, +rs: +List<C.Ride>, +tool: U32, +x: U32, +y: U3
 
 def pb_go(+a: C.Act, +map: C.Q, +guests: +List<C.Guest>, +rides: +List<C.Ride>, +track: C.Track,
   +cash: U32, +time: U32, +nid: U32, +fee: U32, +loan: U32, +rating: U32, +now: +List<U32>,
-  +last: +List<U32>, +hist: +List<U32>, +mess: +List<U32>, +staff: +List<C.Staff>,
+  +last: +List<U32>, +hist: +List<U32>, +res: U32, +mess: +List<U32>, +staff: +List<C.Staff>,
   +h: {Laws.prices_ok(rides) && U32.is_le(fee, 40) == True{} : Bool})
   -> {Laws.park_prices_ok(C.Out.park(C.Park.step(C.Park{map, guests, rides, track, cash, time, nid,
-    C.Fin{fee, loan, rating, now, last, hist}, mess, staff}, a))) == True{} : Bool}:
+    C.Fin{fee, loan, rating, now, last, hist, res}, mess, staff}, a))) == True{} : Bool}:
   match a:
     case C.Tick{}:
       +sn = C.Track.stn(track)
@@ -1030,8 +1030,8 @@ def Laws.prices_bounded(p, a, h):
   match p:
     case C.Park{map, guests, rides, track, cash, time, nid, fin, mess, staff}:
       match fin:
-        case C.Fin{fee, loan, rating, now, last, hist}:
-          pb_go(a, map, guests, rides, track, cash, time, nid, fee, loan, rating, now, last, hist, mess, staff, h)
+        case C.Fin{fee, loan, rating, now, last, hist, res}:
+          pb_go(a, map, guests, rides, track, cash, time, nid, fee, loan, rating, now, last, hist, res, mess, staff, h)
 
 # Litter: a tick's mess is the drops put in front of what wasn't swept, and
 # the kept and swept pieces split the old mess between them (as the guests
@@ -1131,12 +1131,19 @@ def wl_bill(+w: Bool, +v: U32, +rs: +List<C.Ride>)
     {==},
     wl_upkeep(rs))
 
-def wl_month(+c: Bool, +i: U32, +w: Bool, +v: U32, +rs: +List<C.Ride>)
-  -> {Laws.wage_list(C.Ledger.put(c, C.Spend{10, i}, C.Ledger.put(w, C.Spend{11, v}, C.Ledger.upkeep(rs))))
+def wl_mid(+cr: Bool, +rc: U32, +w: Bool, +v: U32, +rs: +List<C.Ride>)
+  -> {Laws.wage_list(C.Ledger.put(cr, C.Spend{12, rc}, C.Ledger.put(w, C.Spend{11, v}, C.Ledger.upkeep(rs))))
       == Bool.pick(List<U32>, w, [v], []) : List<U32>}:
-  bcase(c, b => {Laws.wage_list(C.Ledger.put(b, C.Spend{10, i}, C.Ledger.put(w, C.Spend{11, v}, C.Ledger.upkeep(rs))))
+  bcase(cr, b => {Laws.wage_list(C.Ledger.put(b, C.Spend{12, rc}, C.Ledger.put(w, C.Spend{11, v}, C.Ledger.upkeep(rs))))
       == Bool.pick(List<U32>, w, [v], []) : List<U32>},
     wl_bill(w, v, rs), wl_bill(w, v, rs))
+
+def wl_month(+c: Bool, +i: U32, +cr: Bool, +rc: U32, +w: Bool, +v: U32, +rs: +List<C.Ride>)
+  -> {Laws.wage_list(C.Ledger.put(c, C.Spend{10, i}, C.Ledger.put(cr, C.Spend{12, rc}, C.Ledger.put(w, C.Spend{11, v}, C.Ledger.upkeep(rs)))))
+      == Bool.pick(List<U32>, w, [v], []) : List<U32>}:
+  bcase(c, b => {Laws.wage_list(C.Ledger.put(b, C.Spend{10, i}, C.Ledger.put(cr, C.Spend{12, rc}, C.Ledger.put(w, C.Spend{11, v}, C.Ledger.upkeep(rs)))))
+      == Bool.pick(List<U32>, w, [v], []) : List<U32>},
+    wl_mid(cr, rc, w, v, rs), wl_mid(cr, rc, w, v, rs))
 
 def wl_fees(+c: Bool, +f: U32, +ys: +List<C.Txn>)
   -> {Laws.wage_list(C.Ledger.put(c, C.Gain{7, f}, ys)) == Laws.wage_list(ys) : List<U32>}:
@@ -1150,7 +1157,9 @@ def wl_tick(+gs: +List<C.Guest>, +rs: +List<C.Ride>, +t: U32, +pl: +List<C.Board
   +fees = (narr * U32.min(C.Fin.fee(f), 40) : U32)
   +i = (C.Fin.loan(f) / 80 : U32)
   +w = Bool.not(U32.is_eq(C.Staff.wages(ss), 0))
-  +inner = C.Ledger.put(Bool.not(U32.is_eq(i, 0)), C.Spend{10, i}, C.Ledger.put(w, C.Spend{11, C.Staff.wages(ss)}, C.Ledger.upkeep(rs)))
+  +rc = C.Res.cost(C.Fin.res(f))
+  +inner = C.Ledger.put(Bool.not(U32.is_eq(i, 0)), C.Spend{10, i}, C.Ledger.put(Bool.not(U32.is_eq(rc, 0)), C.Spend{12, rc},
+    C.Ledger.put(w, C.Spend{11, C.Staff.wages(ss)}, C.Ledger.upkeep(rs))))
   bcase(U32.is_eq((t % 3600 : U32), 0) && (t > 0 : U32),
     m => {Laws.wage_list(C.Ledger.put(Bool.not(U32.is_eq(fees, 0)), C.Gain{7, fees},
         List.append(&2, C.Txn, C.Ledger.sales(pl, rs), Bool.pick(+List<C.Txn>, m, inner, []))))
@@ -1160,7 +1169,7 @@ def wl_tick(+gs: +List<C.Guest>, +rs: +List<C.Ride>, +t: U32, +pl: +List<C.Board
         wl_fees(Bool.not(U32.is_eq(fees, 0)), fees, List.append(&2, C.Txn, C.Ledger.sales(pl, rs), inner))) : {_ == Bool.pick(List<U32>, w, [C.Staff.wages(ss)], []) : List<U32>}
     %Equal.sym(List<U32>, Laws.wage_list(List.append(&2, C.Txn, C.Ledger.sales(pl, rs), inner)), Laws.wage_list(inner),
         wl_sales(pl, rs, inner)) : {_ == Bool.pick(List<U32>, w, [C.Staff.wages(ss)], []) : List<U32>}
-    wl_month(Bool.not(U32.is_eq(i, 0)), i, w, C.Staff.wages(ss), rs),
+    wl_month(Bool.not(U32.is_eq(i, 0)), i, Bool.not(U32.is_eq(rc, 0)), rc, w, C.Staff.wages(ss), rs),
     %Equal.sym(List<U32>, Laws.wage_list(C.Ledger.put(Bool.not(U32.is_eq(fees, 0)), C.Gain{7, fees}, List.append(&2, C.Txn, C.Ledger.sales(pl, rs), []))),
         Laws.wage_list(List.append(&2, C.Txn, C.Ledger.sales(pl, rs), [])),
         wl_fees(Bool.not(U32.is_eq(fees, 0)), fees, List.append(&2, C.Txn, C.Ledger.sales(pl, rs), []))) : {_ == [] : List<U32>}

@@ -140,6 +140,17 @@ Small design decisions made while working, listed here so they can be revisited.
 - **Rain** falls on one day in four (a hash of the day number): streaks over the world, an overcast tint, a
   hiss in the ambience, and half the usual arrivals.
 
+- **Research** lives in the park's books (so it is saved): thirteen discoveries (the eight M6 rides, the
+  three new shops' worth of tools, statues and fountains, walls and fences) unlock in a fixed order. Steady
+  funding costs 150 a month and needs about three months a discovery; lavish costs 400 and needs about a
+  month and a half. Spending is a ledger entry (kind 12, research), so wages_booked's proof grew a step. In
+  sandbox everything starts researched. Locked tools show dim with a padlock; the sim itself doesn't stop a
+  locked build, the toolbar does.
+- **Buying land:** the Buy Land tool (land tab, 60 gold) turns wild forest at the park's edge into open
+  grass, a tile at a time, next to land that isn't wild. Construction rights (building over land you don't
+  own) are not done.
+- Ride and shop tools had no placement ghost since M6 began (the ghost only knew tools 1-16); fixed.
+
 ## Done: M1, the vertical slice
 Isometric fantasy map, paths, terrain editing, 4 enchanted tree kinds, Dragon Carousel, Arcane Spire, Potion
 Stall, Troll Tavern, pre-built Wyrm Coaster with block signals and a track editor, guests with needs and
@@ -299,7 +310,7 @@ Spikes, in order:
   tool. A bridge tool raises paths over water, lower paths and track, on supports that match the theme. The
   land stays terraced (no slopes).
 
-## M7: Structure (in progress: day, night and rain done)
+## M7: Structure (in progress: day, night, rain, research and land done)
 - Scenarios with goals and awards, alongside sandbox mode (a main menu to choose).
 - Research that unlocks rides over time.
 - Weather and a day/night cycle, with lanterns and fireflies at night.

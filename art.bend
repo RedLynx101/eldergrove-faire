@@ -2255,6 +2255,12 @@ def Art.icon_pic(+tool: U32, +cx: U32, +cy: U32, +t: U32) -> U32:
       Art.ride.go(17, (cx * 3 : U32), (cy * 3 - 8 : U32), t, 0, 0, 0)
     case 39:
       Art.ride.go(16, (cx * 3 : U32), (cy * 3 - 28 : U32), t, 0, 0, 0)
+    case 46:
+      # a gold coin over a patch of land
+      +coin = ell(cx, (cy + 2 : U32), 4, 4)
+      +rim = coin && Bool.not(ell(cx, (cy + 2 : U32), 3, 3))
+      +mark = U32.is_eq(cx, 0) && between(cy, (0 - 4 : U32), 0)
+      sel(mark, 12092939, sel(rim, 12092939, sel(coin, 16766282, sel(Art.dia(cx, (cy - 4 : U32)), 4626999, TR()))))
     case 41:
       Art.scenery(4, cx, (cy + 7 : U32), 0, t)
     case 42:
@@ -2308,5 +2314,10 @@ def Art.icon(+tool: U32, +on: U32, +dx: U32, +dy: U32, +t: U32) -> U32:
   +cx = (dx - 11 : U32)
   +cy = (dy - 13 : U32)
   +pic = Art.icon_pic(Art.cat_pic(tool), cx, cy, t)
-  sel(edge, frame, over(pic, fill))
+  # a locked tool: dim, with a padlock
+  +locked = U32.is_eq(on, 2)
+  +shackle = locked && (U32.is_eq(dy, 13) && between(dx, 16, 18) || (U32.is_eq(dx, 15) || U32.is_eq(dx, 19)) && between(dy, 14, 15))
+  +body = locked && between(dx, 14, 20) && between(dy, 16, 20)
+  sel(edge, sel(locked, 4210760, frame), sel(shackle, 11579568, sel(body, 14725184,
+    sel(locked, shade(over(pic, fill), 110), over(pic, fill)))))
 

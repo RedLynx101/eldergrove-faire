@@ -108,8 +108,8 @@ def Enc.ws(ws: List<&2, U32>, rest: List<&2, U32>) -> List<&2, U32>:
       Enc.ws(more, 16 <> w <> rest)
 
 def Enc.fin(f: C.Fin, rest: List<&2, U32>) -> List<&2, U32>:
-  C.Fin{fee, loan, rating, now, last, hist} = f
-  Enc.ws(now, Enc.ws(last, Enc.ws(hist, 14 <> fee <> loan <> rating <> rest)))
+  C.Fin{fee, loan, rating, now, last, hist, res} = f
+  Enc.ws(now, Enc.ws(last, Enc.ws(hist, 14 <> fee <> loan <> rating <> res <> rest)))
 
 def Enc.staff1(s: C.Staff, rest: List<&2, U32>) -> List<&2, U32>:
   C.Staff{id, x, y, dir, kind, st, tgt, tmr, zone, look} = s
@@ -183,10 +183,10 @@ def Pop.w(w: U32, st: List<&2, Item>) -> List<&2, Item>:
     case _:
       [IBad{}]
 
-def Pop.fin(fee: U32, loan: U32, rating: U32, st: List<&2, Item>) -> List<&2, Item>:
+def Pop.fin(fee: U32, loan: U32, rating: U32, res: U32, st: List<&2, Item>) -> List<&2, Item>:
   match st:
     case IW{hist} <> IW{last} <> IW{now} <> more:
-      IF{C.Fin{fee, loan, rating, now, last, hist}} <> more
+      IF{C.Fin{fee, loan, rating, now, last, hist, res}} <> more
     case _:
       [IBad{}]
 
@@ -238,8 +238,8 @@ def dec(ws: List<&2, U32>, st: List<&2, Item>) -> List<&2, Item>:
         st))
     case 13 <> cash <> time <> nid <> rest:
       dec(rest, Pop.park(cash, time, nid, st))
-    case 14 <> fee <> loan <> rating <> rest:
-      dec(rest, Pop.fin(fee, loan, rating, st))
+    case 14 <> fee <> loan <> rating <> res <> rest:
+      dec(rest, Pop.fin(fee, loan, rating, res, st))
     case 15 <> rest:
       dec(rest, IW{[]} <> st)
     case 16 <> w <> rest:
@@ -265,7 +265,7 @@ def load(ws: List<&2, U32>) -> Maybe<&2, C.Park>:
 # ---------------------------------------------------------
 
 def MAGIC() -> U32:
-  910313287
+  910313288
 
 def to_bytes(ws: List<&2, U32>) -> List<&2, U32>:
   match ws:

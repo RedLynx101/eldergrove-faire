@@ -947,6 +947,8 @@ def tool_name(+t: U32) -> String:
       "CASTLE WALL  25*"
     case 45:
       "FENCE  8*"
+    case 46:
+      "BUY LAND  60*  AT THE PARK'S EDGE"
     case _:
       "INSPECT (I): CLICK A RIDE OR A GUEST"
 
@@ -1039,6 +1041,8 @@ def Cat.tool.go(+code: U32) -> U32:
       2
     case 9:
       3
+    case 10:
+      46
     case 16:
       4
     case 17:
@@ -1096,7 +1100,7 @@ def Cat.len(+c: U32) -> U32:
     case 0:
       5
     case 1:
-      2
+      3
     case 2:
       6
     case 3:
@@ -1123,6 +1127,8 @@ def Cat.of(+t: U32) -> U32:
     case 2:
       1
     case 3:
+      1
+    case 46:
       1
     case 4:
       2
@@ -1185,6 +1191,8 @@ def Cat.pos(+t: U32) -> U32:
       4
     case 3:
       1
+    case 46:
+      2
     case 41:
       1
     case 42:
@@ -1258,21 +1266,60 @@ def cat_icons(+n: Nat, +k: U32, +c: U32, +acc: +List<Dr>) -> +List<Dr>:
       cat_icons(p, (k + 1 : U32), c,
         DIcon{(B() + 60 + k * 24 : U32), (B() + 294 : U32), (20 + k : U32), sel(U32.is_eq(k, c), 1, 0)} <> acc)
 
-def tool_icons(+n: Nat, +k: U32, +c: U32, +tool: U32, +acc: +List<Dr>) -> +List<Dr>:
+def Res.bit(+t: U32) -> U32:
+  match t:
+    case 30:
+      0
+    case 37:
+      1
+    case 36:
+      2
+    case 31:
+      3
+    case 34:
+      4
+    case 32:
+      5
+    case 33:
+      6
+    case 38:
+      7
+    case 35:
+      8
+    case 39:
+      9
+    case 40:
+      10
+    case 41:
+      11
+    case 42:
+      11
+    case 44:
+      12
+    case 45:
+      12
+    case _:
+      99
+
+def Res.open(+r: U32, +t: U32) -> Bool:
+  +b = Res.bit(t)
+  U32.is_eq(b, 99) || Bool.not(U32.is_eq(((r >> U32.to_nat(U32.min(b, 31))) .&. 1 : U32), 0))
+
+def tool_icons(+n: Nat, +k: U32, +c: U32, +tool: U32, +res: U32, +acc: +List<Dr>) -> +List<Dr>:
   match n:
     case 0n:
       acc
     case 1n+p:
       +tk = Cat.tool(c, k)
-      tool_icons(p, (k + 1 : U32), c, tool,
-        DIcon{(B() + 212 + k * 24 : U32), (B() + 294 : U32), tk, sel(U32.is_eq(tk, tool), 1, 0)} <> acc)
+      tool_icons(p, (k + 1 : U32), c, tool, res,
+        DIcon{(B() + 212 + k * 24 : U32), (B() + 294 : U32), tk, sel(Bool.not(Res.open(res, tk)), 2, sel(U32.is_eq(tk, tool), 1, 0))} <> acc)
 
-def toolbar(+tool: U32, +c: U32, +acc: +List<Dr>) -> +List<Dr>:
+def toolbar(+tool: U32, +c: U32, +res: U32, +acc: +List<Dr>) -> +List<Dr>:
   DIcon{(B() + 4 : U32), (B() + 294 : U32), 12, sel(U32.is_eq(tool, 12), 1, 0)}
     <> DIcon{(B() + 28 : U32), (B() + 294 : U32), 9, sel(U32.is_eq(tool, 9), 1, 0)}
     <> DRect{(B() + 54 : U32), (B() + 295 : U32), 1, 20, 5917290}
     <> DRect{(B() + 206 : U32), (B() + 295 : U32), 1, 20, 5917290}
-    <> cat_icons(6n, 0, c, tool_icons(U32.to_nat(Cat.len(c)), 0, c, tool, acc))
+    <> cat_icons(6n, 0, c, tool_icons(U32.to_nat(Cat.len(c)), 0, c, tool, res, acc))
 
 def happy_avg(+gs: +List<C.Guest>, +sum: U32, +n: U32) -> U32:
   match gs:
@@ -1358,10 +1405,11 @@ def hud(+p: C.Park, +ui: UI, +hov: U32) -> +List<Dr>:
     <> DRect{B(), (B() + 291 : U32), 512, 1, 13148232}
     <> DRect{B(), (B() + 292 : U32), 512, 28, 1973802} <> [] : +List<Dr>}
   +tip = bar_item(mx, my, UI.cat(var))
-  +name = tool_name(sel(U32.is_eq(tip, 0), tool, tip))
+  +shown = sel(U32.is_eq(tip, 0), tool, tip)
+  +name = Bool.pick(String, Res.open(C.Fin.res(C.Park.fin(p)), shown), tool_name(shown), "LOCKED: RESEARCH IT IN THE PARK WINDOW")
   +strip = T(name, 5, 284, sel(U32.is_eq(tip, 0), 16777215, 16766282),
     R(2, 282, (C.len32(U32, str_bytes(name)) * 4 + 6 : U32), 9, 1973802,
-    toolbar(tool, UI.cat(var), coaster_help(tool, hover_info(p, hov, bars)))))
+    toolbar(tool, UI.cat(var), C.Fin.res(C.Park.fin(p)), coaster_help(tool, hover_info(p, hov, bars)))))
   List.append(&2, Dr, top, strip)
 
 # Windows
@@ -1395,7 +1443,7 @@ def Win.h(+k: U32) -> U32:
     case 1:
       154
     case 2:
-      132
+      164
     case 3:
       157
     case 5:
@@ -1867,10 +1915,55 @@ def graph(+hs: +List<U32>, +i: U32, +x: U32, +y: U32, +acc: +List<Dr>) -> +List<
         R((x + (31 - i) * 5 : U32), (y + 50 - h : U32), 4, h, 7324480, acc))
 
 # the park: its rating, guests, entry fee, and the guest count graph
+# research as the interface sees it: which tool needs which discovery
+def Res.name(+k: U32) -> String:
+  match k:
+    case 0:
+      "HEALER'S TENT"
+    case 1:
+      "HEDGE LABYRINTH"
+    case 2:
+      "GOLEM BUMPERS"
+    case 3:
+      "WISP SELLER"
+    case 4:
+      "WHEEL OF STARS"
+    case 5:
+      "ENCHANTED ICES"
+    case 6:
+      "GRIFFIN SWING"
+    case 7:
+      "DRAGON'S EYRIE"
+    case 8:
+      "LICH'S CRYPT"
+    case 9:
+      "WIZARD'S WHIRL"
+    case 10:
+      "MERMAID FLUME"
+    case 11:
+      "STATUES AND FOUNTAINS"
+    case _:
+      "WALLS AND FENCES"
+
+def res_rows(+r: U32, +x: U32, +y: U32, +acc: +List<Dr>) -> +List<Dr>:
+  +f = C.Res.funding(r)
+  +pr = ((r >> 16n) .&. 255 : U32)
+  +done = C.Res.done(r)
+  T("RESEARCH", (x + 6 : U32), (y + 128 : U32), 16766282,
+  button("NONE", (x + 70 : U32), (y + 126 : U32), 30, sel(U32.is_eq(f, 0), 3831360, 5913248),
+  button("STEADY", (x + 104 : U32), (y + 126 : U32), 40, sel(U32.is_eq(f, 1), 3831360, 5913248),
+  button("LAVISH", (x + 148 : U32), (y + 126 : U32), 40, sel(U32.is_eq(f, 2), 3831360, 5913248),
+  T(Bool.pick(String, done, "EVERYTHING IS RESEARCHED",
+      "NEXT: " ++ Res.name(C.Res.next(r)) ++ "  " ++ U32.show((pr * 100 / 256 : U32)) ++ "%   *"
+      ++ U32.show(sel(U32.is_eq(f, 1), 150, sel(U32.is_eq(f, 2), 400, 0))) ++ "/MONTH"),
+    (x + 6 : U32), (y + 140 : U32), 12648447,
+  R((x + 6 : U32), (y + 152 : U32), U32.max(((pr * 188) >> 8n : U32), 1), 5, 7324480,
+  R((x + 6 : U32), (y + 152 : U32), 188, 5, 4210752, acc)))))))
+
 def park_win(+p: C.Park, +x: U32, +y: U32, +acc: +List<Dr>) -> +List<Dr>:
   C.Park{map, +guests, +rides, track, cash, time, nid, +fin, mess, staff} = p
   +rating = C.Fin.rating(fin)
-  +frame = window_box("ELDERGROVE FAIRE", x, y, 200, 132, acc)
+  +frame = res_rows(C.Fin.res(fin), x, y, window_box("ELDERGROVE FAIRE", x, y, 200, 164, acc))
   T("PARK RATING " ++ U32.show(rating), (x + 6 : U32), (y + 15 : U32), 16766282,
   R((x + 96 : U32), (y + 15 : U32), U32.max((rating / 10 : U32), 1), 5, sel((rating < 400 : U32), 14163020, 7324480),
   R((x + 96 : U32), (y + 15 : U32), 100, 5, 4210752,
@@ -2012,7 +2105,9 @@ def ride_click(+lx: U32, +ly: U32) -> U32:
   sel(in_box(lx, ly, 96, 62, 11, 9), 106, sel(in_box(lx, ly, 110, 62, 11, 9), 105, 0)))))))
 
 def park_click(+lx: U32, +ly: U32) -> U32:
-  sel(in_box(lx, ly, 110, 40, 11, 9), 201, sel(in_box(lx, ly, 124, 40, 11, 9), 200, 0))
+  sel(in_box(lx, ly, 110, 40, 11, 9), 201, sel(in_box(lx, ly, 124, 40, 11, 9), 200,
+  sel(in_box(lx, ly, 70, 126, 30, 9), 240, sel(in_box(lx, ly, 104, 126, 40, 9), 241,
+  sel(in_box(lx, ly, 148, 126, 40, 9), 242, 0)))))
 
 def fin_click(+lx: U32, +ly: U32) -> U32:
   sel(in_box(lx, ly, 100, 125, 54, 9), 202, sel(in_box(lx, ly, 160, 125, 54, 9), 203, 0))
@@ -2159,14 +2254,14 @@ def ghost_k(+tool: U32, +ok: Bool, +q: C.Q, +rs: +List<C.Ride>, +i: U32, +j: U32
   (tool .|. (sel(ok, 1, 0) << 8n) .|. (size << 9n) .|. (rk << 12n) .|. (dk << 17n) : U32)
 
 def ghost_on(+tool: U32, +hov: U32, +overwin: Bool) -> Bool:
-  (tool >= 1 : U32) && (tool <= 16 : U32) && Bool.not(U32.is_eq(tool, 12)) && (hov < 99999 : U32) && Bool.not(overwin)
+  ((tool >= 1 : U32) && (tool <= 16 : U32) || (tool >= 30 : U32) && (tool <= 46 : U32)) && Bool.not(U32.is_eq(tool, 12)) && (hov < 99999 : U32) && Bool.not(overwin)
 
 def ghost_dr(+p: C.Park, +tool: U32, +hov: U32, +vx: U32, +vy: U32, +overwin: Bool) -> +List<Dr>:
   C.Park{+map, guests, +rides, +track, +cash, time, nid, fin, mess, staff} = p
   +i = (hov >> 6n : U32)
   +j = (hov .&. 63 : U32)
   +h = C.Land.h(map, i, j)
-  +ok = C.Build.ok(map, track, cash, tool, i, j)
+  +ok = C.Build.ok(map, track, cash, tool, i, j) && Res.open(C.Fin.res(fin), tool)
   Bool.pick(+List<Dr>, ghost_on(tool, hov, overwin),
     [DGhost{scr_x(i, j, vx), scr_y(i, j, h, vy), ghost_k(tool, ok, map, rides, i, j)}], [])
 
@@ -2411,7 +2506,7 @@ def on_map(+lx: U32, +ly: U32, +button: U32, +down: Bool, +ui: UI, +wm: WM, +p: 
   +click = down && Bool.not(bar)
   +wheel = U32.is_eq(button, 5) || U32.is_eq(button, 6)
   +inspect = click && Bool.not(wheel) && (U32.is_eq(tool, 12) || Bool.not(U32.is_eq(button, 0)))
-  +build = click && Bool.not(inspect) && Bool.not(wheel)
+  +build = click && Bool.not(inspect) && Bool.not(wheel) && Res.open(C.Fin.res(C.Park.fin(p)), tool)
   +hov = pick(q, ui2)
   +ui3 = UI.with_tool(UI.with_last(ui2, sel(build, hov, 99999)), sel(pickt, item, sel(pickc, Cat.tool((item - 20 : U32), 0), tool)))
   +ws = WM.wins(wm)

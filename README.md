@@ -129,6 +129,9 @@ The path tool also builds over water: a plank bridge with rails.
 Days turn to night and back (about half a minute a day): lanterns and ride lights glow, fireflies come
 out. Some days it rains, and fewer guests come.
 
+The park window funds research (none, steady, lavish), which unlocks rides and scenery one at a time in
+scenarios; locked tools show a padlock. Buy Land (land tab) opens up the wild forest at the park's edge.
+
 Mess: guests drop wrappers when they finish what they carry, and very queasy
 guests are sick. Both lie on the path until swept (Brownies, coming in M5's
 staff spike), dirty paths wear guests' happiness down and lower the park

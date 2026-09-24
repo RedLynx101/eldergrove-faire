@@ -1715,14 +1715,14 @@ def Rides.attractions(+rs: +List<Ride>) -> U32:
 # better park rating draw more, a steep entry fee fewer
 type Fin is Data:
   Fin{fee: U32, loan: U32, rating: U32, now: List<&2, U32>, last: List<&2, U32>,
-    hist: List<&2, U32>}
+    hist: List<&2, U32>, res: U32}
 
 def Fin.fee(f: Fin) -> U32:
-  Fin{fee, loan, rating, now, last, hist} = f
+  Fin{fee, loan, rating, now, last, hist, res} = f
   fee
 
 def Fin.rating(f: Fin) -> U32:
-  Fin{fee, loan, rating, now, last, hist} = f
+  Fin{fee, loan, rating, now, last, hist, res} = f
   rating
 
 def Guests.come(+gs: +List<Guest>, +rs: +List<Ride>, +t: U32, +f: Fin) -> Bool:
@@ -2014,7 +2014,8 @@ def Bin.fill(+es: +List<U32>, +q: Q) -> Q:
 # Money: every change to the park's gold is a ledger entry
 # ---------------------------------------------------------
 # kind: 1 ride tickets, 2 upkeep, 3 construction, 4 refunds, 5 food, 6 drinks,
-# 7 entry fees, 8 loans taken, 9 loans repaid, 10 loan interest, 11 staff wages
+# 7 entry fees, 8 loans taken, 9 loans repaid, 10 loan interest, 11 staff wages,
+# 12 research
 
 def Fix.has(+xs: +List<U32>, +i: U32) -> Bool:
   match xs:
@@ -2114,7 +2115,7 @@ def MONTH() -> U32:
 # a tick's gold: sales, the arrivals' entry fees, and each month the rides'
 # upkeep and the loan's interest (1/80 of it)
 def Fin.loan(f: Fin) -> U32:
-  Fin{fee, loan, rating, now, last, hist} = f
+  Fin{fee, loan, rating, now, last, hist, res} = f
   loan
 
 def Staff.wage(+k: U32) -> U32:
@@ -2141,6 +2142,20 @@ def Staff.wages(+ss: +List<Staff>) -> U32:
     case s <> rest:
       (Staff.wage(Staff.kind(s)) + Staff.wages(rest) : U32)
 
+def Fin.res(f: Fin) -> U32:
+  Fin{fee, loan, rating, now, last, hist, res} = f
+  res
+
+def Res.done(+r: U32) -> Bool:
+  U32.is_eq((r .&. 8191 : U32), 8191)
+
+def Res.funding(+r: U32) -> U32:
+  ((r >> 24n) .&. 3 : U32)
+
+def Res.cost(+r: U32) -> U32:
+  +f = Res.funding(r)
+  sel(Res.done(r), 0, sel(U32.is_eq(f, 1), 150, sel(U32.is_eq(f, 2), 400, 0)))
+
 def Ledger.tick(+gs: +List<Guest>, +rs: +List<Ride>, +t: U32, +plan: +List<Board>,
   +narr: U32, +f: Fin, +ss: +List<Staff>) -> +List<Txn>:
   +monthly = U32.is_eq((t % MONTH() : U32), 0) && (t > 0 : U32)
@@ -2150,7 +2165,8 @@ def Ledger.tick(+gs: +List<Guest>, +rs: +List<Ride>, +t: U32, +plan: +List<Board
     List.append(&2, Txn, Ledger.sales(plan, rs),
       Bool.pick(+List<Txn>, monthly,
         Ledger.put(Bool.not(U32.is_eq(interest, 0)), Spend{10, interest},
-          Ledger.put(Bool.not(U32.is_eq(Staff.wages(ss), 0)), Spend{11, Staff.wages(ss)}, Ledger.upkeep(rs))), [])))
+          Ledger.put(Bool.not(U32.is_eq(Res.cost(Fin.res(f)), 0)), Spend{12, Res.cost(Fin.res(f))},
+          Ledger.put(Bool.not(U32.is_eq(Staff.wages(ss), 0)), Spend{11, Staff.wages(ss)}, Ledger.upkeep(rs)))), [])))
 
 # The books: every ledger entry is added to this month's column
 def Txn.book(t: Txn, +tab: +List<U32>) -> +List<U32>:
@@ -2168,8 +2184,8 @@ def Fin.book_all(+xs: +List<Txn>, +tab: +List<U32>) -> +List<U32>:
       Fin.book_all(rest, Txn.book(t, tab))
 
 def Fin.book(f: Fin, +xs: +List<Txn>) -> Fin:
-  Fin{fee, loan, rating, +now, last, hist} = f
-  Fin{fee, loan, rating, Fin.book_all(xs, now), last, hist}
+  Fin{fee, loan, rating, +now, last, hist, res} = f
+  Fin{fee, loan, rating, Fin.book_all(xs, now), last, hist, res}
 
 # The park rating: happy guests and open rides raise it, queasy guests lower
 # it (worked out every 64 ticks)
@@ -2225,7 +2241,7 @@ def Wins32.take(+n: Nat, +xs: +List<U32>) -> +List<U32>:
 def Fin.fresh(month: Bool, +now: +List<U32>) -> +List<U32>:
   match month:
     case True{}:
-      Tab.zero(11, [])
+      Tab.zero(12, [])
     case False{}:
       now
 
@@ -2245,12 +2261,51 @@ def Fin.sample(go: Bool, +gs: +List<Guest>, +hist: +List<U32>) -> +List<U32>:
 
 # each tick: the rating now and then, the guest count sampled, and at a
 # month's turn this month's column becomes last month's
+# Research (the books' res): bits 0-12 what is unlocked (0 Healer's Tent,
+# 1 Hedge Labyrinth, 2 Golem Bumpers, 3 Wisp Seller, 4 Wheel of Stars,
+# 5 Enchanted Ices, 6 Griffin Swing, 7 Dragon's Eyrie, 8 Lich's Crypt,
+# 9 Wizard's Whirl, 10 Mermaid Flume, 11 statues and fountains, 12 walls and
+# fences), 16-23 progress toward the next, 24-25 funding (0 none, 1 steady,
+# 2 lavish), 26-29 the scenario (0 sandbox), 30-31 its outcome (1 won,
+# 2 lost). Each month steady funding costs 150 and moves research 96 of 256
+# along, lavish 400 and 192.
+def Res.next.go(+n: Nat, +k: U32, +r: U32) -> U32:
+  match n:
+    case 0n:
+      13
+    case 1n+m:
+      sel(U32.is_eq(((r >> U32.to_nat(k)) .&. 1 : U32), 0), k, Res.next.go(m, (k + 1 : U32), r))
+
+def Res.next(+r: U32) -> U32:
+  Res.next.go(13n, 0, r)
+
+def Res.tick(month: Bool, +r: U32) -> U32:
+  match month:
+    case True{}:
+      +f = Res.funding(r)
+      +p = (((r >> 16n) .&. 255) + sel(U32.is_eq(f, 1), 96, sel(U32.is_eq(f, 2), 192, 0)) : U32)
+      +unlock = (p >= 256 : U32) && Bool.not(Res.done(r))
+      +r2 = sel(unlock, (r .|. U32.shln(1, U32.to_nat(Res.next(r))) : U32), r)
+      +p2 = sel(unlock, (p - 256 : U32), U32.min(p, 255))
+      ((r2 .&. 4278255615) .|. (sel(Res.done(r2), 0, p2) << 16n) : U32)
+    case False{}:
+      r
+
+# land at the park's edge can be bought: wild land beside land that isn't
+def Land.wild(+q: Q, +x: U32, +y: U32) -> Bool:
+  U32.is_eq(Tile.ter(Land.get(q, x, y)), 4) || Bool.not(inmap(x, y))
+
+def Land.buyable(+q: Q, +x: U32, +y: U32) -> Bool:
+  inmap(x, y) && U32.is_eq(Tile.ter(Land.get(q, x, y)), 4)
+    && (Bool.not(Land.wild(q, (x + 1 : U32), y)) || Bool.not(Land.wild(q, (x - 1 : U32), y))
+      || Bool.not(Land.wild(q, x, (y + 1 : U32))) || Bool.not(Land.wild(q, x, (y - 1 : U32))))
+
 def Fin.tick(f: Fin, +t: U32, +gs: +List<Guest>, +rs: +List<Ride>, +nm: U32, +q: Q) -> Fin:
-  Fin{fee, loan, +rating, +now, +last, +hist} = f
+  Fin{fee, loan, +rating, +now, +last, +hist, +res} = f
   +month = U32.is_eq((t % MONTH() : U32), 0) && (t > 0 : U32)
   +sample = U32.is_eq((t % 450 : U32), 0)
   Fin{fee, loan, Park.rate_if(U32.is_eq((t .&. 63 : U32), 0), gs, rs, nm, q, rating),
-    Fin.fresh(month, now), Fin.roll(month, now, last), Fin.sample(sample, gs, hist)}
+    Fin.fresh(month, now), Fin.roll(month, now, last), Fin.sample(sample, gs, hist), Res.tick(month, res)}
 
 # The Wyrm Coaster: track pieces and block sections
 # -------------------------------------------------
@@ -2431,18 +2486,18 @@ def Track.tick(t: Track) -> Track:
 # gold by ledger kind (index kind - 1); hist: the guest count, sampled eight
 # times a month, newest first (32 samples)
 def Fin.new() -> Fin:
-  Fin{0, 0, 600, Tab.zero(11, []), Tab.zero(11, []), []}
+  Fin{0, 0, 600, Tab.zero(12, []), Tab.zero(12, []), [], 8191}
 
 def Fin.now(f: Fin) -> +List<U32>:
-  Fin{fee, loan, rating, now, last, hist} = f
+  Fin{fee, loan, rating, now, last, hist, res} = f
   now
 
 def Fin.last(f: Fin) -> +List<U32>:
-  Fin{fee, loan, rating, now, last, hist} = f
+  Fin{fee, loan, rating, now, last, hist, res} = f
   last
 
 def Fin.hist(f: Fin) -> +List<U32>:
-  Fin{fee, loan, rating, now, last, hist} = f
+  Fin{fee, loan, rating, now, last, hist, res} = f
   hist
 
 # Staff: kind 1 Brownie (handyman), 2 Dwarven Tinker (mechanic), 3 Watch
@@ -2744,6 +2799,8 @@ def Build.cost(+tool: U32) -> U32:
       25
     case 45:
       8
+    case 46:
+      60
     case _:
       Ride.cost(Tool.kind(tool))
 
@@ -2782,6 +2839,8 @@ def Build.legal.go(+tool: U32, +q: Q, +trk: Track, +x: U32, +y: U32, +o: U32,
       empty && dry
     case 45:
       empty && dry
+    case 46:
+      Land.buyable(q, x, y)
     case 10:
       empty && dry && U32.is_eq(len32(Piece, Track.pieces(trk)), 0)
     case _:
@@ -2877,6 +2936,8 @@ def Build.land.go(+tool: U32, +q: Q, +rs: +List<Ride>, +x: U32, +y: U32,
       Land.set(q, x, y, Tile{h, ter, 2, 12, 0})
     case 45:
       Land.set(q, x, y, Tile{h, ter, 2, 13, 0})
+    case 46:
+      Land.set(q, x, y, Tile{h, 0, 0, 0, 0})
     case _:
       Land.ride(q, Tool.kind(tool), x, y, len32(Ride, rs))
 
@@ -3109,9 +3170,10 @@ def Park.ride_op(p: Park, +ride: U32, +op: U32) -> Out:
 # 20000); 3: repay 1000 (with the gold in hand)
 
 def Fin.set(f: Fin, +op: U32, +borrow: Bool, +repay: Bool) -> Fin:
-  Fin{+fee, +loan, rating, now, last, hist} = f
+  Fin{+fee, +loan, rating, now, last, hist, +res} = f
   Fin{Fee.cap(sel(U32.is_eq(op, 0), (fee + 1 : U32), sel(U32.is_eq(op, 1), sub0(fee, 1), fee))),
-    sel(borrow, (loan + 1000 : U32), sel(repay, (loan - 1000 : U32), loan)), rating, now, last, hist}
+    sel(borrow, (loan + 1000 : U32), sel(repay, (loan - 1000 : U32), loan)), rating, now, last, hist,
+    sel((op >= 40 : U32) && (op <= 42 : U32), ((res .&. 4244635647) .|. ((op - 40) << 24n) : U32), res)}
 
 def Park.park_op(p: Park, +op: U32) -> Out:
   Park{map, guests, +rides, track, +cash, +time, nid, +fin, mess, +staff} = p
