@@ -233,7 +233,7 @@ def Laws.headcount_conserved(p, a):
     case C.Park{map, guests, rides, track, cash, time, nid, fin, mess, staff}:
       match a:
         case C.Tick{}:
-          +sn = C.Track.stn(track)
+          +sn = C.Stn.all(track)
           hc_tick(C.Guests.arrivals(guests, rides, time, nid, fin), guests, map, rides, time,
             C.Boards.plan(guests, C.Occ.table(guests, rides, sn), map, rides, sn, []), sn,
             C.Queue.list(guests, map, []))
@@ -367,7 +367,7 @@ def Laws.needs_bounded(p, a, h):
     case C.Park{map, guests, rides, track, cash, time, nid, fin, mess, staff}:
       match a:
         case C.Tick{}:
-          +sn = C.Track.stn(track)
+          +sn = C.Stn.all(track)
           +pl = C.Boards.plan(guests, C.Occ.table(guests, rides, sn), map, rides, sn, [])
           +m = C.Guests.step(guests, map, rides, time, pl, sn, C.Queue.list(guests, map, []))
           all_app(C.Guests.arrivals(guests, rides, time, nid, fin), C.Guests.stay(m),
@@ -398,39 +398,29 @@ def excl(+b: Bool) -> {Bool.not(b) || b == True{} : Bool}:
 def circ_tick(+t: C.Track, h: {Laws.circuit_ok(t) == True{} : Bool})
   -> {Laws.circuit_ok(C.Track.tick(t)) == True{} : Bool}:
   match t:
-    case C.Track{ps, open, bs, s, e}:
+    case C.Track{ps, open, bs, s, e, cfg, stats}:
       match open:
         case True{}:
           h
         case False{}:
           {==}
 
-def circ_build(+ok: Bool, +q: C.Q, +trk: C.Track, +tool: U32, +x: U32, +y: U32,
-  +v: U32, h: {Laws.circuit_ok(trk) == True{} : Bool})
-  -> {Laws.circuit_ok(C.Build.track(ok, q, trk, tool, x, y, v)) == True{} : Bool}:
-  match ok:
-    case True{}:
-      bcase(U32.is_eq(tool, 10), b => {Laws.circuit_ok(Bool.pick(C.Track, b,
-        C.Track.begin(q, x, y, v), trk)) == True{} : Bool}, {==}, h)
-    case False{}:
-      h
-
 def circ_toggle(+t: C.Track) -> {Laws.circuit_ok(C.Track.toggle(t)) == True{} : Bool}:
   match t:
-    case C.Track{ps, open, bs, s, e}:
+    case C.Track{ps, open, bs, s, e, cfg, stats}:
       match open:
         case True{}:
           {==}
         case False{}:
-          excl(C.Track.closed(C.Track{ps, False{}, [], s, e}))
+          excl(C.Track.closed(C.Track{ps, False{}, [], s, e, cfg, stats}))
 
 def circ_edit(+t: C.Track, +op: U32) -> {Laws.circuit_ok(C.Track.edit(t, op)) == True{} : Bool}:
   match t:
-    case C.Track{ps, open, bs, s, e}:
+    case C.Track{ps, open, bs, s, e, cfg, stats}:
       +pc = {C.Piece{C.Pose.x(e), C.Pose.y(e), C.Pose.z(e), op, C.Pose.d(e)} : C.Piece}
       bcase(U32.is_lt(op, 7), b => {Laws.circuit_ok(Bool.pick(C.Track, b,
-        C.Track{List.append(&2, C.Piece, ps, [pc]), False{}, [], s, C.Piece.exit(pc)},
-        C.Track{C.Pieces.init(ps), False{}, [], s, C.Piece.pose(C.Pieces.last(ps))}))
+        C.Track{List.append(&2, C.Piece, ps, [pc]), False{}, [], s, C.Piece.exit(pc), cfg, stats},
+        C.Track{C.Pieces.init(ps), False{}, [], s, C.Piece.pose(C.Pieces.last(ps)), cfg, stats}))
         == True{} : Bool}, {==}, {==})
 
 def circ_op(+t: C.Track, +op: U32, +ok: Bool, h: {Laws.circuit_ok(t) == True{} : Bool})
@@ -443,16 +433,78 @@ def circ_op(+t: C.Track, +op: U32, +ok: Bool, h: {Laws.circuit_ok(t) == True{} :
     case False{}:
       h
 
+def circs_tick(+ts: +List<C.Track>, +h: {Laws.circuits_ok(ts) == True{} : Bool})
+  -> {Laws.circuits_ok(C.Tracks.tick(ts)) == True{} : Bool}:
+  match ts:
+    case []:
+      {==}
+    case t <> rest:
+      and_i(Laws.circuit_ok(C.Track.tick(t)), Laws.circuits_ok(C.Tracks.tick(rest)),
+        circ_tick(t, and_l(Laws.circuit_ok(t), Laws.circuits_ok(rest), h)),
+        circs_tick(rest, and_r(Laws.circuit_ok(t), Laws.circuits_ok(rest), h)))
+
+def circs_app(+xs: +List<C.Track>, +ys: +List<C.Track>,
+  +hx: {Laws.circuits_ok(xs) == True{} : Bool}, +hy: {Laws.circuits_ok(ys) == True{} : Bool})
+  -> {Laws.circuits_ok(List.append(&2, C.Track, xs, ys)) == True{} : Bool}:
+  match xs:
+    case []:
+      hy
+    case x <> rest:
+      and_i(Laws.circuit_ok(x), Laws.circuits_ok(List.append(&2, C.Track, rest, ys)),
+        and_l(Laws.circuit_ok(x), Laws.circuits_ok(rest), hx),
+        circs_app(rest, ys, and_r(Laws.circuit_ok(x), Laws.circuits_ok(rest), hx), hy))
+
+def circs_build(+ok: Bool, +q: C.Q, +ts: +List<C.Track>, +tool: U32, +x: U32, +y: U32,
+  +v: U32, +h: {Laws.circuits_ok(ts) == True{} : Bool})
+  -> {Laws.circuits_ok(C.Build.track(ok, q, ts, tool, x, y, v)) == True{} : Bool}:
+  match ok:
+    case True{}:
+      bcase(U32.is_eq(tool, 10), b => {Laws.circuits_ok(Bool.pick(+List<C.Track>, b,
+        List.append(&2, C.Track, ts, [C.Track.begin(q, x, y, v)]), ts)) == True{} : Bool},
+        circs_app(ts, [C.Track.begin(q, x, y, v)], h, {==}), h)
+    case False{}:
+      h
+
+def circs_get(+ts: +List<C.Track>, +k: U32, +h: {Laws.circuits_ok(ts) == True{} : Bool})
+  -> {Laws.circuit_ok(C.Tracks.get(ts, k)) == True{} : Bool}:
+  match ts:
+    case []:
+      {==}
+    case t <> rest:
+      bcase(U32.is_eq(k, 0), b => {Laws.circuit_ok(Bool.pick(C.Track, b, t, C.Tracks.get(rest, (k - 1 : U32)))) == True{} : Bool},
+        and_l(Laws.circuit_ok(t), Laws.circuits_ok(rest), h),
+        circs_get(rest, (k - 1 : U32), and_r(Laws.circuit_ok(t), Laws.circuits_ok(rest), h)))
+
+def circs_set(+ts: +List<C.Track>, +k: U32, +t2: C.Track, +h: {Laws.circuits_ok(ts) == True{} : Bool},
+  +h2: {Laws.circuit_ok(t2) == True{} : Bool})
+  -> {Laws.circuits_ok(C.Tracks.set(ts, k, t2)) == True{} : Bool}:
+  match ts:
+    case []:
+      {==}
+    case t <> rest:
+      and_i(Laws.circuit_ok(Bool.pick(C.Track, U32.is_eq(k, 0), t2, t)), Laws.circuits_ok(C.Tracks.set(rest, (k - 1 : U32), t2)),
+        bcase(U32.is_eq(k, 0), b => {Laws.circuit_ok(Bool.pick(C.Track, b, t2, t)) == True{} : Bool},
+          h2, and_l(Laws.circuit_ok(t), Laws.circuits_ok(rest), h)),
+        circs_set(rest, (k - 1 : U32), t2, and_r(Laws.circuit_ok(t), Laws.circuits_ok(rest), h), h2))
+
+def circs_op(+ts: +List<C.Track>, +k: U32, +code: U32, +ok: Bool, +h: {Laws.circuits_ok(ts) == True{} : Bool})
+  -> {Laws.circuits_ok(C.Tracks.set(ts, k, C.Track.op(C.Tracks.get(ts, k), code, ok))) == True{} : Bool}:
+  circs_set(ts, k, C.Track.op(C.Tracks.get(ts, k), code, ok), h, circ_op(C.Tracks.get(ts, k), code, ok, circs_get(ts, k, h)))
+
 def Laws.coaster_on_circuit(p, a, h):
   match p:
     case C.Park{map, guests, rides, track, cash, time, nid, fin, mess, staff}:
       match a:
         case C.Tick{}:
-          circ_tick(track, h)
+          circs_tick(track, h)
         case C.Build{tool, x, y, v}:
-          circ_build(C.Build.ok(map, track, cash, tool, x, y), map, track, tool, x, y, v, h)
+          circs_build(C.Build.ok(map, track, cash, tool, x, y), map, track, tool, x, y, v, h)
         case C.TrackOp{op}:
-          circ_op(track, op, C.TrackOp.ok(map, track, cash, op), h)
+          +k = (op >> 5n : U32)
+          +code = (op .&. 31 : U32)
+          +trk = C.Tracks.get(track, k)
+          +ok = C.TrackOp.ok(map, trk, cash, code) && (k < C.len32(C.Track, track) : U32)
+          circs_op(track, k, code, ok, h)
         case C.RideOp{ride, op}:
           h
         case C.ParkOp{op}:
@@ -572,33 +624,44 @@ def rt_ss(+xs: List<&2, C.Slot>, +rest: List<&2, U32>, +st: List<&2, S.Item>)
       {==}
 
 def rt_track_go(+ps: List<&2, C.Piece>, +open: Bool, +ss: List<&2, C.Slot>,
-  +sx: U32, +sy: U32, +sz: U32, +sd: U32, +ex: U32, +ey: U32, +ez: U32, +ed: U32,
-  +rest: List<&2, U32>, +st: List<&2, S.Item>)
-  -> {S.dec(S.Enc.track(C.Track{ps, open, ss, C.Pose{sx, sy, sz, sd}, C.Pose{ex, ey, ez, ed}}, rest), st)
-    == S.dec(rest, S.IT{C.Track{ps, open, ss, C.Pose{sx, sy, sz, sd}, C.Pose{ex, ey, ez, ed}}} <> st) : List<&2, S.Item>}:
+  +sx: U32, +sy: U32, +sz: U32, +sd: U32, +ex: U32, +ey: U32, +ez: U32, +ed: U32, +cfg: U32, +stats: U32,
+  +rest: List<&2, U32>, +more: List<&2, C.Track>, +st: List<&2, S.Item>)
+  -> {S.dec(S.Enc.track(C.Track{ps, open, ss, C.Pose{sx, sy, sz, sd}, C.Pose{ex, ey, ez, ed}, cfg, stats}, rest), S.IT{more} <> st)
+    == S.dec(rest, S.IT{C.Track{ps, open, ss, C.Pose{sx, sy, sz, sd}, C.Pose{ex, ey, ez, ed}, cfg, stats} <> more} <> st) : List<&2, S.Item>}:
   match open:
     case True{}:
-      +r12 = {12 <> 1 <> sx <> sy <> sz <> sd <> ex <> ey <> ez <> ed <> rest : List<&2, U32>}
-      +lhs = S.dec(S.Enc.track(C.Track{ps, True{}, ss, C.Pose{sx, sy, sz, sd}, C.Pose{ex, ey, ez, ed}}, rest), st)
-      %rt_ss(ss, r12, S.IP{ps} <> st) : {lhs == _ : List<&2, S.Item>}
-      %rt_ps(ps, S.Enc.ss(ss, r12), st) : {lhs == _ : List<&2, S.Item>}
+      +r12 = {12 <> 1 <> sx <> sy <> sz <> sd <> ex <> ey <> ez <> ed <> cfg <> stats <> rest : List<&2, U32>}
+      +lhs = S.dec(S.Enc.track(C.Track{ps, True{}, ss, C.Pose{sx, sy, sz, sd}, C.Pose{ex, ey, ez, ed}, cfg, stats}, rest), S.IT{more} <> st)
+      %rt_ss(ss, r12, S.IP{ps} <> S.IT{more} <> st) : {lhs == _ : List<&2, S.Item>}
+      %rt_ps(ps, S.Enc.ss(ss, r12), S.IT{more} <> st) : {lhs == _ : List<&2, S.Item>}
       {==}
     case False{}:
-      +r12 = {12 <> 0 <> sx <> sy <> sz <> sd <> ex <> ey <> ez <> ed <> rest : List<&2, U32>}
-      +lhs = S.dec(S.Enc.track(C.Track{ps, False{}, ss, C.Pose{sx, sy, sz, sd}, C.Pose{ex, ey, ez, ed}}, rest), st)
-      %rt_ss(ss, r12, S.IP{ps} <> st) : {lhs == _ : List<&2, S.Item>}
-      %rt_ps(ps, S.Enc.ss(ss, r12), st) : {lhs == _ : List<&2, S.Item>}
+      +r12 = {12 <> 0 <> sx <> sy <> sz <> sd <> ex <> ey <> ez <> ed <> cfg <> stats <> rest : List<&2, U32>}
+      +lhs = S.dec(S.Enc.track(C.Track{ps, False{}, ss, C.Pose{sx, sy, sz, sd}, C.Pose{ex, ey, ez, ed}, cfg, stats}, rest), S.IT{more} <> st)
+      %rt_ss(ss, r12, S.IP{ps} <> S.IT{more} <> st) : {lhs == _ : List<&2, S.Item>}
+      %rt_ps(ps, S.Enc.ss(ss, r12), S.IT{more} <> st) : {lhs == _ : List<&2, S.Item>}
       {==}
 
-def rt_track(+t: C.Track, +rest: List<&2, U32>, +st: List<&2, S.Item>)
-  -> {S.dec(S.Enc.track(t, rest), st) == S.dec(rest, S.IT{t} <> st) : List<&2, S.Item>}:
+def rt_track(+t: C.Track, +rest: List<&2, U32>, +more: List<&2, C.Track>, +st: List<&2, S.Item>)
+  -> {S.dec(S.Enc.track(t, rest), S.IT{more} <> st) == S.dec(rest, S.IT{t <> more} <> st) : List<&2, S.Item>}:
   match t:
-    case C.Track{ps, open, ss, s, e}:
+    case C.Track{ps, open, ss, s, e, cfg, stats}:
       match s:
         case C.Pose{sx, sy, sz, sd}:
           match e:
             case C.Pose{ex, ey, ez, ed}:
-              rt_track_go(ps, open, ss, sx, sy, sz, sd, ex, ey, ez, ed, rest, st)
+              rt_track_go(ps, open, ss, sx, sy, sz, sd, ex, ey, ez, ed, cfg, stats, rest, more, st)
+
+def rt_tks(+xs: List<&2, C.Track>, +rest: List<&2, U32>, +st: List<&2, S.Item>)
+  -> {S.dec(S.Enc.tks(xs, rest), st) == S.dec(rest, S.IT{xs} <> st) : List<&2, S.Item>}:
+  match xs:
+    case []:
+      {==}
+    case x <> more:
+      +lhs = S.dec(S.Enc.tks(x <> more, rest), st)
+      %rt_track(x, rest, more, st) : {lhs == _ : List<&2, S.Item>}
+      %rt_tks(more, S.Enc.track(x, rest), st) : {lhs == _ : List<&2, S.Item>}
+      {==}
 
 def rt_w(+w: U32, +rest: List<&2, U32>, +more: List<&2, U32>, +st: List<&2, S.Item>)
   -> {S.dec(16 <> w <> rest, S.IW{more} <> st) == S.dec(rest, S.IW{w <> more} <> st) : List<&2, S.Item>}:
@@ -653,14 +716,14 @@ def rt_park(+p: C.Park, +rest: List<&2, U32>, +st: List<&2, S.Item>)
       +rsf = S.Enc.stf(staff, r13)
       +rm = S.Enc.ws(mess, rsf)
       +rf = S.Enc.fin(fin, rm)
-      +rt = S.Enc.track(t, rf)
+      +rt = S.Enc.tks(t, rf)
       +rr = S.Enc.rs(rs, rt)
       +rg = S.Enc.gs(gs, rr)
       +lhs = S.dec(S.Enc.park(C.Park{q, gs, rs, t, cash, time, nid, fin, mess, staff}, rest), st)
       %rt_stf(staff, r13, S.IW{mess} <> S.IF{fin} <> S.IT{t} <> S.IR{rs} <> S.IG{gs} <> S.IQ{q} <> st) : {lhs == _ : List<&2, S.Item>}
       %rt_ws(mess, rsf, S.IF{fin} <> S.IT{t} <> S.IR{rs} <> S.IG{gs} <> S.IQ{q} <> st) : {lhs == _ : List<&2, S.Item>}
       %rt_fin(fin, rm, S.IT{t} <> S.IR{rs} <> S.IG{gs} <> S.IQ{q} <> st) : {lhs == _ : List<&2, S.Item>}
-      %rt_track(t, rf, S.IR{rs} <> S.IG{gs} <> S.IQ{q} <> st) : {lhs == _ : List<&2, S.Item>}
+      %rt_tks(t, rf, S.IR{rs} <> S.IG{gs} <> S.IQ{q} <> st) : {lhs == _ : List<&2, S.Item>}
       %rt_rs(rs, rt, S.IG{gs} <> S.IQ{q} <> st) : {lhs == _ : List<&2, S.Item>}
       %rt_gs(gs, rr, S.IQ{q} <> st) : {lhs == _ : List<&2, S.Item>}
       %rt_q(q, rg, st) : {lhs == _ : List<&2, S.Item>}
@@ -901,7 +964,7 @@ def fee_cap_ok(+v: U32) -> {U32.is_le(C.Fee.cap(v), 40) == True{} : Bool}:
   bcase_eq(U32.is_le(v, 40), c => {U32.is_le(C.sel(c, v, 40), 40) == True{} : Bool},
     e => Equal.sym(Bool, True{}, U32.is_le(v, 40), e), e => {==})
 
-def tick_ok(+rs: +List<C.Ride>, +idx: U32, +q: C.Q, +ps: +List<C.Piece>, +occ: +List<U32>,
+def tick_ok(+rs: +List<C.Ride>, +idx: U32, +q: C.Q, +ps: +List<C.Track>, +occ: +List<U32>,
   +plan: +List<C.Board>, +qt: +List<U32>, +fr: Bool, +t: U32, +fx: +List<U32>, +h: {Laws.prices_ok(rs) == True{} : Bool})
   -> {Laws.prices_ok(C.Rides.tick(rs, idx, q, ps, occ, plan, qt, fr, t, fx)) == True{} : Bool}:
   match rs:
@@ -914,17 +977,17 @@ def tick_ok(+rs: +List<C.Ride>, +idx: U32, +q: C.Q, +ps: +List<C.Piece>, +occ: +
             and_l(U32.is_le(price, 20), Laws.prices_ok(rest), h),
             tick_ok(rest, (idx + 1 : U32), q, ps, occ, plan, qt, fr, t, fx, and_r(U32.is_le(price, 20), Laws.prices_ok(rest), h)))
 
-def coaster_ok(+rs: +List<C.Ride>, +op: U32, +h: {Laws.prices_ok(rs) == True{} : Bool})
-  -> {Laws.prices_ok(C.Rides.coaster(rs, op)) == True{} : Bool}:
+def coaster_ok(+rs: +List<C.Ride>, +k: U32, +op: U32, +h: {Laws.prices_ok(rs) == True{} : Bool})
+  -> {Laws.prices_ok(C.Rides.coaster(rs, k, op)) == True{} : Bool}:
   match rs:
     case []:
       {==}
     case r <> rest:
       match r:
         case C.Ride{kind, x, y, w, hh, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate, wear}:
-          and_i(U32.is_le(price, 20), Laws.prices_ok(C.Rides.coaster(rest, op)),
+          and_i(U32.is_le(price, 20), Laws.prices_ok(C.Rides.coaster(rest, k, op)),
             and_l(U32.is_le(price, 20), Laws.prices_ok(rest), h),
-            coaster_ok(rest, op, and_r(U32.is_le(price, 20), Laws.prices_ok(rest), h)))
+            coaster_ok(rest, k, op, and_r(U32.is_le(price, 20), Laws.prices_ok(rest), h)))
 
 def set_ok(+rs: +List<C.Ride>, +i: U32, +op: U32, +h: {Laws.prices_ok(rs) == True{} : Bool})
   -> {Laws.prices_ok(C.Rides.set(rs, i, op)) == True{} : Bool}:
@@ -974,15 +1037,15 @@ def new_ok(+k: U32, +x: U32, +y: U32, +s: U32, +o: U32, +t: U32)
   -> {U32.is_le(C.Ride.price(C.Ride.new(k, x, y, s, o, t)), 20) == True{} : Bool}:
   cap_ok(C.Ride.fee(k))
 
-def build_ok(+ok: Bool, +q: C.Q, +rs: +List<C.Ride>, +tool: U32, +x: U32, +y: U32, +time: U32,
+def build_ok(+ok: Bool, +q: C.Q, +rs: +List<C.Ride>, +tool: U32, +x: U32, +y: U32, +time: U32, +nt: U32,
   +h: {Laws.prices_ok(rs) == True{} : Bool})
-  -> {Laws.prices_ok(C.Build.rides(ok, q, rs, tool, x, y, time)) == True{} : Bool}:
+  -> {Laws.prices_ok(C.Build.rides(ok, q, rs, tool, x, y, time, nt)) == True{} : Bool}:
   match ok:
     case True{}:
       +t = C.Land.get(q, x, y)
       +k = C.Tool.kind(tool)
       +s = C.Ride.size(k)
-      +coast = Bool.pick(+List<C.Ride>, U32.is_eq(tool, 10), List.append(&2, C.Ride, rs, [C.Ride.new(5, x, y, 1, 0, time)]), rs)
+      +coast = Bool.pick(+List<C.Ride>, U32.is_eq(tool, 10), List.append(&2, C.Ride, rs, [C.Ride.coaster(x, y, nt, time)]), rs)
       +add = Bool.pick(+List<C.Ride>, Bool.not(U32.is_eq(k, 0)),
         List.append(&2, C.Ride, rs, [C.Ride.new(k, x, y, s, 1, time)]), coast)
       bcase(U32.is_eq(tool, 9) && U32.is_eq(C.Tile.obj(t), 3),
@@ -992,13 +1055,13 @@ def build_ok(+ok: Bool, +q: C.Q, +rs: +List<C.Ride>, +tool: U32, +x: U32, +y: U3
           c => {Laws.prices_ok(Bool.pick(+List<C.Ride>, c, List.append(&2, C.Ride, rs, [C.Ride.new(k, x, y, s, 1, time)]), coast)) == True{} : Bool},
           app_ok(rs, C.Ride.new(k, x, y, s, 1, time), h, new_ok(k, x, y, s, 1, time)),
           bcase(U32.is_eq(tool, 10),
-            c => {Laws.prices_ok(Bool.pick(+List<C.Ride>, c, List.append(&2, C.Ride, rs, [C.Ride.new(5, x, y, 1, 0, time)]), rs)) == True{} : Bool},
-            app_ok(rs, C.Ride.new(5, x, y, 1, 0, time), h, new_ok(5, x, y, 1, 0, time)),
+            c => {Laws.prices_ok(Bool.pick(+List<C.Ride>, c, List.append(&2, C.Ride, rs, [C.Ride.coaster(x, y, nt, time)]), rs)) == True{} : Bool},
+            app_ok(rs, C.Ride.coaster(x, y, nt, time), h, cap_ok(C.Ride.fee(5))),
             h)))
     case False{}:
       h
 
-def pb_go(+a: C.Act, +map: C.Q, +guests: +List<C.Guest>, +rides: +List<C.Ride>, +track: C.Track,
+def pb_go(+a: C.Act, +map: C.Q, +guests: +List<C.Guest>, +rides: +List<C.Ride>, +track: +List<C.Track>,
   +cash: U32, +time: U32, +nid: U32, +fee: U32, +loan: U32, +rating: U32, +now: +List<U32>,
   +last: +List<U32>, +hist: +List<U32>, +res: U32, +mess: +List<U32>, +staff: +List<C.Staff>,
   +h: {Laws.prices_ok(rides) && U32.is_le(fee, 40) == True{} : Bool})
@@ -1006,20 +1069,23 @@ def pb_go(+a: C.Act, +map: C.Q, +guests: +List<C.Guest>, +rides: +List<C.Ride>, 
     C.Fin{fee, loan, rating, now, last, hist, res}, mess, staff}, a))) == True{} : Bool}:
   match a:
     case C.Tick{}:
-      +sn = C.Track.stn(track)
+      +sn = C.Stn.all(track)
       +occ = C.Occ.table(guests, rides, sn)
       +pl = C.Boards.plan(guests, occ, map, rides, sn, [])
       +fr = U32.is_eq((time .&. 15 : U32), 0)
       +qt = C.Qlen.fill_if(fr, guests, map, C.len32(C.Ride, rides))
-      and_i(Laws.prices_ok(C.Rides.tick(rides, 0, map, C.Track.pieces(track), occ, pl, qt, fr, time, C.Staff.fixing(staff))), U32.is_le(fee, 40),
-        tick_ok(rides, 0, map, C.Track.pieces(track), occ, pl, qt, fr, time, C.Staff.fixing(staff), and_l(Laws.prices_ok(rides), U32.is_le(fee, 40), h)), and_r(Laws.prices_ok(rides), U32.is_le(fee, 40), h))
+      and_i(Laws.prices_ok(C.Rides.tick(rides, 0, map, track, occ, pl, qt, fr, time, C.Staff.fixing(staff))), U32.is_le(fee, 40),
+        tick_ok(rides, 0, map, track, occ, pl, qt, fr, time, C.Staff.fixing(staff), and_l(Laws.prices_ok(rides), U32.is_le(fee, 40), h)), and_r(Laws.prices_ok(rides), U32.is_le(fee, 40), h))
     case C.Build{tool, x, y, v}:
-      and_i(Laws.prices_ok(C.Build.rides(C.Build.ok(map, track, cash, tool, x, y), map, rides, tool, x, y, time)),
-        U32.is_le(fee, 40), build_ok(C.Build.ok(map, track, cash, tool, x, y), map, rides, tool, x, y, time, and_l(Laws.prices_ok(rides), U32.is_le(fee, 40), h)), and_r(Laws.prices_ok(rides), U32.is_le(fee, 40), h))
+      and_i(Laws.prices_ok(C.Build.rides(C.Build.ok(map, track, cash, tool, x, y), map, rides, tool, x, y, time, C.len32(C.Track, track))),
+        U32.is_le(fee, 40), build_ok(C.Build.ok(map, track, cash, tool, x, y), map, rides, tool, x, y, time, C.len32(C.Track, track), and_l(Laws.prices_ok(rides), U32.is_le(fee, 40), h)), and_r(Laws.prices_ok(rides), U32.is_le(fee, 40), h))
     case C.TrackOp{op}:
-      +trk2 = C.Track.op(track, op, C.TrackOp.ok(map, track, cash, op))
-      and_i(Laws.prices_ok(C.Rides.coaster(rides, C.sel(C.Track.open(trk2), 1, 0))), U32.is_le(fee, 40),
-        coaster_ok(rides, C.sel(C.Track.open(trk2), 1, 0), and_l(Laws.prices_ok(rides), U32.is_le(fee, 40), h)), and_r(Laws.prices_ok(rides), U32.is_le(fee, 40), h))
+      +k = (op >> 5n : U32)
+      +code = (op .&. 31 : U32)
+      +trk = C.Tracks.get(track, k)
+      +trk2 = C.Track.op(trk, code, C.TrackOp.ok(map, trk, cash, code) && (k < C.len32(C.Track, track) : U32))
+      and_i(Laws.prices_ok(C.Rides.coaster(rides, k, C.sel(C.Track.open(trk2), 1, 0))), U32.is_le(fee, 40),
+        coaster_ok(rides, k, C.sel(C.Track.open(trk2), 1, 0), and_l(Laws.prices_ok(rides), U32.is_le(fee, 40), h)), and_r(Laws.prices_ok(rides), U32.is_le(fee, 40), h))
     case C.RideOp{ride, op}:
       and_i(Laws.prices_ok(C.Rides.set(rides, ride, op)), U32.is_le(fee, 40), set_ok(rides, ride, op, and_l(Laws.prices_ok(rides), U32.is_le(fee, 40), h)), and_r(Laws.prices_ok(rides), U32.is_le(fee, 40), h))
     case C.ParkOp{op}:
@@ -1086,7 +1152,7 @@ def Laws.litter_accounted(p, a):
     case C.Park{map, guests, rides, track, cash, time, nid, fin, mess, staff}:
       match a:
         case C.Tick{}:
-          +sn = C.Track.stn(track)
+          +sn = C.Stn.all(track)
           +pl = C.Boards.plan(guests, C.Occ.table(guests, rides, sn), map, rides, sn, [])
           mc_tick(C.Mess.drops(C.Mess.events(guests, pl, map, time), (C.len32(U32, mess) < 600 : U32)), mess, staff)
         case C.Build{tool, x, y, v}:
@@ -1208,13 +1274,13 @@ def Laws.wages_booked(p, a):
     case C.Park{map, guests, rides, track, cash, time, nid, fin, mess, staff}:
       match a:
         case C.Tick{}:
-          +sn = C.Track.stn(track)
+          +sn = C.Stn.all(track)
           +pl = C.Boards.plan(guests, C.Occ.table(guests, rides, sn), map, rides, sn, [])
           wl_tick(guests, rides, time, pl, C.len32(C.Guest, C.Guests.arrivals(guests, rides, time, nid, fin)), fin, staff)
         case C.Build{tool, x, y, v}:
           wl_build(C.Build.ok(map, track, cash, tool, x, y), map, rides, tool, x, y)
         case C.TrackOp{op}:
-          wl_track(C.TrackOp.ok(map, track, cash, op), op)
+          wl_track(C.TrackOp.ok(map, C.Tracks.get(track, (op >> 5n : U32)), cash, (op .&. 31 : U32)) && ((op >> 5n) < C.len32(C.Track, track) : U32), (op .&. 31 : U32))
         case C.RideOp{ride, op}:
           {==}
         case C.ParkOp{op}:

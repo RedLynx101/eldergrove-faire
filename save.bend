@@ -16,7 +16,7 @@ type Item is Data:
   IR{rs: List<&2, C.Ride>}
   IP{ps: List<&2, C.Piece>}
   IS{ss: List<&2, C.Slot>}
-  IT{t: C.Track}
+  IT{ts: List<&2, C.Track>}
   IK{p: C.Park}
   IW{ws: List<&2, U32>}
   IF{f: C.Fin}
@@ -94,11 +94,18 @@ def Enc.ss(ss: List<&2, C.Slot>, rest: List<&2, U32>) -> List<&2, U32>:
       Enc.ss(more, Enc.slot(s, rest))
 
 def Enc.track(t: C.Track, rest: List<&2, U32>) -> List<&2, U32>:
-  C.Track{ps, open, ss, s, e} = t
+  C.Track{ps, open, ss, s, e, cfg, stats} = t
   C.Pose{sx, sy, sz, sd} = s
   C.Pose{ex, ey, ez, ed} = e
   Enc.ps(ps, Enc.ss(ss, 12 <> b2u(open) <> sx <> sy <> sz <> sd <> ex <> ey
-    <> ez <> ed <> rest))
+    <> ez <> ed <> cfg <> stats <> rest))
+
+def Enc.tks(ts: List<&2, C.Track>, rest: List<&2, U32>) -> List<&2, U32>:
+  match ts:
+    case []:
+      21 <> rest
+    case t <> more:
+      Enc.tks(more, Enc.track(t, rest))
 
 def Enc.ws(ws: List<&2, U32>, rest: List<&2, U32>) -> List<&2, U32>:
   match ws:
@@ -124,7 +131,7 @@ def Enc.stf(ss: List<&2, C.Staff>, rest: List<&2, U32>) -> List<&2, U32>:
 
 def Enc.park(p: C.Park, rest: List<&2, U32>) -> List<&2, U32>:
   C.Park{map, guests, rides, track, cash, time, nid, fin, mess, staff} = p
-  Enc.q(map, Enc.gs(guests, Enc.rs(rides, Enc.track(track, Enc.fin(fin, Enc.ws(mess, Enc.stf(staff,
+  Enc.q(map, Enc.gs(guests, Enc.rs(rides, Enc.tks(track, Enc.fin(fin, Enc.ws(mess, Enc.stf(staff,
     13 <> cash <> time <> nid <> rest)))))))
 
 def save(p: C.Park) -> List<&2, U32>:
@@ -168,11 +175,11 @@ def Pop.s(s: C.Slot, st: List<&2, Item>) -> List<&2, Item>:
     case _:
       [IBad{}]
 
-def Pop.track(o: Bool, s: C.Pose, e: C.Pose, st: List<&2, Item>)
+def Pop.track(o: Bool, s: C.Pose, e: C.Pose, cfg: U32, stats: U32, st: List<&2, Item>)
   -> List<&2, Item>:
   match st:
-    case IS{ss} <> IP{ps} <> more:
-      IT{C.Track{ps, o, ss, s, e}} <> more
+    case IS{ss} <> IP{ps} <> IT{ts} <> more:
+      IT{C.Track{ps, o, ss, s, e, cfg, stats} <> ts} <> more
     case _:
       [IBad{}]
 
@@ -215,6 +222,8 @@ def dec(ws: List<&2, U32>, st: List<&2, Item>) -> List<&2, Item>:
       dec(rest, Pop.qn(st))
     case 3 <> rest:
       dec(rest, IG{[]} <> st)
+    case 21 <> rest:
+      dec(rest, IT{[]} <> st)
     case 4 <> id <> x <> y <> dir <> s <> tgt <> tmr <> cash <> hu <> th <> en
       <> na <> ha <> lk <> mind <> bl <> rest:
       dec(rest, Pop.g(C.Guest{id, x, y, dir, s, tgt, tmr, cash, hu, th, en, na,
@@ -233,8 +242,8 @@ def dec(ws: List<&2, U32>, st: List<&2, Item>) -> List<&2, Item>:
       dec(rest, Pop.s(C.Free{a, n, s}, st))
     case 11 <> a <> n <> s <> id <> prog <> speed <> wait <> rest:
       dec(rest, Pop.s(C.Held{a, n, s, C.Train{id, prog, speed, wait}}, st))
-    case 12 <> o <> sx <> sy <> sz <> sd <> ex <> ey <> ez <> ed <> rest:
-      dec(rest, Pop.track(u2b(o), C.Pose{sx, sy, sz, sd}, C.Pose{ex, ey, ez, ed},
+    case 12 <> o <> sx <> sy <> sz <> sd <> ex <> ey <> ez <> ed <> cfg <> stats <> rest:
+      dec(rest, Pop.track(u2b(o), C.Pose{sx, sy, sz, sd}, C.Pose{ex, ey, ez, ed}, cfg, stats,
         st))
     case 13 <> cash <> time <> nid <> rest:
       dec(rest, Pop.park(cash, time, nid, st))
@@ -265,7 +274,7 @@ def load(ws: List<&2, U32>) -> Maybe<&2, C.Park>:
 # ---------------------------------------------------------
 
 def MAGIC() -> U32:
-  910313288
+  910313290
 
 def to_bytes(ws: List<&2, U32>) -> List<&2, U32>:
   match ws:

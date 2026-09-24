@@ -1,7 +1,6 @@
 # Eldergrove Faire: Roadmap
 
-Last updated: 2026-09-24 · M1-M4 done. Next: M5 (controls, problems, staff and people). Plan runs to M8
-(custom coasters).
+Last updated: 2026-09-24 · M1-M7 done. Working on M8 (custom coasters), the last milestone in the plan.
 
 ## Decisions
 
@@ -169,6 +168,11 @@ Small design decisions made while working, listed here so they can be revisited.
   Shared route maps would speed up the part that isn't the bottleneck, so the crowd cap simply rises to 1200
   and dynamic resolution absorbs the drawing. Live, 1100 guests ran at about 40 fps on a machine that was
   running slow that day (it gave 60 at 700 earlier). Route maps stay an option if the sim ever dominates.
+- **Up to 8 coasters per park.** Each track keeps its own pieces, trains and settings; its tiles carry
+  the coaster's number, so clicking any track tile opens the right ride. Riders are keyed by coaster and
+  train, so two coasters never show each other's passengers.
+- **Opening an unfinished track does nothing.** Before, it placed trains on a track that was not a closed
+  circuit while leaving the ride shut; now the track stays empty until the circuit closes.
 
 ## Done: M1, the vertical slice
 Isometric fantasy map, paths, terrain editing, 4 enchanted tree kinds, Dragon Carousel, Arcane Spire, Potion
@@ -337,6 +341,8 @@ Spikes, in order:
 - Crowds past 700: guests share per-ride route maps instead of each searching paths themselves.
 
 ## M8: Custom coasters
+Progress: spike 1 (several coasters per park) done.
+
 - **A construction window,** built carefully for ease of use:
   - piece buttons, grouped: straight, gentle and steep slopes, small and large turns, banked turns, lift
     hill, brakes, block brakes, station;
@@ -362,8 +368,8 @@ save_load_roundtrip, capacity_respected, riders_conserved.
 Proven in M4: board_only_when_loading, ride_until_unloading, seats_unique, purchase_is_transfer,
 prices_bounded (thirteen in all).
 Proven in M5: litter_accounted, wages_booked (fifteen in all).
-Planned: open_only_tested, and coaster_on_circuit and no_collisions
-extended to every coaster (M8).
+Extended in M8: coaster_on_circuit now covers every coaster in the park (no_collisions was already stated
+for any track, so it covers them all). Planned: open_only_tested (M8).
 Proof maintenance rule: keep the code field-wise (each park field updated by its own function) so
 existing proofs survive new features.
 

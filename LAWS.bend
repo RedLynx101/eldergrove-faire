@@ -53,18 +53,26 @@ law needs_bounded:
   for h: {all_needs_ok(C.Park.guests(p)) == True{} : Bool}
   {all_needs_ok(C.Park.guests(C.Out.park(C.Park.step(p, a)))) == True{} : Bool}
 
-# 4. THE COASTER RUNS ONLY ON A CLOSED CIRCUIT. A coaster that is open has
+# 4. EVERY COASTER RUNS ONLY ON A CLOSED CIRCUIT. A coaster that is open has
 # a track that closes back on its station (at least four pieces, ending
-# where it began) -- and no step can open one that does not.
+# where it began) -- and no step can open one that does not. The park holds
+# any number of coasters; this holds for each of them.
 def circuit_ok(t: C.Track) -> Bool:
   +t2 = t
   Bool.not(C.Track.open(t2)) || C.Track.closed(t2)
 
+def circuits_ok(ts: +List<C.Track>) -> Bool:
+  match ts:
+    case []:
+      True{}
+    case t <> rest:
+      circuit_ok(t) && circuits_ok(rest)
+
 law coaster_on_circuit:
   for +p: C.Park
   for +a: C.Act
-  for h: {circuit_ok(C.Park.track(p)) == True{} : Bool}
-  {circuit_ok(C.Park.track(C.Out.park(C.Park.step(p, a)))) == True{} : Bool}
+  for h: {circuits_ok(C.Park.track(p)) == True{} : Bool}
+  {circuits_ok(C.Park.track(C.Out.park(C.Park.step(p, a)))) == True{} : Bool}
 
 # 5. NO COLLISIONS. A block section holds one train at most (a block either
 # holds a train or is free), and running the block signals never loses or
