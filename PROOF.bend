@@ -395,13 +395,63 @@ def excl(+b: Bool) -> {Bool.not(b) || b == True{} : Bool}:
     case False{}:
       {==}
 
+# "(a and b) and c" implies b, and implies c: every place that opens a
+# track sets `open` to (a and closed) and live
+def nimp_b(+a: Bool, +b: Bool, +c: Bool) -> {Bool.not((a && b) && c) || b == True{} : Bool}:
+  match a:
+    case True{}:
+      match b:
+        case True{}:
+          match c:
+            case True{}:
+              {==}
+            case False{}:
+              {==}
+        case False{}:
+          match c:
+            case True{}:
+              {==}
+            case False{}:
+              {==}
+    case False{}:
+      match b:
+        case True{}:
+          {==}
+        case False{}:
+          {==}
+
+def nimp_c(+a: Bool, +b: Bool, +c: Bool) -> {Bool.not((a && b) && c) || c == True{} : Bool}:
+  match a:
+    case True{}:
+      match b:
+        case True{}:
+          match c:
+            case True{}:
+              {==}
+            case False{}:
+              {==}
+        case False{}:
+          match c:
+            case True{}:
+              {==}
+            case False{}:
+              {==}
+    case False{}:
+      match c:
+        case True{}:
+          {==}
+        case False{}:
+          {==}
+
 def circ_tick(+t: C.Track, h: {Laws.circuit_ok(t) == True{} : Bool})
   -> {Laws.circuit_ok(C.Track.tick(t)) == True{} : Bool}:
   match t:
     case C.Track{ps, open, bs, s, e, cfg, stats}:
       match open:
         case True{}:
-          h
+          +st2 = C.Test.watch(C.Blocks.step(bs, ps, cfg), stats)
+          nimp_b(Bool.not(C.Test.testing(stats) && Bool.not(C.Test.testing(st2))),
+            C.Track.closed(C.Track{ps, False{}, [], s, e, cfg, stats}), C.Test.live(st2))
         case False{}:
           {==}
 
@@ -417,26 +467,43 @@ def circ_toggle(+t: C.Track) -> {Laws.circuit_ok(C.Track.toggle(t)) == True{} : 
         case True{}:
           {==}
         case False{}:
-          excl(C.Track.closed(C.Track{ps, False{}, [], s, e, cfg, stats}))
+          nimp_b(True{}, C.Track.closed(C.Track{ps, False{}, [], s, e, cfg, stats}), C.Test.live(stats))
+
+def circ_test(+t: C.Track) -> {Laws.circuit_ok(C.Track.test(t)) == True{} : Bool}:
+  match t:
+    case C.Track{ps, open, bs, s, e, cfg, stats}:
+      nimp_b(True{}, C.Track.closed(C.Track{ps, False{}, [], s, e, cfg, 0}),
+        C.Test.live((1 .|. (C.Dry.fail(C.Dry.run(ps, cfg)) << 2n) : U32)))
+
+def circ_pretest(+t: C.Track) -> {Laws.circuit_ok(C.Track.pretest(t)) == True{} : Bool}:
+  match t:
+    case C.Track{ps, open, bs, s, e, cfg, stats}:
+      {==}
 
 def circ_edit(+t: C.Track, +op: U32) -> {Laws.circuit_ok(C.Track.edit(t, op)) == True{} : Bool}:
   match t:
     case C.Track{ps, open, bs, s, e, cfg, stats}:
       +pc = {C.Piece{C.Pose.x(e), C.Pose.y(e), C.Pose.z(e), op, C.Pose.d(e)} : C.Piece}
       bcase(C.Piece.adds(op), b => {Laws.circuit_ok(Bool.pick(C.Track, b,
-        C.Track{List.append(&2, C.Piece, ps, [pc]), False{}, [], s, C.Piece.exit(pc), cfg, stats},
-        C.Track{C.Pieces.init(ps), False{}, [], s, C.Piece.pose(C.Pieces.last(ps)), cfg, stats}))
+        C.Track{List.append(&2, C.Piece, ps, [pc]), False{}, [], s, C.Piece.exit(pc), cfg, 0},
+        C.Track{C.Pieces.init(ps), False{}, [], s, C.Piece.pose(C.Pieces.last(ps)), cfg, 0}))
         == True{} : Bool}, {==}, {==})
 
 def circ_op(+t: C.Track, +op: U32, +ok: Bool, h: {Laws.circuit_ok(t) == True{} : Bool})
   -> {Laws.circuit_ok(C.Track.op(t, op, ok)) == True{} : Bool}:
   match ok:
     case True{}:
-      bcase(U32.is_eq(op, 8), b => {Laws.circuit_ok(Bool.pick(C.Track, b,
-        C.Track.toggle(t), Bool.pick(C.Track, (op >= 16 : U32), C.Track.setcfg(t, op), C.Track.edit(t, op)))) == True{} : Bool},
+      +rest = Bool.pick(C.Track, (op >= 16 : U32), C.Track.setcfg(t, op), C.Track.edit(t, op))
+      +pre = Bool.pick(C.Track, U32.is_eq(op, 25), C.Track.pretest(t), rest)
+      +tst = Bool.pick(C.Track, U32.is_eq(op, 24), C.Track.test(t), pre)
+      bcase(U32.is_eq(op, 8), b => {Laws.circuit_ok(Bool.pick(C.Track, b, C.Track.toggle(t), tst)) == True{} : Bool},
         circ_toggle(t),
-        bcase((op >= 16 : U32), b => {Laws.circuit_ok(Bool.pick(C.Track, b, C.Track.setcfg(t, op), C.Track.edit(t, op))) == True{} : Bool},
-          circ_cfg(t, op), circ_edit(t, op)))
+        bcase(U32.is_eq(op, 24), b => {Laws.circuit_ok(Bool.pick(C.Track, b, C.Track.test(t), pre)) == True{} : Bool},
+          circ_test(t),
+          bcase(U32.is_eq(op, 25), b => {Laws.circuit_ok(Bool.pick(C.Track, b, C.Track.pretest(t), rest)) == True{} : Bool},
+            circ_pretest(t),
+            bcase((op >= 16 : U32), b => {Laws.circuit_ok(Bool.pick(C.Track, b, C.Track.setcfg(t, op), C.Track.edit(t, op))) == True{} : Bool},
+              circ_cfg(t, op), circ_edit(t, op)))))
     case False{}:
       h
 
@@ -512,6 +579,153 @@ def Laws.coaster_on_circuit(p, a, h):
           +trk = C.Tracks.get(track, k)
           +ok = C.TrackOp.ok(map, trk, cash, code) && (k < C.len32(C.Track, track) : U32)
           circs_op(track, k, code, ok, h)
+        case C.RideOp{ride, op}:
+          h
+        case C.ParkOp{op}:
+          h
+
+# A coaster carries trains only when tested
+# ------------------------------------------
+# Same shape as the circuit law: a tick keeps `open` only while the test
+# (or its pass) stands, opening and testing set `open` to a check that
+# includes it, and edits close the track.
+
+def tst_tick(+t: C.Track, h: {Laws.tested_ok(t) == True{} : Bool})
+  -> {Laws.tested_ok(C.Track.tick(t)) == True{} : Bool}:
+  match t:
+    case C.Track{ps, open, bs, s, e, cfg, stats}:
+      match open:
+        case True{}:
+          +st2 = C.Test.watch(C.Blocks.step(bs, ps, cfg), stats)
+          nimp_c(Bool.not(C.Test.testing(stats) && Bool.not(C.Test.testing(st2))),
+            C.Track.closed(C.Track{ps, False{}, [], s, e, cfg, stats}), C.Test.live(st2))
+        case False{}:
+          {==}
+
+def tst_toggle(+t: C.Track) -> {Laws.tested_ok(C.Track.toggle(t)) == True{} : Bool}:
+  match t:
+    case C.Track{ps, open, bs, s, e, cfg, stats}:
+      match open:
+        case True{}:
+          {==}
+        case False{}:
+          nimp_c(True{}, C.Track.closed(C.Track{ps, False{}, [], s, e, cfg, stats}), C.Test.live(stats))
+
+def tst_test(+t: C.Track) -> {Laws.tested_ok(C.Track.test(t)) == True{} : Bool}:
+  match t:
+    case C.Track{ps, open, bs, s, e, cfg, stats}:
+      nimp_c(True{}, C.Track.closed(C.Track{ps, False{}, [], s, e, cfg, 0}),
+        C.Test.live((1 .|. (C.Dry.fail(C.Dry.run(ps, cfg)) << 2n) : U32)))
+
+def tst_pretest(+t: C.Track) -> {Laws.tested_ok(C.Track.pretest(t)) == True{} : Bool}:
+  match t:
+    case C.Track{ps, open, bs, s, e, cfg, stats}:
+      {==}
+
+def tst_cfg(+t: C.Track, +op: U32) -> {Laws.tested_ok(C.Track.setcfg(t, op)) == True{} : Bool}:
+  match t:
+    case C.Track{ps, open, bs, s, e, cfg, stats}:
+      {==}
+
+def tst_edit(+t: C.Track, +op: U32) -> {Laws.tested_ok(C.Track.edit(t, op)) == True{} : Bool}:
+  match t:
+    case C.Track{ps, open, bs, s, e, cfg, stats}:
+      +pc = {C.Piece{C.Pose.x(e), C.Pose.y(e), C.Pose.z(e), op, C.Pose.d(e)} : C.Piece}
+      bcase(C.Piece.adds(op), b => {Laws.tested_ok(Bool.pick(C.Track, b,
+        C.Track{List.append(&2, C.Piece, ps, [pc]), False{}, [], s, C.Piece.exit(pc), cfg, 0},
+        C.Track{C.Pieces.init(ps), False{}, [], s, C.Piece.pose(C.Pieces.last(ps)), cfg, 0}))
+        == True{} : Bool}, {==}, {==})
+
+def tst_op(+t: C.Track, +op: U32, +ok: Bool, h: {Laws.tested_ok(t) == True{} : Bool})
+  -> {Laws.tested_ok(C.Track.op(t, op, ok)) == True{} : Bool}:
+  match ok:
+    case True{}:
+      +rest = Bool.pick(C.Track, (op >= 16 : U32), C.Track.setcfg(t, op), C.Track.edit(t, op))
+      +pre = Bool.pick(C.Track, U32.is_eq(op, 25), C.Track.pretest(t), rest)
+      +tst = Bool.pick(C.Track, U32.is_eq(op, 24), C.Track.test(t), pre)
+      bcase(U32.is_eq(op, 8), b => {Laws.tested_ok(Bool.pick(C.Track, b, C.Track.toggle(t), tst)) == True{} : Bool},
+        tst_toggle(t),
+        bcase(U32.is_eq(op, 24), b => {Laws.tested_ok(Bool.pick(C.Track, b, C.Track.test(t), pre)) == True{} : Bool},
+          tst_test(t),
+          bcase(U32.is_eq(op, 25), b => {Laws.tested_ok(Bool.pick(C.Track, b, C.Track.pretest(t), rest)) == True{} : Bool},
+            tst_pretest(t),
+            bcase((op >= 16 : U32), b => {Laws.tested_ok(Bool.pick(C.Track, b, C.Track.setcfg(t, op), C.Track.edit(t, op))) == True{} : Bool},
+              tst_cfg(t, op), tst_edit(t, op)))))
+    case False{}:
+      h
+
+def tsts_tick(+ts: +List<C.Track>, +h: {Laws.tests_ok(ts) == True{} : Bool})
+  -> {Laws.tests_ok(C.Tracks.tick(ts)) == True{} : Bool}:
+  match ts:
+    case []:
+      {==}
+    case t <> rest:
+      and_i(Laws.tested_ok(C.Track.tick(t)), Laws.tests_ok(C.Tracks.tick(rest)),
+        tst_tick(t, and_l(Laws.tested_ok(t), Laws.tests_ok(rest), h)),
+        tsts_tick(rest, and_r(Laws.tested_ok(t), Laws.tests_ok(rest), h)))
+
+def tsts_app(+xs: +List<C.Track>, +ys: +List<C.Track>,
+  +hx: {Laws.tests_ok(xs) == True{} : Bool}, +hy: {Laws.tests_ok(ys) == True{} : Bool})
+  -> {Laws.tests_ok(List.append(&2, C.Track, xs, ys)) == True{} : Bool}:
+  match xs:
+    case []:
+      hy
+    case x <> rest:
+      and_i(Laws.tested_ok(x), Laws.tests_ok(List.append(&2, C.Track, rest, ys)),
+        and_l(Laws.tested_ok(x), Laws.tests_ok(rest), hx),
+        tsts_app(rest, ys, and_r(Laws.tested_ok(x), Laws.tests_ok(rest), hx), hy))
+
+def tsts_build(+ok: Bool, +q: C.Q, +ts: +List<C.Track>, +tool: U32, +x: U32, +y: U32,
+  +v: U32, +h: {Laws.tests_ok(ts) == True{} : Bool})
+  -> {Laws.tests_ok(C.Build.track(ok, q, ts, tool, x, y, v)) == True{} : Bool}:
+  match ok:
+    case True{}:
+      bcase(U32.is_eq(tool, 10), b => {Laws.tests_ok(Bool.pick(+List<C.Track>, b,
+        List.append(&2, C.Track, ts, [C.Track.begin(q, x, y, v)]), ts)) == True{} : Bool},
+        tsts_app(ts, [C.Track.begin(q, x, y, v)], h, {==}), h)
+    case False{}:
+      h
+
+def tsts_get(+ts: +List<C.Track>, +k: U32, +h: {Laws.tests_ok(ts) == True{} : Bool})
+  -> {Laws.tested_ok(C.Tracks.get(ts, k)) == True{} : Bool}:
+  match ts:
+    case []:
+      {==}
+    case t <> rest:
+      bcase(U32.is_eq(k, 0), b => {Laws.tested_ok(Bool.pick(C.Track, b, t, C.Tracks.get(rest, (k - 1 : U32)))) == True{} : Bool},
+        and_l(Laws.tested_ok(t), Laws.tests_ok(rest), h),
+        tsts_get(rest, (k - 1 : U32), and_r(Laws.tested_ok(t), Laws.tests_ok(rest), h)))
+
+def tsts_set(+ts: +List<C.Track>, +k: U32, +t2: C.Track, +h: {Laws.tests_ok(ts) == True{} : Bool},
+  +h2: {Laws.tested_ok(t2) == True{} : Bool})
+  -> {Laws.tests_ok(C.Tracks.set(ts, k, t2)) == True{} : Bool}:
+  match ts:
+    case []:
+      {==}
+    case t <> rest:
+      and_i(Laws.tested_ok(Bool.pick(C.Track, U32.is_eq(k, 0), t2, t)), Laws.tests_ok(C.Tracks.set(rest, (k - 1 : U32), t2)),
+        bcase(U32.is_eq(k, 0), b => {Laws.tested_ok(Bool.pick(C.Track, b, t2, t)) == True{} : Bool},
+          h2, and_l(Laws.tested_ok(t), Laws.tests_ok(rest), h)),
+        tsts_set(rest, (k - 1 : U32), t2, and_r(Laws.tested_ok(t), Laws.tests_ok(rest), h), h2))
+
+def tsts_op(+ts: +List<C.Track>, +k: U32, +code: U32, +ok: Bool, +h: {Laws.tests_ok(ts) == True{} : Bool})
+  -> {Laws.tests_ok(C.Tracks.set(ts, k, C.Track.op(C.Tracks.get(ts, k), code, ok))) == True{} : Bool}:
+  tsts_set(ts, k, C.Track.op(C.Tracks.get(ts, k), code, ok), h, tst_op(C.Tracks.get(ts, k), code, ok, tsts_get(ts, k, h)))
+
+def Laws.open_only_tested(p, a, h):
+  match p:
+    case C.Park{map, guests, rides, track, cash, time, nid, fin, mess, staff}:
+      match a:
+        case C.Tick{}:
+          tsts_tick(track, h)
+        case C.Build{tool, x, y, v}:
+          tsts_build(C.Build.ok(map, track, cash, tool, x, y), map, track, tool, x, y, v, h)
+        case C.TrackOp{op}:
+          +k = (op >> 5n : U32)
+          +code = (op .&. 31 : U32)
+          +trk = C.Tracks.get(track, k)
+          +ok = C.TrackOp.ok(map, trk, cash, code) && (k < C.len32(C.Track, track) : U32)
+          tsts_op(track, k, code, ok, h)
         case C.RideOp{ride, op}:
           h
         case C.ParkOp{op}:
@@ -1091,8 +1305,8 @@ def pb_go(+a: C.Act, +map: C.Q, +guests: +List<C.Guest>, +rides: +List<C.Ride>, 
       +code = (op .&. 31 : U32)
       +trk = C.Tracks.get(track, k)
       +trk2 = C.Track.op(trk, code, C.TrackOp.ok(map, trk, cash, code) && (k < C.len32(C.Track, track) : U32))
-      and_i(Laws.prices_ok(C.Rides.coaster(rides, k, C.sel(C.Track.open(trk2), 1, 0))), U32.is_le(fee, 40),
-        coaster_ok(rides, k, C.sel(C.Track.open(trk2), 1, 0), and_l(Laws.prices_ok(rides), U32.is_le(fee, 40), h)), and_r(Laws.prices_ok(rides), U32.is_le(fee, 40), h))
+      and_i(Laws.prices_ok(C.Rides.coaster(rides, k, C.sel(C.Track.open(trk2) && C.Test.passed(C.Track.stats(trk2)), 1, 0))), U32.is_le(fee, 40),
+        coaster_ok(rides, k, C.sel(C.Track.open(trk2) && C.Test.passed(C.Track.stats(trk2)), 1, 0), and_l(Laws.prices_ok(rides), U32.is_le(fee, 40), h)), and_r(Laws.prices_ok(rides), U32.is_le(fee, 40), h))
     case C.RideOp{ride, op}:
       and_i(Laws.prices_ok(C.Rides.set(rides, ride, op)), U32.is_le(fee, 40), set_ok(rides, ride, op, and_l(Laws.prices_ok(rides), U32.is_le(fee, 40), h)), and_r(Laws.prices_ok(rides), U32.is_le(fee, 40), h))
     case C.ParkOp{op}:

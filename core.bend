@@ -1098,9 +1098,12 @@ type Track is Data:
   Track{pieces: List<&2, Piece>, open: Bool, blocks: List<&2, Slot>,
     start: Pose, end: Pose, cfg: U32, stats: U32}
 
+def Test.passed(+st: U32) -> Bool:
+  U32.is_eq((st .&. 3 : U32), 2)
+
 def Track.stn(t: Track) -> U32:
   Track{pieces, open, blocks, start, end, cfg, stats} = t
-  Stn.find(blocks, (sel(open, 1, 0) .|. (65535 << 16n) : U32))
+  Stn.find(blocks, (sel(open && Test.passed(stats), 1, 0) .|. (65535 << 16n) : U32))
 
 def Tracks.stn(+ts: +List<Track>) -> +List<U32>:
   match ts:
@@ -1258,11 +1261,64 @@ def Blocks.step(+ss: +List<Slot>, +ps: +List<Piece>, +cfg: U32) -> +List<Slot>:
     case s <> rest:
       Slots.rot(Slots.pass(Slots.adv(rest, ps, cfg), Slot.adv(s, ps, cfg)))
 
-def Track.tick.go(open: Bool, +ps: +List<Piece>, +bs: +List<Slot>, s: Pose,
-  e: Pose, +cfg: U32, +stats: U32) -> Track:
+# an open track runs its trains; a test run ends when its train comes round
+# (or stalls), and the track closes again
+def Test.testing(+st: U32) -> Bool:
+  U32.is_eq((st .&. 3 : U32), 1)
+
+def Test.live(+st: U32) -> Bool:
+  Test.testing(st) || Test.passed(st)
+
+def Test.fail(+st: U32) -> U32:
+  ((st >> 2n) .&. 255 : U32)
+
+def Blocks.pos(+ss: +List<Slot>) -> U32:
+  match ss:
+    case []:
+      999
+    case s <> rest:
+      match s:
+        case Free{a, n, st}:
+          Blocks.pos(rest)
+        case Held{+a, n, st, t}:
+          Train{id, +prog, speed, wait} = t
+          (a + (prog >> 8n) : U32)
+
+# watching a test run: it passes when the train comes round to the station
+# again, and fails when it reaches the piece it can't climb
+def Test.watch(+bs: +List<Slot>, +st: U32) -> U32:
+  +pos = U32.min(Blocks.pos(bs), 255)
+  +fail = Test.fail(st)
+  +last = ((st >> 10n) .&. 255 : U32)
+  +left = Bool.not(U32.is_eq((st .&. 262144 : U32), 0)) || (pos > 0 : U32)
+  +round = left && (pos < last : U32)
+  +stuck = Bool.not(U32.is_eq(fail, 255)) && (pos >= fail : U32)
+  +state = sel(stuck, 3, sel(round, 2, 1))
+  sel(Test.testing(st), (state .|. (fail << 2n) .|. (pos << 10n) .|. sel(left, 262144, 0) : U32), st)
+
+# a test run: the track opens with one empty train (guests can't board: the
+# station counts as closed until the test passes)
+def Pose.eq(a: Pose, b: Pose) -> Bool:
+  Pose{ax, ay, az, ad} = a
+  Pose{bx, by, bz, bd} = b
+  U32.is_eq(ax, bx) && U32.is_eq(ay, by) && U32.is_eq(az, bz)
+    && U32.is_eq(ad, bd)
+
+# 1/256 of a piece per unit of progress
+def Track.closed(t: Track) -> Bool:
+  Track{pieces, open, blocks, start, end, cfg, stats} = t
+  (len32(Piece, pieces) >= 4 : U32) && Pose.eq(start, end)
+
+def Track.tick.go(open: Bool, +ps: +List<Piece>, +bs: +List<Slot>, +s: Pose,
+  +e: Pose, +cfg: U32, +stats: U32) -> Track:
   match open:
     case True{}:
-      Track{ps, True{}, Blocks.step(bs, ps, cfg), s, e, cfg, stats}
+      +bs2 = Blocks.step(bs, ps, cfg)
+      +st2 = Test.watch(bs2, stats)
+      +shut = {Track{ps, False{}, [], s, e, cfg, stats} : Track}
+      +keep = Bool.not(Test.testing(stats) && Bool.not(Test.testing(st2)))
+      +on = (keep && Track.closed(shut)) && Test.live(st2)
+      Track{ps, on, Bool.pick(+List<Slot>, on, bs2, []), s, e, cfg, st2}
     case False{}:
       Track{ps, False{}, bs, s, e, cfg, stats}
 
@@ -1997,36 +2053,169 @@ def Ride.next_tm(+ph: U32, +ph2: U32, +tm: U32, +n: U32) -> U32:
   sel(Bool.not(U32.is_eq(ph, ph2)), 0,
     sel(U32.is_eq(ph, 0), sel((n > 0 : U32), U32.min((tm + 1 : U32), 60000), 0), (tm + 1 : U32)))
 
-def Track.tally(+ps: +List<Piece>, +t: U32, +zs: U32) -> U32 & U32:
+# a coaster's ratings come from its dry run, once it has passed a test
+def Track.stats(t: Track) -> U32:
+  Track{pieces, open, blocks, start, end, cfg, stats} = t
+  stats
+
+type Dry is Data:
+  Dry{e: U32, i: U32, prev: U32, top: U32, drops: U32, run: U32, big: U32, gv: U32,
+    gl: U32, neg: U32, air: U32, turns: U32, hi: U32, lo: U32, fail: U32}
+
+def isqrt.go(+n: Nat, +e: U32, +r: U32, +b: U32) -> U32:
+  match n:
+    case 0n:
+      r
+    case 1n+m:
+      +t = (r .|. b : U32)
+      isqrt.go(m, e, sel((t * t <= e : U32), t, r), (b >> 1n : U32))
+
+def isqrt(+e: U32) -> U32:
+  isqrt.go(16n, e, 0, 32768)
+
+# the dry run so far: energy, the piece index, the last piece's kind, top
+# speed, drops, the current drop and the biggest (levels), vertical and
+# lateral G and the worst negative G (hundredths), air time (tenths of a
+# second), turns, highest and lowest level, and the stall piece (255: none)
+def Piece.left(+k: U32) -> Bool:
+  U32.is_eq(k, 3) || U32.is_eq(k, 10)
+
+def Piece.right(+k: U32) -> Bool:
+  U32.is_eq(k, 4) || U32.is_eq(k, 11)
+
+def Piece.rise(+k: U32) -> U32:
+  sel(U32.is_eq(k, 1) || U32.is_eq(k, 6), 1, sel(U32.is_eq(k, 12), 2, 0))
+
+def Piece.drop(+k: U32) -> U32:
+  sel(U32.is_eq(k, 2), 1, sel(U32.is_eq(k, 13), 2, 0))
+
+def Dry.step(d: Dry, p: Piece, +cfg: U32) -> Dry:
+  Dry{+e, +i, +prev, +top, +drops, +run, +big, +gv, +gl, +neg, +air, +turns, +hi, +lo, +fail} = d
+  Piece{x, y, +z, +k, dir} = p
+  +rise = Piece.rise(k)
+  +drop = Piece.drop(k)
+  +lift = U32.is_eq(k, 6)
+  +lv = Cfg.lift(cfg)
+  +e1 = sel(U32.is_eq(k, 5), U32.max(e, 100), sel(lift, U32.max(e, (lv * lv : U32)), e))
+  +need = (rise * 381 : U32)
+  +stall = (rise > 0 : U32) && Bool.not(lift) && (e1 < need : U32)
+  +e2 = (sel(lift, e1, sel(stall, 100, (e1 - need : U32))) + drop * 381 : U32)
+  +turn = Piece.left(k) || Piece.right(k)
+  +bank = (k >= 10 : U32) && (k <= 11 : U32)
+  +loss = sel(turn && Bool.not(bank), (e2 >> 4n : U32), sel(bank, ((e2 >> 5n) + (e2 >> 7n) : U32), (e2 >> 5n : U32)))
+  +e3 = sel(U32.is_eq(k, 9), U32.min(e2, 400), U32.max(sub0(e2, (loss + 20 : U32)), 1))
+  +v = isqrt(e3)
+  +pdown = (Piece.drop(prev) > 0 : U32)
+  +pup = (Piece.rise(prev) > 0 : U32)
+  # the bottom of a drop pulls down, the top of a hill lifts off
+  +valley = pdown && U32.is_eq(drop, 0)
+  +gv2 = sel(valley, U32.max(gv, (100 + e2 * 100 / sel(U32.is_eq(prev, 13), 762, 1524) : U32)), gv)
+  +crest = pup && (drop > 0 : U32)
+  +c = sel(crest, (e2 * 100 / sel(U32.is_eq(k, 13) || U32.is_eq(prev, 12), 635, 1270) : U32), 0)
+  +neg2 = sel((c > 100 : U32), U32.max(neg, (c - 100 : U32)), neg)
+  +air2 = (air + sel((c > 100 : U32), (144 / U32.max(v, 1) : U32), 0) : U32)
+  +gl2 = sel(turn, U32.max(gl, sel(bank, (e2 * 40 / 508 : U32), (e2 * 100 / 508 : U32))), gl)
+  +run2 = sel((drop > 0 : U32), sel(pdown, (run + drop : U32), drop), 0)
+  +z2 = ((z + rise) - drop : U32)
+  Dry{e3, (i + 1 : U32), k, U32.max(top, v), (drops + sel((drop > 0 : U32) && Bool.not(pdown), 1, 0) : U32),
+    run2, U32.max(big, run2), gv2, gl2, neg2, air2, (turns + sel(turn, 1, 0) : U32),
+    U32.max(hi, U32.max(z, z2)), U32.min(lo, U32.min(z, z2)), sel(U32.is_eq(fail, 255) && stall, i, fail)}
+
+def Dry.go(+ps: +List<Piece>, d: Dry, +cfg: U32) -> Dry:
   match ps:
     case []:
-      (t, zs)
+      d
     case p <> rest:
-      Piece{x, y, +z, +kind, dir} = p
-      +turn = sel(U32.is_eq(kind, 3) || U32.is_eq(kind, 4), 1, 0)
-      +drop = sel(U32.is_eq(kind, 2), 256, 0)
-      +lo = U32.min((zs .&. 255 : U32), z)
-      +hi = U32.max((zs >> 8n : U32), z)
-      Track.tally(rest, (t + turn + drop + 65536 : U32), (lo .|. (hi << 8n) : U32))
+      Dry.go(rest, Dry.step(d, p, cfg), cfg)
 
-def Track.rate.go(pr: U32 & U32) -> U32:
-  (+t, +zs) = pr
-  +turns = (t .&. 255 : U32)
-  +drops = ((t >> 8n) .&. 255 : U32)
-  +n = (t >> 16n : U32)
-  +height = sub0((zs >> 8n : U32), (zs .&. 255 : U32))
-  sel(U32.is_eq(n, 0), 0, Rate.pack((60 + 12 * turns + 30 * drops + 30 * height + 2 * n : U32),
-    (40 + 12 * turns + 25 * drops + 35 * height : U32), (20 + 8 * turns + 15 * drops + 15 * height : U32)))
+def Dry.run(+ps: +List<Piece>, +cfg: U32) -> Dry:
+  Dry.go(ps, Dry{0, 0, 5, 0, 0, 0, 0, 100, 0, 0, 0, 0, 0, 255, 255}, cfg)
 
-def Track.rating(+ps: +List<Piece>) -> U32:
-  Track.rate.go(Track.tally(ps, 0, 255))
+def Dry.rate(d: Dry, +cfg: U32) -> U32:
+  Dry{e, +n, prev, +top, +drops, run, +big, +gv, +gl, +neg, +air, +turns, +hi, +lo, fail} = d
+  +ty = Cfg.type(cfg)
+  +base = sel(U32.is_eq(ty, 1), 150, sel(U32.is_eq(ty, 2), 250, 200))
+  +height = sub0(hi, lo)
+  +int = (50 + top + (gv - 100) * 2 / 3 + gl * 2 / 3 + neg + big * 20 + height * 10 + sel(U32.is_eq(ty, 2), 60, 0)
+    - sel(U32.is_eq(ty, 1), 40, 0) : U32)
+  +exc0 = (base + top * 3 / 2 + drops * 25 + big * 30 + air * 8 + turns * 5 + n + height * 10 : U32)
+  +exc = sel((int > 1000 : U32), (exc0 >> 1n : U32), exc0)
+  +nau = (30 + gl / 2 + turns * 8 + air * 4 + (gv - 100) / 4 + sel(U32.is_eq(ty, 2), 80, 0) : U32)
+  sel(U32.is_eq(n, 0), 0, Rate.pack(exc, int, nau))
 
-def Ride.rating(+k: U32, +ps: +List<Piece>) -> U32:
+# where the (single) test train is: the absolute piece it's on, or 999
+def Track.pieces(t: Track) -> +List<Piece>:
+  Track{pieces, open, blocks, start, end, cfg, stats} = t
+  pieces
+
+def Track.cfg(t: Track) -> U32:
+  Track{pieces, open, blocks, start, end, cfg, stats} = t
+  cfg
+
+def Ride.rating(+k: U32, +t: Track) -> U32:
   match k:
     case 5:
-      Track.rating(ps)
+      sel(Test.passed(Track.stats(t)), Dry.rate(Dry.run(Track.pieces(t), Track.cfg(t)), Track.cfg(t)), 0)
     case _:
       Ride.rate0(k)
+
+# Testing
+# -------
+# A coaster must pass a test run before it opens. A dry run over its pieces
+# follows the train's energy: the station and the lift hill push it, climbs
+# cost it, drops pay it back, and every piece takes a little in friction
+# (turns more, banked ones less); brakes slow it to 20 km/h. It measures the
+# ride (speed, drops, height, G-forces, air time) and finds the first piece
+# a train can't climb. Energy is speed squared, speed in km/h; a level of
+# height is worth 381 (1.5 m).
+
+# stats: bits 0-1 the test (0 not tested, 1 testing, 2 passed, 3 failed);
+# 2-9 the piece a train stalls on (255: none); 10-17 where the test train was
+# last seen; bit 18 once it has left the station
+def Test.failed(+st: U32) -> Bool:
+  U32.is_eq((st .&. 3 : U32), 3)
+
+# a track may carry trains: on its test run, or once it has passed
+def Dry.top(d: Dry) -> U32:
+  Dry{e, i, prev, top, drops, run, big, gv, gl, neg, air, turns, hi, lo, fail} = d
+  top
+
+def Dry.fail(d: Dry) -> U32:
+  Dry{e, i, prev, top, drops, run, big, gv, gl, neg, air, turns, hi, lo, fail} = d
+  fail
+
+# excitement, intensity and nausea (hundredths): speed, drops, air and turns
+# thrill; G-forces make it intense; turning and floating make it queasy; a
+# ride too intense to enjoy loses half its excitement. Minecarts are tamer,
+# flyers wilder.
+def Blocks.make(+n: Nat, +start: U32, +total: U32, +k: U32, +left: U32) -> +List<Slot>:
+  match n:
+    case 0n:
+      []
+    case 1n+p:
+      +left = (total - start : U32)
+      +len = sel((left < 8 : U32), left, 4)
+      +st = sel(U32.is_eq(start, 0), 1, 0)
+      +more = (start + len < total : U32)
+      +train = U32.is_eq((k % 3 : U32), 0) && (left > 0 : U32)
+      +rest = Bool.pick(+List<Slot>, more,
+        Blocks.make(p, (start + len : U32), total, (k + 1 : U32), sel(train, (left - 1 : U32), left)), [])
+      Bool.pick(Slot, train, Held{start, len, st, Train{k, 0, 0, 60}},
+        Free{start, len, st}) <> rest
+
+def Track.test(t: Track) -> Track:
+  Track{+ps, open, bs, +s, +e, +cfg, stats} = t
+  +n = len32(Piece, ps)
+  +shut = {Track{ps, False{}, [], s, e, cfg, 0} : Track}
+  +st = (1 .|. (Dry.fail(Dry.run(ps, cfg)) << 2n) : U32)
+  +on = (True{} && Track.closed(shut)) && Test.live(st)
+  Track{ps, on, Bool.pick(+List<Slot>, on, Blocks.make(U32.to_nat(n), 0, n, 0, 1), []), s, e, cfg, st}
+
+# a pre-built coaster comes tested (if its dry run passes)
+def Track.pretest(t: Track) -> Track:
+  Track{+ps, open, bs, +s, +e, +cfg, stats} = t
+  +f = Dry.fail(Dry.run(ps, cfg))
+  Track{ps, False{}, [], s, e, cfg, sel(U32.is_eq(f, 255), 2, (3 .|. (f << 2n) : U32))}
 
 # Mess: litter and worse
 # ----------------------
@@ -2220,10 +2409,6 @@ def Fix.has(+xs: +List<U32>, +i: U32) -> Bool:
 
 # a Brownie at a tile centre empties the bins on and beside it and mends
 # smashed furniture there
-def Track.pieces(t: Track) -> +List<Piece>:
-  Track{pieces, open, blocks, start, end, cfg, stats} = t
-  pieces
-
 def Track.blocks(t: Track) -> +List<Slot>:
   Track{pieces, open, blocks, start, end, cfg, stats} = t
   blocks
@@ -2236,7 +2421,8 @@ def Track.blocks(t: Track) -> +List<Slot>:
 def Ride.tick(r: Ride, +idx: U32, +q: Q, +ts: +List<Track>, +occ: +List<U32>,
   +plan: +List<Board>, +qt: +List<U32>, +fresh: Bool, +t: U32, +fx: +List<U32>) -> Ride:
   Ride{+kind, +x, +y, +w, +h, +price, +open, +ph, +tm, ent, ex, +qlen, +wmin, +wmax, +total, +earned, +born, rate, +wear} = r
-  +ps = Track.pieces(Tracks.get(ts, h))
+  +tk = Tracks.get(ts, h)
+  +ps = Track.pieces(tk)
   +brk = Wear.broken(wear)
   +n = Seat.count((Tab.at(occ, idx) .|. Boards.mask(plan, idx, 0) : U32))
   +nb = Boards.count(plan, idx, 0)
@@ -2244,7 +2430,7 @@ def Ride.tick(r: Ride, +idx: U32, +q: Q, +ts: +List<Track>, +occ: +List<U32>,
   +ph2 = sel(Ride.cycles(kind), Ride.next_ph(ph, tm, go, Ride.duration(kind)), 0)
   Ride{kind, x, y, w, h, price, open, sel(brk, ph, ph2), sel(brk, tm, sel(Ride.cycles(kind), Ride.next_tm(ph, ph2, tm, n), 0)),
     Ride.door(kind, q, ps, x, y, w, 7), Ride.door(kind, q, ps, x, y, w, 1), sel(fresh, Tab.at(qt, idx), qlen),
-    wmin, wmax, (total + nb : U32), (earned + nb * price : U32), born, Ride.rating(kind, ps),
+    wmin, wmax, (total + nb : U32), (earned + nb * price : U32), born, Ride.rating(kind, tk),
     Wear.tick(wear, kind, open, idx, t, born, Fix.has(fx, idx))}
 
 def Rides.tick(+rs: +List<Ride>, +idx: U32, +q: Q, +ts: +List<Track>, +occ: +List<U32>,
@@ -2526,18 +2712,6 @@ def Fin.tick(f: Fin, +t: U32, +gs: +List<Guest>, +rs: +List<Ride>, +nm: U32, +q:
 def Piece.adds(+op: U32) -> Bool:
   (op < 7 : U32) || (op >= 9 : U32) && (op < 14 : U32)
 
-def Piece.left(+k: U32) -> Bool:
-  U32.is_eq(k, 3) || U32.is_eq(k, 10)
-
-def Piece.right(+k: U32) -> Bool:
-  U32.is_eq(k, 4) || U32.is_eq(k, 11)
-
-def Piece.rise(+k: U32) -> U32:
-  sel(U32.is_eq(k, 1) || U32.is_eq(k, 6), 1, sel(U32.is_eq(k, 12), 2, 0))
-
-def Piece.drop(+k: U32) -> U32:
-  sel(U32.is_eq(k, 2), 1, sel(U32.is_eq(k, 13), 2, 0))
-
 def Piece.cost(+k: U32) -> U32:
   sel(U32.is_eq(k, 0), 30, sel(U32.is_eq(k, 5) || U32.is_eq(k, 6) || (k >= 12 : U32), 60,
     sel((k >= 9 : U32), 50, 40)))
@@ -2549,13 +2723,6 @@ def Piece.exit(p: Piece) -> Pose:
   +z2 = ((z + Piece.rise(kind)) - Piece.drop(kind) : U32)
   Pose{(x + dx_of(d2) : U32), (y + dy_of(d2) : U32), z2, d2}
 
-def Pose.eq(a: Pose, b: Pose) -> Bool:
-  Pose{ax, ay, az, ad} = a
-  Pose{bx, by, bz, bd} = b
-  U32.is_eq(ax, bx) && U32.is_eq(ay, by) && U32.is_eq(az, bz)
-    && U32.is_eq(ad, bd)
-
-# 1/256 of a piece per unit of progress
 def Slot.ready(s: Slot) -> Bool:
   match s:
     case Free{a, n, st}:
@@ -2580,25 +2747,6 @@ def Blocks.trains(+ss: +List<Slot>) -> Nat:
       Nat.add(Slot.count(s), Blocks.trains(rest))
 
 # blocks of 4 pieces; a train waits in every third block
-def Blocks.make(+n: Nat, +start: U32, +total: U32, +k: U32, +left: U32) -> +List<Slot>:
-  match n:
-    case 0n:
-      []
-    case 1n+p:
-      +left = (total - start : U32)
-      +len = sel((left < 8 : U32), left, 4)
-      +st = sel(U32.is_eq(start, 0), 1, 0)
-      +more = (start + len < total : U32)
-      +train = U32.is_eq((k % 3 : U32), 0) && (left > 0 : U32)
-      +rest = Bool.pick(+List<Slot>, more,
-        Blocks.make(p, (start + len : U32), total, (k + 1 : U32), sel(train, (left - 1 : U32), left)), [])
-      Bool.pick(Slot, train, Held{start, len, st, Train{k, 0, 0, 60}},
-        Free{start, len, st}) <> rest
-
-def Track.closed(t: Track) -> Bool:
-  Track{pieces, open, blocks, start, end, cfg, stats} = t
-  (len32(Piece, pieces) >= 4 : U32) && Pose.eq(start, end)
-
 def Track.open(t: Track) -> Bool:
   Track{pieces, open, blocks, start, end, cfg, stats} = t
   open
@@ -3174,11 +3322,12 @@ def TrackOp.ok(+q: Q, +trk: Track, +cash: U32, +op: U32) -> Bool:
   +n = len32(Piece, Track.pieces(trk))
   +shut = Bool.not(Track.open(trk))
   +plat = Bool.not(U32.is_eq(op, 5)) || U32.is_eq(Piece.kind(Pieces.last(Track.pieces(trk))), 5)
-  +add = Piece.adds(op) && shut && (n > 0 : U32) && Bool.not(Track.closed(trk)) && plat
+  +add = Piece.adds(op) && shut && (n > 0 : U32) && (n < 250 : U32) && Bool.not(Track.closed(trk)) && plat
     && Track.room(q, Track.end(trk), op) && Build.can_pay(cash, Piece.cost(op))
   +del = U32.is_eq(op, 7) && shut && (n > 1 : U32)
   +set = (op >= 16 : U32) && (op < 24 : U32) && shut
-  add || del || set || U32.is_eq(op, 8)
+  +tst = (U32.is_eq(op, 24) || U32.is_eq(op, 25)) && shut && Track.closed(trk)
+  add || del || set || tst || U32.is_eq(op, 8)
 
 # a piece costs its price; taking one off gives half of its price back
 def TrackOp.ledger(ok: Bool, +op: U32, +last: U32) -> +List<Txn>:
@@ -3212,11 +3361,11 @@ def Track.toggle.go(open: Bool, +ps: +List<Piece>, bs: +List<Slot>, +s: Pose,
   +e: Pose, +cfg: U32, +stats: U32) -> Track:
   match open:
     case True{}:
-      Track{ps, False{}, [], s, e, cfg, stats}
+      Track{ps, False{}, [], s, e, cfg, sel(Test.testing(stats), 0, stats)}
     case False{}:
       +n = len32(Piece, ps)
       +shut = {Track{ps, False{}, [], s, e, cfg, stats} : Track}
-      +ok = Track.closed(shut)
+      +ok = (True{} && Track.closed(shut)) && Test.live(stats)
       +want = Cfg.trains(cfg)
       Track{ps, ok, Bool.pick(+List<Slot>, ok, Blocks.make(U32.to_nat(n), 0, n, 0, sel(U32.is_eq(want, 0), 99, want)), []), s, e, cfg, stats}
 
@@ -3227,13 +3376,9 @@ def Track.toggle(t: Track) -> Track:
 # changing a setting closes the coaster (it is closed already: see TrackOp.ok)
 def Track.setcfg(t: Track, +op: U32) -> Track:
   Track{+ps, open, bs, +s, +e, +cfg, +stats} = t
-  Track{ps, False{}, [], s, e, Cfg.set(cfg, op, Track.most(len32(Piece, ps))), stats}
+  Track{ps, False{}, [], s, e, Cfg.set(cfg, op, Track.most(len32(Piece, ps))), 0}
 
 # every coaster's type, two bits each (coaster k at bits 2k), for drawing
-def Track.cfg(t: Track) -> U32:
-  Track{pieces, open, blocks, start, end, cfg, stats} = t
-  cfg
-
 def Tracks.types(+ts: +List<Track>, +k: U32) -> U32:
   match ts:
     case []:
@@ -3246,14 +3391,16 @@ def Track.edit(t: Track, +op: U32) -> Track:
   Track{+ps, open, bs, +s, +e, +cfg, +stats} = t
   +pc = {Piece{Pose.x(e), Pose.y(e), Pose.z(e), op, Pose.d(e)} : Piece}
   Bool.pick(Track, Piece.adds(op),
-    Track{List.append(&2, Piece, ps, [pc]), False{}, [], s, Piece.exit(pc), cfg, stats},
-    Track{Pieces.init(ps), False{}, [], s, Piece.pose(Pieces.last(ps)), cfg, stats})
+    Track{List.append(&2, Piece, ps, [pc]), False{}, [], s, Piece.exit(pc), cfg, 0},
+    Track{Pieces.init(ps), False{}, [], s, Piece.pose(Pieces.last(ps)), cfg, 0})
 
 def Track.op(+t: Track, +op: U32, ok: Bool) -> Track:
   match ok:
     case True{}:
       Bool.pick(Track, U32.is_eq(op, 8), Track.toggle(t),
-        Bool.pick(Track, (op >= 16 : U32), Track.setcfg(t, op), Track.edit(t, op)))
+        Bool.pick(Track, U32.is_eq(op, 24), Track.test(t),
+        Bool.pick(Track, U32.is_eq(op, 25), Track.pretest(t),
+        Bool.pick(Track, (op >= 16 : U32), Track.setcfg(t, op), Track.edit(t, op)))))
     case False{}:
       t
 
@@ -3275,7 +3422,7 @@ def Park.track_op(p: Park, +op: U32) -> Out:
   +led = TrackOp.ledger(ok, code, Piece.kind(Pieces.last(Track.pieces(trk))))
   +trk2 = Track.op(trk, code, ok)
   Out{Park{Land.fix(TrackOp.map(ok, map, trk, code, k)), guests,
-    Rides.coaster(rides, k, sel(Track.open(trk2), 1, 0)), Tracks.set(track, k, trk2),
+    Rides.coaster(rides, k, sel(Track.open(trk2) && Test.passed(Track.stats(trk2)), 1, 0)), Tracks.set(track, k, trk2),
     Ledger.apply(led, cash), time, nid, fin, mess, staff}, led, [], [], [], []}
 
 # Ride settings (the ride window)

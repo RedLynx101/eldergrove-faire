@@ -195,6 +195,24 @@ Small design decisions made while working, listed here so they can be revisited.
 - **no_collisions gained a parameter.** Train physics now reads the coaster's settings, so `Blocks.step`
   takes them and the law quantifies over them too (`for +cfg: U32`). A mechanical change to LAWS.bend; the
   proof threads the value through unchanged.
+- **Tests are decided by a dry run, shown by a real train.** The in-game physics never lets a train stop
+  (it crawls at 10 at worst), so pass or fail comes from a dry run over the pieces: energy is speed squared,
+  a level of height is worth 381 (1.5 m at km/h), the station pushes to 10 km/h, the lift to its speed,
+  friction takes 1/32 of the energy a piece plus a little (flat turns 1/16, banked about 1/25), brakes cap
+  at 20 km/h. A climb the energy can't pay for is the stall piece. The test train then runs for real, and
+  the test ends when it comes round to the station (pass) or reaches the stall piece (fail).
+- **What a test measures:** top speed (km/h), length (4 m a piece), height and drops (1.5 m a level),
+  vertical G at the bottom of drops (12 m radius after gentle, 6 m after steep), lateral G on turns (4 m
+  radius; banking takes 60% off), negative G and air time over crests. The ratings follow from these
+  (base 2.00 Wyrm, 1.50 Minecart, 2.50 Flyer); a ride with intensity past 10 loses half its excitement.
+  The starter Wyrm rates about 4.3 / 3.1 / 1.6.
+- **A pre-built coaster comes tested:** track op 25 marks a track tested if its dry run passes, without
+  playing ticks at startup. Nothing in the UI sends it.
+- **open_only_tested is stated on the track:** `open` implies the test is running or passed. Guests board
+  only a passed coaster (the station counts as closed during a test). Wherever code opens a track it
+  sets `open` to (a condition and the circuit check) and "the test stands", so both coaster laws follow
+  from two small Boolean lemmas.
+- **Tracks are capped at 250 pieces**, so a piece index fits the test's bookkeeping.
 
 ## Done: M1, the vertical slice
 Isometric fantasy map, paths, terrain editing, 4 enchanted tree kinds, Dragon Carousel, Arcane Spire, Potion
@@ -363,8 +381,8 @@ Spikes, in order:
 - Crowds past 700: guests share per-ride route maps instead of each searching paths themselves.
 
 ## M8: Custom coasters
-Progress: spikes 1-3 done (several coasters per park; the construction window and new pieces; coaster types,
-trains and lift speed).
+Progress: spikes 1-4 done (several coasters per park; the construction window and new pieces; coaster types,
+trains and lift speed; test runs and open_only_tested).
 
 - **A construction window,** built carefully for ease of use:
   - piece buttons, grouped: straight, gentle and steep slopes, small and large turns, banked turns, lift
@@ -392,7 +410,8 @@ Proven in M4: board_only_when_loading, ride_until_unloading, seats_unique, purch
 prices_bounded (thirteen in all).
 Proven in M5: litter_accounted, wages_booked (fifteen in all).
 Extended in M8: coaster_on_circuit now covers every coaster in the park (no_collisions was already stated
-for any track, so it covers them all). Planned: open_only_tested (M8).
+for any track, so it covers them all, and now takes the coaster's settings too). Proven in M8:
+open_only_tested (sixteen in all).
 Proof maintenance rule: keep the code field-wise (each park field updated by its own function) so
 existing proofs survive new features.
 

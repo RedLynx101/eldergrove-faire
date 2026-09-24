@@ -32,12 +32,13 @@ Dev modes:
 - `./park --rides out.ppm T` draws the M6 rides T ticks into a run, every seat taken.
 - `./park --pieces out.ppm` draws every coaster track piece in its four headings.
 - `./park --cars out.ppm` draws each coaster type's car on its own track, in four headings.
+- `./park --coastertest` sends two new coasters on test runs (one with a lift hill, one without) and reports how each ended.
 - `./park --scen K MONTHS` plays scenario K (0 sandbox, 1-3) a month at a time and reports it.
 - `./park --wav out.wav SECONDS` records the music with every effect in turn;
   `python3 tools/wavcheck.py out.wav out.png` prints its levels and draws it. `PARK_MUTE=1` plays nothing.
 - `--shot` takes an optional 6th argument, a window to show (kind * 256 + ride; 256 is the carousel's), and a 7th, the zoom (0 normal, 1 close, 2 far).
   Window kind 8 (construction) adds an unfinished second coaster to picture; piece * 4096 added to it
-  picks the piece previewed.
+  picks the piece previewed (15 instead pictures a coaster whose test run failed).
 - Environment: `PARK_OPT=n` starts with options n (bits: 0-1 window size, 2 whole pixels, 3 dynamic
   resolution off), `PARK_PROF=1` prints frame timings, `PARK_NOPACE=1` removes the 60 Hz cap,
   `PARK_DUMP=out.ppm` writes the 300th shown frame. `tools/prof.sh ./park ...` profiles with perf.
@@ -177,7 +178,11 @@ red where it doesn't, with its cost and the height it ends at. Each button has a
 price back). WASD always moves the camera. The window says how far the track's end is from the station.
 A coaster opens from its ride window, and only once its track closes back on its station; its track
 can be changed only while it is closed (the ride window's BUILD button reopens the construction
-window). The window also sets the coaster's type (the wooden Wyrm; the Dwarven Minecart, slower and
+window). Before it opens, a coaster must pass a test run (TEST in either window): an empty train goes
+round while the ride stays shut to guests. A pass fills the ride window with what it measured (top speed,
+length, height, drops, air time, G-forces) and the ratings; a failure says which piece the train couldn't
+climb and marks it on the map with a red sign. Any change to the track or its settings needs a new test.
+The window also sets the coaster's type (the wooden Wyrm; the Dwarven Minecart, slower and
 gentler; the Griffin Flyer, fastest, its cars hanging below the rails), how many trains run (up to one
 in every third block) and the lift hill's speed. A park holds up to 8 coasters; the Wyrm Coaster comes
 pre-built.
@@ -212,8 +217,11 @@ pre-built.
 11. **seats_unique**: the boarding plan never gives one seat to two guests.
 12. **purchase_is_transfer**: a guest who boards (or buys) pays exactly the price: their gold after is their gold before less the price the ledger adds to the park.
 13. **prices_bounded**: ride prices stay within 0..20 gold and the entry fee within 0..40, whatever step happens.
+14. **litter_accounted**: every piece of litter is on the ground, swept, or in a bin; none vanishes.
+15. **wages_booked**: every wage paid goes through the ledger.
+16. **open_only_tested**: a coaster's track carries trains only on its test run or once it has passed one; editing it or changing its settings calls for a new test.
 
-Laws 1-4 and 13 quantify over every possible `Park.step` (tick, build, track edit),
+Laws 1-4, 13-16 quantify over every possible `Park.step` (tick, build, track edit),
 so they hold for anything a player or the clock can do.
 Laws 7-12 hold for every possible input to the boarding plan, a rider's
 tick, or a boarding.

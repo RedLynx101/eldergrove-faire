@@ -1056,9 +1056,9 @@ def msg_text(+m: U32) -> String:
     case 5:
       "NO SAVE FOUND"
     case 6:
-      "THE WYRM COASTER OPENS!"
+      "THE COASTER OPENS!"
     case 7:
-      "THE WYRM COASTER CLOSES"
+      "THE COASTER CLOSES"
     case 8:
       "BORROWED 1000 GOLD"
     case 9:
@@ -1073,6 +1073,16 @@ def msg_text(+m: U32) -> String:
       "SOUNDS ON  (N)"
     case 14:
       "SOUNDS OFF  (N)"
+    case 15:
+      "TEST THE COASTER BEFORE IT OPENS"
+    case 16:
+      "TEST RUN: AN EMPTY TRAIN GOES ROUND"
+    case 17:
+      "TEST PASSED! THE COASTER CAN OPEN"
+    case 18:
+      "TEST FAILED: SEE ITS BUILD WINDOW"
+    case 19:
+      "FINISH THE TRACK FIRST"
     case _:
       Bool.pick(String, (m >= 131 : U32) && (m <= 135 : U32), Award.text((m - 131 : U32)),
       Bool.pick(String, (m >= 100 : U32) && (m < 110 : U32), "THE " ++ ride_name((m - 100 : U32)) ++ " BROKE DOWN!",
@@ -1626,10 +1636,67 @@ def rate_line(label: String, +v: U32, +x: U32, +y: U32, +col: U32, +acc: +List<D
 # has none yet)
 def ride_rates(+k: U32, +r: U32, +x: U32, +y: U32, +acc: +List<Dr>) -> +List<Dr>:
   Bool.pick(+List<Dr>, C.Ride.shop(k), acc,
-    Bool.pick(+List<Dr>, U32.is_eq(r, 0), T("RATINGS: NOT A CIRCUIT YET", (x + 6 : U32), (y + 118 : U32), 15261888, acc),
+    Bool.pick(+List<Dr>, U32.is_eq(r, 0), T("RATINGS: AFTER A TEST RUN", (x + 6 : U32), (y + 118 : U32), 15261888, acc),
       rate_line("EXCITEMENT", C.Rate.e(r), x, (y + 116 : U32), 16766282,
       rate_line("INTENSITY", C.Rate.i(r), x, (y + 128 : U32), 16750480,
       rate_line("NAUSEA", C.Rate.n(r), x, (y + 140 : U32), 9498256, acc)))))
+
+# tenths as a decimal: 45 -> "4.5"
+def tenths(+v: U32) -> String:
+  U32.show((v / 10 : U32)) ++ "." ++ U32.show((v % 10 : U32))
+
+# what a coaster's test found (the dry run of its track), or why there is
+# nothing yet: three lines in the ride window
+def Piece.name(+k: U32) -> String:
+  match k:
+    case 0:
+      "STRAIGHT"
+    case 1:
+      "GENTLE UP"
+    case 2:
+      "GENTLE DOWN"
+    case 3:
+      "TURN LEFT"
+    case 4:
+      "TURN RIGHT"
+    case 5:
+      "STATION"
+    case 6:
+      "LIFT HILL"
+    case 9:
+      "BRAKES"
+    case 10:
+      "BANKED LEFT"
+    case 11:
+      "BANKED RIGHT"
+    case 12:
+      "STEEP UP"
+    case _:
+      "STEEP DOWN"
+
+# the button under (lx, ly): 300 + its track op, or 0
+def Coaster.stats_go(+t: C.Track, d: C.Dry, +x: U32, +y: U32, +acc: +List<Dr>) -> +List<Dr>:
+  C.Dry{e, +n, prev, +top, +drops, run, +big, +gv, +gl, +neg, +air, turns, +hi, +lo, fail} = d
+  +st = C.Track.stats(t)
+  +ps = C.Track.pieces(t)
+  +f = C.Test.fail(st)
+  +l1 = Bool.pick(String, C.Test.passed(st), "SPEED " ++ U32.show(top) ++ "KM/H  LENGTH " ++ U32.show((n * 4 : U32))
+      ++ "M  HEIGHT " ++ tenths((C.sub0(hi, lo) * 15 : U32)) ++ "M",
+    Bool.pick(String, C.Test.testing(st), "TESTING: AN EMPTY TRAIN GOES ROUND",
+    Bool.pick(String, C.Test.failed(st), "TEST FAILED: STALLS ON PIECE " ++ U32.show((f + 1 : U32)),
+    Bool.pick(String, C.Track.closed(t), "NOT TESTED: PRESS TEST", "TRACK NOT FINISHED: PRESS BUILD"))))
+  +l2 = Bool.pick(String, C.Test.passed(st), "DROPS " ++ U32.show(drops) ++ ", BIGGEST " ++ tenths((big * 15 : U32))
+      ++ "M   AIR TIME " ++ tenths(air) ++ "S",
+    Bool.pick(String, C.Test.failed(st), "(" ++ Piece.name(C.Piece.kind(C.Pieces.get(ps, f))) ++ "): TOO SLOW TO CLIMB IT", ""))
+  +l3 = Bool.pick(String, C.Test.passed(st), "G " ++ cents(gv) ++ " DOWN  " ++ cents(gl) ++ " SIDEWAYS"
+      ++ Bool.pick(String, (neg > 0 : U32), "  -" ++ cents(neg) ++ " UP", ""),
+    Bool.pick(String, C.Test.failed(st), "ADD A LIFT HILL OR A BIGGER DROP BEFORE IT", ""))
+  +col = sel(C.Test.failed(st), 16748688, sel(C.Test.passed(st), 12648447, 16766282))
+  T(l1, (x + 6 : U32), (y + 51 : U32), col, T(l2, (x + 6 : U32), (y + 60 : U32), col,
+    T(l3, (x + 6 : U32), (y + 69 : U32), col, acc)))
+
+def Coaster.stats_dr(+t: C.Track, +x: U32, +y: U32, +acc: +List<Dr>) -> +List<Dr>:
+  Coaster.stats_go(t, C.Dry.run(C.Track.pieces(t), C.Track.cfg(t)), x, y, acc)
 
 def Coaster.tname(+ty: U32) -> String:
   match ty:
@@ -1653,7 +1720,10 @@ def ride_win(+p: C.Park, +x: U32, +y: U32, +idx: U32, +acc: +List<Dr>) -> +List<
   +title = Bool.pick(String, U32.is_eq(k, 5), Coaster.name(track, C.Ride.ht(rd)), ride_name(k))
   +frame = ride_rates(k, C.Ride.rate(rd), x, y, window_box(title, x, y, 196, 154, acc))
   +waits = Bool.pick(+List<Dr>, C.Ride.cycles(k), ride_waits(C.Ride.wmin(rd), C.Ride.wmax(rd), x, y, frame), frame)
-  +build = Bool.pick(+List<Dr>, U32.is_eq(k, 5), button("BUILD", (x + 150 : U32), (y + 14 : U32), 40, 5913248, waits), waits)
+  +tk = C.Tracks.get(track, C.Ride.ht(rd))
+  +build = Bool.pick(+List<Dr>, U32.is_eq(k, 5), button("BUILD", (x + 150 : U32), (y + 14 : U32), 40, 5913248,
+    button("TEST", (x + 150 : U32), (y + 26 : U32), 40, sel(C.Track.closed(tk) && Bool.not(C.Track.open(tk)), 3831360, 5263440),
+      Coaster.stats_dr(tk, x, y, waits))), waits)
   button(Bool.pick(String, open, "OPEN", "CLOSED"), (x + 6 : U32), (y + 14 : U32), 44,
     sel(open, 3831360, 10498096),
   T(ride_state(rd), (x + 50 : U32), (y + 16 : U32), 12648447,
@@ -2205,34 +2275,6 @@ def goal_win(+p: C.Park, +x: U32, +y: U32, +acc: +List<Dr>) -> +List<Dr>:
     sel(won, 7324480, 16748688),
   T("PLAY ON AS LONG AS YOU LIKE.", (x + 6 : U32), (y + 60 : U32), 11579568, frame))))
 
-def Piece.name(+k: U32) -> String:
-  match k:
-    case 0:
-      "STRAIGHT"
-    case 1:
-      "GENTLE UP"
-    case 2:
-      "GENTLE DOWN"
-    case 3:
-      "TURN LEFT"
-    case 4:
-      "TURN RIGHT"
-    case 5:
-      "STATION"
-    case 6:
-      "LIFT HILL"
-    case 9:
-      "BRAKES"
-    case 10:
-      "BANKED LEFT"
-    case 11:
-      "BANKED RIGHT"
-    case 12:
-      "STEEP UP"
-    case _:
-      "STEEP DOWN"
-
-# the button under (lx, ly): 300 + its track op, or 0
 def Cons.op(+i: U32) -> U32:
   match i:
     case 0:
@@ -2261,6 +2303,8 @@ def Cons.op(+i: U32) -> U32:
       5
     case 12:
       7
+    case 13:
+      24
     case _:
       99
 
@@ -2282,6 +2326,8 @@ def Piece.label(+k: U32) -> String:
       "LIFT HILL L"
     case 7:
       "UNDO BKSP"
+    case 24:
+      "TEST RUN"
     case 9:
       "BRAKES J"
     case 10:
@@ -2299,7 +2345,8 @@ def Cons.btn(+i: U32, +x: U32, +y: U32, +pv: U32, +q: C.Q, +trk: C.Track, +cash:
   +bx = (x + 6 + (i .&. 3) * 56 : U32)
   +by = (y + 26 + (i >> 2n) * 12 : U32)
   +fits = C.TrackOp.ok(q, trk, cash, op)
-  +col = sel(U32.is_eq(op, 7), sel(fits, 10498096, 5263440), sel(fits, 5913248, 6045746))
+  +col = sel(U32.is_eq(op, 7), sel(fits, 10498096, 5263440), sel(U32.is_eq(op, 24), sel(fits, 3831360, 5263440),
+    sel(fits, 5913248, 6045746)))
   +glow = U32.is_eq(op, pv)
   button(Piece.label(op), bx, by, 52, col,
     Bool.pick(+List<Dr>, glow, R(C.sub0(bx, 1), C.sub0(by, 1), 54, 11, 16766282, acc), acc))
@@ -2346,13 +2393,20 @@ def cons_win(+p: C.Park, +x: U32, +y: U32, +a: U32, +v: U32, +acc: +List<Dr>) ->
   +fits = C.TrackOp.ok(map, trk, cash, pv)
   +cost = C.Piece.cost(pv)
   +last = C.Piece.kind(C.Pieces.last(C.Track.pieces(trk)))
-  +state = Bool.pick(String, open, "OPEN", Bool.pick(String, closed, "CIRCUIT COMPLETE", "BUILDING"))
-  +why = Bool.pick(String, open, "CLOSE THE RIDE TO CHANGE ITS TRACK",
-    Bool.pick(String, closed, "DONE: OPEN IT FROM ITS RIDE WINDOW",
+  +tst = C.Track.stats(trk)
+  +testing = C.Test.testing(tst)
+  +state = Bool.pick(String, open && testing, "TESTING", Bool.pick(String, open, "OPEN",
+    Bool.pick(String, closed && C.Test.passed(tst), "TESTED", Bool.pick(String, closed && C.Test.failed(tst), "TEST FAILED",
+    Bool.pick(String, closed, "CIRCUIT COMPLETE", "BUILDING")))))
+  +why = Bool.pick(String, open && testing, "THE TEST TRAIN IS GOING ROUND...",
+    Bool.pick(String, open, "CLOSE THE RIDE TO CHANGE ITS TRACK",
+    Bool.pick(String, closed && C.Test.passed(tst), "TESTED: OPEN IT FROM ITS RIDE WINDOW",
+    Bool.pick(String, closed && C.Test.failed(tst), "PIECE " ++ U32.show((C.Test.fail(tst) + 1 : U32)) ++ " IS TOO STEEP FOR ITS SPEED: SEE RED",
+    Bool.pick(String, closed, "DONE: PRESS TEST RUN",
     Bool.pick(String, Bool.not(C.Build.can_pay(cash, cost)), "NOT ENOUGH GOLD FOR THIS PIECE",
     Bool.pick(String, U32.is_eq(pv, 5) && Bool.not(U32.is_eq(last, 5)), "A STATION ONLY EXTENDS THE PLATFORM",
     Bool.pick(String, Bool.not(fits), "NO ROOM: LAND, SCENERY, WATER'S EDGE OR TOO HIGH",
-      Cons.home(e, C.Track.start(trk)))))))
+      Cons.home(e, C.Track.start(trk))))))))))
   +near = (C.absd(C.Pose.x(e), C.Pose.x(C.Track.start(trk))) + C.absd(C.Pose.y(e), C.Pose.y(C.Track.start(trk))) <= 3 : U32)
   +cfg = C.Track.cfg(trk)
   +ty = C.Cfg.type(cfg)
@@ -2366,13 +2420,15 @@ def cons_win(+p: C.Park, +x: U32, +y: U32, +a: U32, +v: U32, +acc: +List<Dr>) ->
     T("LIFT SPEED " ++ U32.show(C.Cfg.lift(cfg)), (x + 118 : U32), (y + 90 : U32), 15261888, pm((x + 202 : U32), (y + 88 : U32),
       box))))))))
   T("PIECES " ++ U32.show(n) ++ "   HEIGHT " ++ U32.show(z), (x + 6 : U32), (y + 14 : U32), 15261888,
-  T(state, (x + 150 : U32), (y + 14 : U32), sel(open, 3831360, sel(closed, 16766282, 16777215)),
+  T(state, (x + 150 : U32), (y + 14 : U32), sel(open && Bool.not(testing), 3831360, sel(closed && C.Test.failed(tst), 16748688,
+    sel(closed || testing, 16766282, 16777215))),
   T(Bool.pick(String, open || closed, "", "NEXT: " ++ Piece.name(pv) ++ "  *" ++ U32.show(cost)
       ++ "  HEIGHT " ++ U32.show(z) ++ " TO " ++ U32.show(z2)),
     (x + 6 : U32), (y + 102 : U32), sel(fits, 12648384, 16748688),
-  T(why, (x + 6 : U32), (y + 114 : U32), sel(fits && near && Bool.not(closed), 16766282, sel(fits || closed, 15261888, 16748688)),
+  T(why, (x + 6 : U32), (y + 114 : U32), sel(closed && C.Test.failed(tst), 16748688,
+    sel(fits && near && Bool.not(closed), 16766282, sel(fits || closed, 15261888, 16748688))),
   T("HOVER A PIECE TO PREVIEW IT, CLICK OR PRESS ITS KEY", (x + 6 : U32), (y + 126 : U32), 9474192,
-    Cons.btns(13n, 0, x, y, pv, map, trk, cash, set))))))
+    Cons.btns(14n, 0, x, y, pv, map, trk, cash, set))))))
 
 def win_dr.go(+k: U32, +x: U32, +y: U32, +a: U32, +p: C.Park, +o: U32, +v: U32, +acc: +List<Dr>) -> +List<Dr>:
   match k:
@@ -2409,10 +2465,10 @@ def in_box(+lx: U32, +ly: U32, +x: U32, +y: U32, +w: U32, +h: U32) -> Bool:
   (lx >= x : U32) && (lx < x + w : U32) && (ly >= y : U32) && (ly < y + h : U32)
 
 def ride_click(+lx: U32, +ly: U32) -> U32:
-  sel(in_box(lx, ly, 6, 14, 44, 9), 100, sel(in_box(lx, ly, 150, 14, 40, 9), 400,
+  sel(in_box(lx, ly, 6, 14, 44, 9), 100, sel(in_box(lx, ly, 150, 14, 40, 9), 400, sel(in_box(lx, ly, 150, 26, 40, 9), 107,
   sel(in_box(lx, ly, 96, 26, 11, 9), 102, sel(in_box(lx, ly, 110, 26, 11, 9), 101,
   sel(in_box(lx, ly, 96, 50, 11, 9), 104, sel(in_box(lx, ly, 110, 50, 11, 9), 103,
-  sel(in_box(lx, ly, 96, 62, 11, 9), 106, sel(in_box(lx, ly, 110, 62, 11, 9), 105, 0))))))))
+  sel(in_box(lx, ly, 96, 62, 11, 9), 106, sel(in_box(lx, ly, 110, 62, 11, 9), 105, 0)))))))))
 
 def park_click(+lx: U32, +ly: U32) -> U32:
   sel(in_box(lx, ly, 110, 40, 11, 9), 201, sel(in_box(lx, ly, 124, 40, 11, 9), 200,
@@ -2563,31 +2619,36 @@ def coaster_acts() -> List<C.Act>:
    C.TrackOp{2}, C.TrackOp{0}, C.TrackOp{0}, C.TrackOp{4}, C.TrackOp{0},
    C.TrackOp{0}, C.TrackOp{0}, C.TrackOp{0}, C.TrackOp{0}, C.TrackOp{0},
    C.TrackOp{2}, C.TrackOp{4}, C.TrackOp{0}, C.TrackOp{0}, C.TrackOp{0},
-   C.TrackOp{0}, C.TrackOp{4}, C.TrackOp{8}]
+   C.TrackOp{0}, C.TrackOp{4}, C.TrackOp{25}, C.TrackOp{8}]
 
 # a patch cleared for a second coaster at (40, 56)
 def clear2_acts() -> List<C.Act>:
   [C.Build{9, 38, 54, 0}, C.Build{9, 39, 54, 0}, C.Build{9, 40, 54, 0}, C.Build{9, 41, 54, 0}, C.Build{9, 42, 54, 0},
-   C.Build{9, 43, 54, 0}, C.Build{9, 44, 54, 0}, C.Build{9, 45, 54, 0}, C.Build{9, 38, 55, 0}, C.Build{9, 39, 55, 0},
-   C.Build{9, 40, 55, 0}, C.Build{9, 41, 55, 0}, C.Build{9, 42, 55, 0}, C.Build{9, 43, 55, 0}, C.Build{9, 44, 55, 0},
-   C.Build{9, 45, 55, 0}, C.Build{9, 38, 56, 0}, C.Build{9, 39, 56, 0}, C.Build{9, 40, 56, 0}, C.Build{9, 41, 56, 0},
-   C.Build{9, 42, 56, 0}, C.Build{9, 43, 56, 0}, C.Build{9, 44, 56, 0}, C.Build{9, 45, 56, 0}, C.Build{9, 38, 57, 0},
-   C.Build{9, 39, 57, 0}, C.Build{9, 40, 57, 0}, C.Build{9, 41, 57, 0}, C.Build{9, 42, 57, 0}, C.Build{9, 43, 57, 0},
-   C.Build{9, 44, 57, 0}, C.Build{9, 45, 57, 0}, C.Build{9, 38, 58, 0}, C.Build{9, 39, 58, 0}, C.Build{9, 40, 58, 0},
-   C.Build{9, 41, 58, 0}, C.Build{9, 42, 58, 0}, C.Build{9, 43, 58, 0}, C.Build{9, 44, 58, 0}, C.Build{9, 45, 58, 0}]
+   C.Build{9, 43, 54, 0}, C.Build{9, 44, 54, 0}, C.Build{9, 45, 54, 0}, C.Build{9, 46, 54, 0}, C.Build{9, 47, 54, 0},
+   C.Build{9, 38, 55, 0}, C.Build{9, 39, 55, 0}, C.Build{9, 40, 55, 0}, C.Build{9, 41, 55, 0}, C.Build{9, 42, 55, 0},
+   C.Build{9, 43, 55, 0}, C.Build{9, 44, 55, 0}, C.Build{9, 45, 55, 0}, C.Build{9, 46, 55, 0}, C.Build{9, 47, 55, 0},
+   C.Build{9, 38, 56, 0}, C.Build{9, 39, 56, 0}, C.Build{9, 40, 56, 0}, C.Build{9, 41, 56, 0}, C.Build{9, 42, 56, 0},
+   C.Build{9, 43, 56, 0}, C.Build{9, 44, 56, 0}, C.Build{9, 45, 56, 0}, C.Build{9, 46, 56, 0}, C.Build{9, 47, 56, 0},
+   C.Build{9, 38, 57, 0}, C.Build{9, 39, 57, 0}, C.Build{9, 40, 57, 0}, C.Build{9, 41, 57, 0}, C.Build{9, 42, 57, 0},
+   C.Build{9, 43, 57, 0}, C.Build{9, 44, 57, 0}, C.Build{9, 45, 57, 0}, C.Build{9, 46, 57, 0}, C.Build{9, 47, 57, 0},
+   C.Build{9, 38, 58, 0}, C.Build{9, 39, 58, 0}, C.Build{9, 40, 58, 0}, C.Build{9, 41, 58, 0}, C.Build{9, 42, 58, 0},
+   C.Build{9, 43, 58, 0}, C.Build{9, 44, 58, 0}, C.Build{9, 45, 58, 0}, C.Build{9, 46, 58, 0}, C.Build{9, 47, 58, 0}]
 
-# a small second loop for the save test, on that patch: a steep hump,
-# banked turns and brakes; a Dwarven Minecart with its lift one step faster
+# a small second loop for the save test, on that patch: a lift hill, a steep
+# drop, banked turns and brakes; a Dwarven Minecart with its lift one step
+# faster, pre-tested
 def loop2_acts() -> List<C.Act>:
-  List.append(&1, C.Act, clear2_acts(), [C.Build{10, 40, 56, 0}, C.TrackOp{37}, C.TrackOp{44}, C.TrackOp{45}, C.TrackOp{43},
-   C.TrackOp{43}, C.TrackOp{41}, C.TrackOp{32}, C.TrackOp{32}, C.TrackOp{32},
-   C.TrackOp{43}, C.TrackOp{43}, C.TrackOp{49}, C.TrackOp{55}, C.TrackOp{40}])
+  List.append(&1, C.Act, clear2_acts(), [C.Build{10, 40, 56, 0}, C.TrackOp{37}, C.TrackOp{38}, C.TrackOp{38}, C.TrackOp{45},
+   C.TrackOp{43}, C.TrackOp{43}, C.TrackOp{41}, C.TrackOp{32}, C.TrackOp{32},
+   C.TrackOp{32}, C.TrackOp{32}, C.TrackOp{43}, C.TrackOp{43}, C.TrackOp{49},
+   C.TrackOp{55}, C.TrackOp{57}, C.TrackOp{40}])
 
 # the same loop two pieces short of closing, for pictures of the
 # construction window
 def demo_acts() -> List<C.Act>:
-  List.append(&1, C.Act, clear2_acts(), [C.Build{10, 40, 56, 0}, C.TrackOp{37}, C.TrackOp{44}, C.TrackOp{45}, C.TrackOp{43},
-   C.TrackOp{43}, C.TrackOp{41}, C.TrackOp{32}, C.TrackOp{32}, C.TrackOp{32}, C.TrackOp{49}])
+  List.append(&1, C.Act, clear2_acts(), [C.Build{10, 40, 56, 0}, C.TrackOp{37}, C.TrackOp{38}, C.TrackOp{38}, C.TrackOp{45},
+   C.TrackOp{43}, C.TrackOp{43}, C.TrackOp{41}, C.TrackOp{32}, C.TrackOp{32},
+   C.TrackOp{32}, C.TrackOp{32}, C.TrackOp{49}])
 
 def track_report(+ts: +List<C.Track>, +k: U32) -> String:
   match ts:
@@ -2734,7 +2795,8 @@ def win_code(+k: U32, +lx: U32, +ly: U32) -> U32:
 def ride_act(+p: C.Park, +idx: U32, +op: U32) -> C.Act:
   +k = C.Ride.kind(C.Rides.get(C.Park.rides(p), idx))
   +h = C.Ride.ht(C.Rides.get(C.Park.rides(p), idx))
-  Bool.pick(C.Act, U32.is_eq(op, 0) && U32.is_eq(k, 5), C.TrackOp{(h * 32 + 8 : U32)}, C.RideOp{idx, op})
+  Bool.pick(C.Act, U32.is_eq(op, 0) && U32.is_eq(k, 5), C.TrackOp{(h * 32 + 8 : U32)},
+    Bool.pick(C.Act, U32.is_eq(op, 7) && U32.is_eq(k, 5), C.TrackOp{(h * 32 + 24 : U32)}, C.RideOp{idx, op}))
 
 def UI.with_var(u: UI, +v: U32) -> UI:
   UI{cx, cy, keys, mx, my, md, tool, var, sp, msg, fr, inc, last, io, fps, tl, opt} = u
@@ -2774,7 +2836,18 @@ def Cons.ghost.go(on: Bool, +p: C.Park, +k: U32, +pv: U32, +vx: U32, +vy: U32, +
       +fits = C.TrackOp.ok(map, trk, cash, pv)
       +code = ((pv + C.Pose.d(e) * 16) .|. (C.Cfg.type(C.Track.cfg(trk)) << 12n) .|. 131072 .|. sel(fits, 262144, 0) : U32)
       +show = Bool.not(C.Track.open(trk)) && Bool.not(C.Track.closed(trk)) && C.inmap(i, j)
-      Bool.pick(+List<Dr>, show, DTrack{scr_x(i, j, vx), scr_y(i, j, h, vy), code, (C.Pose.z(e) - h : U32)} <> acc, acc)
+      +bad = Bool.not(C.Track.open(trk)) && C.Test.failed(C.Track.stats(trk))
+      +fp = C.Pieces.get(C.Track.pieces(trk), C.Test.fail(C.Track.stats(trk)))
+      +fpo = C.Piece.pose(fp)
+      +fx = C.Pose.x(fpo)
+      +fy = C.Pose.y(fpo)
+      +fz = C.Pose.z(fpo)
+      +fk = C.Piece.kind(fp)
+      +fd = C.Pose.d(fpo)
+      +fh = C.Land.h(map, fx, fy)
+      +fcode = ((fk + fd * 16) .|. (C.Cfg.type(C.Track.cfg(trk)) << 12n) .|. 65536 .|. 131072 : U32)
+      Bool.pick(+List<Dr>, bad, DTrack{scr_x(fx, fy, vx), scr_y(fx, fy, fh, vy), fcode, (fz - fh : U32)} <> acc,
+        Bool.pick(+List<Dr>, show, DTrack{scr_x(i, j, vx), scr_y(i, j, h, vy), code, (C.Pose.z(e) - h : U32)} <> acc, acc))
     case False{}:
       acc
 
@@ -3223,8 +3296,11 @@ def act_msg(+a: C.Act, +o: C.Out) -> U32:
     case C.Build{t, x, y, v}:
       sel(paid(o), 1, 2)
     case C.TrackOp{+op}:
-      sel(U32.is_eq((op .&. 31 : U32), 8), sel(C.Track.open(C.Tracks.get(C.Park.track(C.Out.park(o)), (op >> 5n : U32))), 6, 7),
-        sel(paid(o), 0, 2))
+      +t = C.Tracks.get(C.Park.track(C.Out.park(o)), (op >> 5n : U32))
+      +c = (op .&. 31 : U32)
+      sel(U32.is_eq(c, 8), sel(C.Track.open(t), 6, sel(Bool.not(C.Track.closed(t)), 19,
+        sel(C.Test.passed(C.Track.stats(t)), 7, 15))),
+        sel(U32.is_eq(c, 24), sel(C.Track.open(t), 16, 19), sel(paid(o), 0, 2)))
     case C.RideOp{r, op}:
       0
     case C.ParkOp{+op}:
@@ -3325,6 +3401,17 @@ def UI.said(u: UI, +m: U32) -> UI:
   UI{cx, cy, keys, mx, my, md, tool, var, sp, +msg, fr, inc, last, io, fps, tl, opt} = u
   UI{cx, cy, keys, mx, my, md, tool, var, sp, sel(U32.is_eq(m, 0), msg, m), fr, inc, last, io, fps, tl, opt}
 
+# 17 when a coaster's test run passed this step, 18 when one failed, else 0
+def Tracks.tested(+a: +List<C.Track>, +b: +List<C.Track>) -> U32:
+  match a b:
+    case Con{x, xs} Con{y, ys}:
+      +s0 = C.Track.stats(x)
+      +s1 = C.Track.stats(y)
+      +was = C.Test.testing(s0) && Bool.not(C.Test.testing(s1))
+      sel(was && C.Test.passed(s1), 17, sel(was && C.Test.failed(s1), 18, Tracks.tested(xs, ys)))
+    case _ _:
+      0
+
 def step_game.go(+p: C.Park, +ui: UI, +wm: WM, +acts: +List<C.Act>, quit: Bool,
   snd: Z.Snd, +clicked: Bool) -> Maybe<Game>:
   UI{+cx, +cy, +keys, mx, my, md, tool, +var, +sp, +msg, +fr, +inc, last, io, fps, tl, +opt} = ui
@@ -3355,8 +3442,9 @@ def step_game.go(+p: C.Park, +ui: UI, +wm: WM, +acts: +List<C.Act>, quit: Bool,
   +ws0 = Bool.pick(+List<Win>, (req > 0 : U32), [], WM.wins(wm))
   +ws1 = Bool.pick(+List<Win>, fresh, Wins.open(ws0, 8, (nt1 - 1 : U32), 16, 30), ws0)
   +wm2 = {WM{Bool.pick(+List<Win>, (gop > 0 : U32), Wins.open(ws1, 7, 0, 150, 90), ws1), WM.drag(wm), WM.gx(wm), WM.gy(wm)} : WM}
-  Bool.pick(Maybe<Game>, quit, None{}, Some{Game{Res.park(r2), UI.said(ui2, sel((award > 0 : U32), award, bk)), wm2,
-    Z.Snd.cue(snd, (word .|. sel((gop > 0 : U32) || (award > 0 : U32), 16, 0) : U32))}})
+  +tmsg = Tracks.tested(C.Park.track(p0), C.Park.track(Res.park(r2)))
+  Bool.pick(Maybe<Game>, quit, None{}, Some{Game{Res.park(r2), UI.said(ui2, sel((award > 0 : U32), award, sel((tmsg > 0 : U32), tmsg, bk))), wm2,
+    Z.Snd.cue(snd, (word .|. sel((gop > 0 : U32) || (award > 0 : U32) || U32.is_eq(tmsg, 17), 16, 0) : U32))}})
 
 def UI.tool(u: UI) -> U32:
   UI{cx, cy, keys, mx, my, md, tool, var, sp, msg, fr, inc, last, io, fps, tl, opt} = u
@@ -3608,9 +3696,23 @@ def Game.with(g: Game, acts: List<C.Act>) -> Game:
   Game{+p, +ui, wm, snd} = g
   Game{C.Park.run(acts, p), ui, wm, snd}
 
+def ctest.bad() -> List<C.Act>:
+  List.append(&1, C.Act, clear2_acts(), [C.Build{10, 40, 56, 0}, C.TrackOp{37}, C.TrackOp{33}, C.TrackOp{34}, C.TrackOp{43},
+   C.TrackOp{43}, C.TrackOp{32}, C.TrackOp{32}, C.TrackOp{32}, C.TrackOp{32},
+   C.TrackOp{43}, C.TrackOp{43}, C.TrackOp{56}])
+
+# run until coaster 1's test ends (in steps of 50 ticks, at most n steps)
+def shot.acts(b: Bool) -> List<C.Act>:
+  match b:
+    case True{}:
+      ctest.bad()
+    case False{}:
+      demo_acts()
+
 def shot(path: String, n: Nat, +tool: U32, +cx: U32, +cy: U32, +win: U32, +z: U32) -> IO(Unit):
   +g = Game.new()
-  shot.go(Bool.pick(Game, U32.is_eq(((win >> 8n) .&. 15 : U32), 8), Game.with(g, demo_acts()), g), path, n, tool, cx, cy, win, z)
+  shot.go(Bool.pick(Game, U32.is_eq(((win >> 8n) .&. 15 : U32), 8), Game.with(g, shot.acts(U32.is_eq((win >> 12n : U32), 15))), g),
+    path, n, tool, cx, cy, win, z)
 
 def is_shot(+args: +List<String>) -> Bool:
   match args:
@@ -3673,6 +3775,33 @@ def scen.line(+p: C.Park) -> String:
     ++ ", rating " ++ U32.show(C.Fin.rating(C.Park.fin(p))) ++ ", gold " ++ U32.show(C.Park.cash(p))
     ++ ", loan " ++ U32.show(C.Fin.loan(C.Park.fin(p))) ++ ", researched " ++ U32.show((r .&. 8191 : U32))
     ++ ", progress " ++ U32.show(((r >> 16n) .&. 255 : U32)) ++ ", status " ++ U32.show(Scn.status(p))
+
+# --coastertest: the second loop, then one that climbs straight out of its
+# station with no lift, each sent on a test run; how each test ended
+def ctest.good() -> List<C.Act>:
+  List.append(&1, C.Act, clear2_acts(), [C.Build{10, 40, 56, 0}, C.TrackOp{37}, C.TrackOp{38}, C.TrackOp{38}, C.TrackOp{45},
+   C.TrackOp{43}, C.TrackOp{43}, C.TrackOp{41}, C.TrackOp{32}, C.TrackOp{32},
+   C.TrackOp{32}, C.TrackOp{32}, C.TrackOp{43}, C.TrackOp{43}, C.TrackOp{56}])
+
+def ctest.run(+n: Nat, +p: C.Park, +t: U32) -> String:
+  match n:
+    case 0n:
+      "still testing after " ++ U32.show(t) ++ " ticks"
+    case 1n+m:
+      +st = C.Track.stats(C.Tracks.get(C.Park.track(p), 1))
+      Bool.pick(String, C.Test.testing(st),
+        ctest.run(m, Res.park(ticks(50n, p, 0)), (t + 50 : U32)),
+        Bool.pick(String, C.Test.passed(st), "PASSED", Bool.pick(String, C.Test.failed(st),
+          "FAILED at piece " ++ U32.show(C.Test.fail(st)), "not tested")) ++ " after about " ++ U32.show(t) ++ " ticks"
+          ++ ", rating " ++ U32.show(C.Ride.rate(C.Rides.get(C.Park.rides(p), Coaster.ride(C.Park.rides(p), 1, 0))))
+          ++ ", open " ++ Bool.show(C.Track.open(C.Tracks.get(C.Park.track(p), 1))))
+
+def ctest.go() -> IO(Unit):
+  do IO<Unit>:
+    IO.print("with a lift hill: " ++ ctest.run(80n, C.Park.run(ctest.good(), Game.park(Game.new())), 0))
+    IO.print("no lift hill: " ++ ctest.run(80n, C.Park.run(ctest.bad(), Game.park(Game.new())), 0))
+    IO.print("starter coaster: rating " ++ U32.show(C.Ride.rate(C.Rides.get(C.Park.rides(Game.park(Game.new())), 14)))
+      ++ ", stats " ++ U32.show(C.Track.stats(C.Tracks.get(C.Park.track(Game.park(Game.new())), 0))))
 
 def scen.run(+n: Nat, +p: C.Park) -> IO(Unit):
   match n:
@@ -4242,9 +4371,10 @@ def start.go(bench: Bool, +args: +List<String>) -> IO(Unit):
         Bool.pick(IO(Unit), is_arg(args, "--people"), people_shot(nth(args, 1)),
         Bool.pick(IO(Unit), is_arg(args, "--pieces"), pieces_shot(nth(args, 1)),
         Bool.pick(IO(Unit), is_arg(args, "--cars"), cars_shot(nth(args, 1)),
+        Bool.pick(IO(Unit), is_arg(args, "--coastertest"), ctest.go(),
         Bool.pick(IO(Unit), is_arg(args, "--rides"), rides_shot(nth(args, 1), arg_u32(nth(args, 2))),
         Bool.pick(IO(Unit), is_arg(args, "--scen"), scen.run(arg_nat(nth(args, 2)), Scn.park(arg_u32(nth(args, 1)))),
-          start.test(is_arg(args, "--savetest"), args)))))))
+          start.test(is_arg(args, "--savetest"), args))))))))
 
 def start(+args: +List<String>) -> IO(Unit):
   start.go(is_bench(args), args)

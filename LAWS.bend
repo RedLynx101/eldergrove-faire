@@ -283,3 +283,24 @@ law wages_booked:
   for +p: C.Park
   for +a: C.Act
   {wage_list(C.Out.ledger(C.Park.step(p, a))) == wages_due(p, a) : List<U32>}
+
+# 16. A COASTER OPENS ONLY ONCE TESTED. A coaster's track carries trains only
+# on its test run or once it has passed one (and, by law 4, only on a closed
+# circuit). Editing a track or changing its settings calls for a new test.
+# Guests board only a coaster that has passed.
+def tested_ok(t: C.Track) -> Bool:
+  +t2 = t
+  Bool.not(C.Track.open(t2)) || C.Test.live(C.Track.stats(t2))
+
+def tests_ok(ts: +List<C.Track>) -> Bool:
+  match ts:
+    case []:
+      True{}
+    case t <> rest:
+      tested_ok(t) && tests_ok(rest)
+
+law open_only_tested:
+  for +p: C.Park
+  for +a: C.Act
+  for h: {tests_ok(C.Park.track(p)) == True{} : Bool}
+  {tests_ok(C.Park.track(C.Out.park(C.Park.step(p, a)))) == True{} : Bool}
