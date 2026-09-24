@@ -657,12 +657,18 @@ def bit8(+n: U32) -> U32:
 def Seat.has(+f: U32, +b: U32) -> Bool:
   Bool.not(U32.is_eq((f .&. b : U32), 0))
 
-# the lowest free seat below cap, or NONE
+# seat k if it is free (f: the free seats) and below cap, else `rest`
+def Seat.pick(+f: U32, +cap: U32, +k: U32, +rest: U32) -> U32:
+  sel(Seat.has(f, bit8(k)) && U32.is_lt(k, cap), k, rest)
+
+def Seat.first(+f: U32, +cap: U32) -> U32:
+  Seat.pick(f, cap, 0, Seat.pick(f, cap, 1, Seat.pick(f, cap, 2, Seat.pick(f, cap, 3,
+    Seat.pick(f, cap, 4, Seat.pick(f, cap, 5, Seat.pick(f, cap, 6, Seat.pick(f, cap, 7,
+    NONE()))))))))
+
+# the lowest free seat below cap (m: the seats taken), or NONE
 def Seat.free(+m: U32, +cap: U32) -> U32:
-  +f = ((m .^. 255) .&. (bit8(cap) - 1) : U32)
-  sel(Seat.has(f, 1), 0, sel(Seat.has(f, 2), 1, sel(Seat.has(f, 4), 2,
-    sel(Seat.has(f, 8), 3, sel(Seat.has(f, 16), 4, sel(Seat.has(f, 32), 5,
-    sel(Seat.has(f, 64), 6, sel(Seat.has(f, 128), 7, NONE()))))))))
+  Seat.first((m .^. 255 : U32), cap)
 
 # the coaster's station: whether it runs, and the train loading there
 type Stn is Data:

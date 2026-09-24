@@ -78,6 +78,11 @@ coaster per park for now (the Wyrm Coaster comes pre-built).
 4. **coaster_on_circuit**: an open coaster's track always closes back on its station.
 5. **no_collisions**: a block holds at most one train, and the block signals never lose or duplicate one.
 6. **save_load_roundtrip**: loading a save gives back exactly the park that was saved.
+7. **capacity_respected**: the boarding plan (the only way anyone gets a seat) never seats a guest at or past their ride's seat count.
+8. **riders_conserved**: nobody leaves the park from a ride: a guest riding at the start of a tick is still in the park after it.
 
 Laws 1-4 quantify over every possible `Park.step` (tick, build, track edit),
 so they hold for anything a player or the clock can do.
+Laws 7 and 8 hold for every possible input to the boarding plan and to a
+rider's tick. Not yet proven: that no two guests are planned into the same
+seat (the plan skips taken seats, but no law checks it).

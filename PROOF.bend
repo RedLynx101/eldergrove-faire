@@ -603,3 +603,104 @@ def Laws.save_load_roundtrip(p):
   %Equal.sym(List<&2, S.Item>, S.dec(S.Enc.park(p, []), []), S.dec([], S.IK{p} <> []), rt_park(p, [], []))
     : {S.Load.fin(_) == Some{p} : Maybe<&2, C.Park>}
   {==}
+
+# Capacity: Seat.first is a chain of Seat.pick steps, each taking seat k only
+# when k < cap, so whatever it returns is NONE or below cap; Boards.put drops
+# NONE; the plan only ever adds such boards to its accumulator.
+def or_r(+a: Bool, +b: Bool, hb: {b == True{} : Bool}) -> {a || b == True{} : Bool}:
+  match a:
+    case True{}:
+      {==}
+    case False{}:
+      hb
+
+def or_f(+a: Bool, +b: Bool, e: {False{} == a : Bool}, h: {a || b == True{} : Bool})
+  -> {b == True{} : Bool}:
+  %Equal.sym(Bool, False{}, a, e) : {_ || b == True{} : Bool}
+  h
+
+def pick_ok(+f: U32, +cap: U32, +k: U32, +rest: U32,
+  +hr: {U32.is_eq(rest, C.NONE()) || U32.is_lt(rest, cap) == True{} : Bool})
+  -> {U32.is_eq(C.Seat.pick(f, cap, k, rest), C.NONE()) || U32.is_lt(C.Seat.pick(f, cap, k, rest), cap)
+    == True{} : Bool}:
+  bcase_eq(C.Seat.has(f, C.bit8(k)) && U32.is_lt(k, cap),
+    c => {U32.is_eq(C.sel(c, k, rest), C.NONE()) || U32.is_lt(C.sel(c, k, rest), cap) == True{} : Bool},
+    e => or_r(U32.is_eq(k, C.NONE()), U32.is_lt(k, cap),
+      and_r(C.Seat.has(f, C.bit8(k)), U32.is_lt(k, cap),
+        Equal.sym(Bool, True{}, C.Seat.has(f, C.bit8(k)) && U32.is_lt(k, cap), e))),
+    e => hr)
+
+def seat_ok(+m: U32, +cap: U32)
+  -> {U32.is_eq(C.Seat.free(m, cap), C.NONE()) || U32.is_lt(C.Seat.free(m, cap), cap) == True{} : Bool}:
+  +f = (m .^. 255 : U32)
+  pick_ok(f, cap, 0, C.Seat.pick(f, cap, 1, C.Seat.pick(f, cap, 2, C.Seat.pick(f, cap, 3,
+    C.Seat.pick(f, cap, 4, C.Seat.pick(f, cap, 5, C.Seat.pick(f, cap, 6, C.Seat.pick(f, cap, 7,
+    C.NONE()))))))),
+  pick_ok(f, cap, 1, C.Seat.pick(f, cap, 2, C.Seat.pick(f, cap, 3,
+    C.Seat.pick(f, cap, 4, C.Seat.pick(f, cap, 5, C.Seat.pick(f, cap, 6, C.Seat.pick(f, cap, 7,
+    C.NONE())))))),
+  pick_ok(f, cap, 2, C.Seat.pick(f, cap, 3,
+    C.Seat.pick(f, cap, 4, C.Seat.pick(f, cap, 5, C.Seat.pick(f, cap, 6, C.Seat.pick(f, cap, 7,
+    C.NONE()))))),
+  pick_ok(f, cap, 3,
+    C.Seat.pick(f, cap, 4, C.Seat.pick(f, cap, 5, C.Seat.pick(f, cap, 6, C.Seat.pick(f, cap, 7,
+    C.NONE())))),
+  pick_ok(f, cap, 4, C.Seat.pick(f, cap, 5, C.Seat.pick(f, cap, 6, C.Seat.pick(f, cap, 7, C.NONE()))),
+  pick_ok(f, cap, 5, C.Seat.pick(f, cap, 6, C.Seat.pick(f, cap, 7, C.NONE())),
+  pick_ok(f, cap, 6, C.Seat.pick(f, cap, 7, C.NONE()),
+  pick_ok(f, cap, 7, C.NONE(), {==}))))))))
+
+def put_ok(+s: U32, +id: U32, +r: U32, +rs: +List<C.Ride>, +acc: +List<C.Board>,
+  +hs: {U32.is_eq(s, C.NONE()) || U32.is_lt(s, C.Ride.seats(C.Ride.kind(C.Rides.get(rs, r)))) == True{} : Bool},
+  +h: {Laws.all_boards_ok(rs, acc) == True{} : Bool})
+  -> {Laws.all_boards_ok(rs, C.Boards.put(s, id, r, acc)) == True{} : Bool}:
+  +cap = C.Ride.seats(C.Ride.kind(C.Rides.get(rs, r)))
+  bcase_eq(U32.is_eq(s, C.NONE()),
+    c => {Laws.all_boards_ok(rs, Bool.pick(+List<C.Board>, c, acc, C.Board{id, r, s} <> acc)) == True{} : Bool},
+    e => h,
+    e => and_i(U32.is_lt(s, cap), Laws.all_boards_ok(rs, acc),
+      or_f(U32.is_eq(s, C.NONE()), U32.is_lt(s, cap), e, hs), h))
+
+def try_ok(+want: Bool, +g: C.Guest, +occ: +List<U32>, +rs: +List<C.Ride>, +sn: C.Stn,
+  +acc: +List<C.Board>, +h: {Laws.all_boards_ok(rs, acc) == True{} : Bool})
+  -> {Laws.all_boards_ok(rs, C.Boards.try(want, g, occ, rs, sn, acc)) == True{} : Bool}:
+  match want:
+    case True{}:
+      +r = C.Guest.tgt(g)
+      +cap = C.Ride.seats(C.Ride.kind(C.Rides.get(rs, r)))
+      +m = (C.Tab.at(occ, r) .|. C.Boards.mask(acc, r, 0) : U32)
+      put_ok(C.Seat.free(m, cap), C.Guest.id(g), r, rs, acc, seat_ok(m, cap), h)
+    case False{}:
+      h
+
+def plan_ok(+gs: +List<C.Guest>, +occ: +List<U32>, +q: C.Q, +rs: +List<C.Ride>, +sn: C.Stn,
+  +ne: +List<U32>, +acc: +List<C.Board>, +h: {Laws.all_boards_ok(rs, acc) == True{} : Bool})
+  -> {Laws.all_boards_ok(rs, C.Boards.plan(gs, occ, q, rs, sn, ne, acc)) == True{} : Bool}:
+  match gs:
+    case []:
+      h
+    case g <> rest:
+      plan_ok(rest, occ, q, rs, sn, ne, C.Boards.try(C.Guest.wants(g, q, rs, sn, ne), g, occ, rs, sn, acc),
+        try_ok(C.Guest.wants(g, q, rs, sn, ne), g, occ, rs, sn, acc, h))
+
+def Laws.capacity_respected(gs, occ, q, rs, stn, ents):
+  plan_ok(gs, occ, q, rs, stn, ents, [], {==})
+
+# Riders: a rider's tick is Guest.off, which sets st to 0 (got off) or 1
+# (still riding) -- never 3 (gone) -- and the needs and clamp keep st.
+def riders_one(+id: U32, +x: U32, +y: U32, +dir: U32, +tgt: U32, +tmr: U32, +cash: U32,
+  +hu: U32, +th: U32, +en: U32, +na: U32, +ha: U32, +lk: U32, +q: C.Q, +rs: +List<C.Ride>,
+  +t: U32, +pl: +List<C.Board>, +sn: C.Stn, +qs: +List<U32>, +ne: +List<U32>)
+  -> {C.Guest.gone(C.Guest.step(C.Guest{id, x, y, dir, 1, tgt, tmr, cash, hu, th, en, na, ha, lk},
+    q, rs, t, pl, sn, qs, ne)) == False{} : Bool}:
+  bcase(C.Guest.done(tmr, dir, tgt, rs, sn),
+    b => {C.Guest.gone(C.Guest.clamp(C.Guest.needs(C.Guest.off(b, id, x, y, dir, tgt, tmr, cash,
+      hu, th, en, na, ha, lk, q, rs), t))) == False{} : Bool},
+    {==}, {==})
+
+def Laws.riders_conserved(g, q, rs, t, plan, stn, qs, ents, h):
+  match g:
+    case C.Guest{id, x, y, dir, st, tgt, tmr, cash, hu, th, en, na, ha, lk}:
+      %Equal.sym(U32, st, 1, h) : {C.Guest.gone(C.Guest.step(C.Guest{id, x, y, dir, _, tgt, tmr, cash,
+        hu, th, en, na, ha, lk}, q, rs, t, plan, stn, qs, ents)) == False{} : Bool}
+      riders_one(id, x, y, dir, tgt, tmr, cash, hu, th, en, na, ha, lk, q, rs, t, plan, stn, qs, ents)
