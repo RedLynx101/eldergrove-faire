@@ -19,8 +19,21 @@ sixteen rules of the park are proven, not just tested, by Bend's checker.
 MIT licensed. See [ROADMAP.md](ROADMAP.md) for how it was built, milestone by milestone, and every
 design call along the way.
 
+## Download
+
+**[Eldergrove Faire v1.0.0 for Linux](https://github.com/RedLynx101/eldergrove-faire/releases/latest)**:
+download `eldergrove-faire-v1.0.0-linux-x86_64.tar.gz`, unpack it, and run `./play.sh`. It needs x86-64
+Linux with glibc 2.34 or newer (Ubuntu 22.04+, Debian 12+, Fedora 35+), plus `libx11-6` (and
+`pulseaudio-utils` for sound). On **Windows 11**, the same download runs through WSL2: double-click
+`Play on Windows (WSL).cmd`.
+
+> **A native Windows `.exe` is planned** as the next release, so Windows players won't need WSL. See
+> [ROADMAP.md](ROADMAP.md#next-m10-a-native-windows-build-planned) for the plan. To build from source
+> instead, see [Build and run](#build-and-run).
+
 ## Contents
 
+- [Download](#download)
 - [Screenshots](#screenshots)
 - [What's in it](#whats-in-it)
 - [Why Bend](#why-bend)
@@ -152,7 +165,8 @@ describe.
 ## Build and run
 
 The game runs on **Linux (x86-64, X11)** and on **Windows 11 through WSL2**, whose built-in graphics
-(WSLg) show the window and play the sound.
+(WSLg) show the window and play the sound. Prebuilt binaries are on the
+[releases page](https://github.com/RedLynx101/eldergrove-faire/releases); these steps build from source.
 
 1. Install Bend (Linux, or Ubuntu under WSL):
 

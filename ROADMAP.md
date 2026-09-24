@@ -1,6 +1,6 @@
 # Eldergrove Faire: Roadmap
 
-Last updated: 2026-09-24 · M1-M9 done.
+Last updated: 2026-09-24 · M1-M9 done; v1.0.0 released for Linux. Next: a native Windows build (M10).
 
 ## Decisions
 
@@ -295,6 +295,10 @@ Small design decisions made while working, listed here so they can be revisited.
   drawing one frame took about 2.3 s under Node, roughly 150 times the native frame. A playable web version
   would compile the C output to WebAssembly (threads need cross-origin isolation headers) with a canvas and
   WebAudio in place of the X11 and PulseAudio effects.
+- **v1.0.0 (Linux) packaging:** a clean build of the committed tree, stripped (4.7 MB), in a tarball with
+  `play.sh` (starts from its own folder, so saves land beside it), `Play on Windows (WSL).cmd` (runs the same
+  binary through WSL until the native build exists), a quick start and the licenses. It needs glibc 2.34+.
+  Before upload it was tested unpacked in a fresh folder, and the Windows launcher was run from Windows.
 
 ## Done: M1, the vertical slice
 Isometric fantasy map, paths, terrain editing, 4 enchanted tree kinds, Dragon Carousel, Arcane Spire, Potion
@@ -527,6 +531,21 @@ longer passes; saved track designs; coaster sounds by type; no coaster limit.
   and a train's seats span two mask words; capacity_respected and seats_unique take each coaster's seat
   count as a parameter (a mechanical law update, stated in LAWS.bend). The riskiest step, so it goes last.
 - **Close:** docs, roadmap page, memory, a report.
+
+## Next: M10, a native Windows build (planned)
+v1.0.0 ships as a Linux x86-64 binary that also runs on Windows 11 through WSL2. M10 makes a native
+Windows `.exe`, so Windows players need nothing else installed.
+
+- **The window effect (`win_frame.c`):** a Win32 version beside the X11 one. It would open a window, blit
+  the frame with GDI (`StretchDIBits`), turn Win32 key and mouse messages into the game's events, and
+  honour the window-size and whole-pixel options.
+- **The sound effect (`snd.c`):** play the same float sample ring through a Windows audio API (WASAPI or
+  waveOut) instead of `pacat`.
+- **The build:** compile Bend's C output for Windows (MinGW-w64 or clang, with a pthreads shim for the
+  runtime's threads), then check speed against the Linux build.
+- **The release:** a zip with `EldergroveFaire.exe`, the quick start and the licenses, built by a script and
+  attached to a GitHub release, then smoke-tested on a Windows machine without WSL.
+- **Unchanged:** the game itself. Only the two effect files and the build differ.
 
 ## Laws
 Proven: money_conserved, headcount_conserved, needs_bounded, coaster_on_circuit, no_collisions,
