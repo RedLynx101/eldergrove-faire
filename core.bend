@@ -1204,7 +1204,7 @@ def Wear.fix(+w: U32) -> U32:
 def REPAIR() -> U32:
   1800
 
-def Wear.tick(+w: U32, +k: U32, +open: U32, +idx: U32, +t: U32, +born: U32) -> U32:
+def Wear.tick(+w: U32, +k: U32, +open: U32, +idx: U32, +t: U32, +born: U32, +boost: Bool) -> U32:
   +rel = Wear.rel(w)
   +brk = Wear.broken(w)
   +runs = U32.is_eq(open, 1) && (Ride.cycles(k) || U32.is_eq(k, 5))
@@ -1216,7 +1216,7 @@ def Wear.tick(+w: U32, +k: U32, +open: U32, +idx: U32, +t: U32, +born: U32) -> U
   +cap = U32.max(sub0(255, ((t - born) / 1200 : U32)), 120)
   +rel3 = sel(fixed, U32.min((rel + 60 : U32), cap), rel2)
   +brk2 = Bool.not(fixed) && (brk || snap)
-  (rel3 .|. sel(brk2, 256, 0) .|. (sel(brk2 && brk, (Wear.fix(w) + 1 : U32), 0) << 16n) : U32)
+  (rel3 .|. sel(brk2, 256, 0) .|. (sel(brk2 && brk, (Wear.fix(w) + sel(boost, 30, 1) : U32), 0) << 16n) : U32)
 
 def Ride.wear(r: Ride) -> U32:
   Ride{kind, x, y, w, h, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate, wear} = r
@@ -1405,6 +1405,12 @@ def Guest.sick(+st: U32, +na: U32, +id: U32, +t: U32) -> Bool:
   (U32.is_eq(st, 0) || U32.is_eq(st, 2)) && (na > 95 : U32) && U32.is_eq((hash(id, t) .&. 511 : U32), 0)
 
 # a guest finishing what they carry this tick (the same test Guest.walk uses)
+def Stamp.now(+t: U32) -> U32:
+  (((t >> 6n) .&. 127) .|. 128 : U32)
+
+def Stamp.recent(+s: U32, +t: U32) -> Bool:
+  U32.is_eq(s, Stamp.now(t)) || U32.is_eq(s, Stamp.now((t - 64 : U32)))
+
 def Guest.walk(g: Guest, +q: Q, +rs: +List<Ride>, +t: U32, +qs: +List<U32>) -> Guest:
   Guest{+id, +x, +y, +dir, +st, +tgt, +tmr, +cash, +hu, +th, +en, +na, +ha,
     +lk, +mind, +bl} = g
@@ -1423,7 +1429,7 @@ def Guest.walk(g: Guest, +q: Q, +rs: +List<Ride>, +t: U32, +qs: +List<U32>) -> G
   +grim = (dirt >= 2 : U32) && U32.is_eq(((t + id) .&. 63 : U32), 0)
   +filthy = (dirt >= 4 : U32) && U32.is_eq(((hash(id, t) >> 4n) .&. 255 : U32), 0)
   # a bench: a tired guest sits down; up again when rested
-  +sit = ctr && U32.is_eq(st, 0) && U32.is_eq((Tile.a(here) .&. 15 : U32), 2) && U32.is_eq(Tile.obj(here), 1)
+  +sit = ctr && U32.is_eq(st, 0) && U32.is_eq((Tile.a(here) .&. 271 : U32), 2) && U32.is_eq(Tile.obj(here), 1)
     && (en < 80 : U32)
   +sitting = U32.is_eq(st, 4)
   +rested = sitting && ((en >= 190 : U32) || U32.is_eq(tmr, 0))
@@ -1474,7 +1480,10 @@ def Guest.walk(g: Guest, +q: Q, +rs: +List<Ride>, +t: U32, +qs: +List<U32>) -> G
   +y2 = sel(go, (y + dy_of(dir2) : U32), y)
   +finish = U32.is_eq(((r >> 8n) .&. 1023 : U32), 0)
   +lk2 = (sel(finish, (lk .&. 4277993471 : U32), (lk .&. 4278190079 : U32)) .|. sel(go, 16777216, 0) : U32)
-  +ha2 = sub0(sub0(ha, sel(dear || fed_up, 6, 0)), sel(sick, 10, sel(grim, sel((dirt >= 6 : U32), 2, 1), 0)))
+  # a Bard playing nearby cheers them up
+  +cheer = Stamp.recent(((Tile.b(here) >> 24n) .&. 255 : U32), t) && U32.is_eq(((t + id) .&. 31 : U32), 0)
+  +ha2 = (sub0(sub0(ha, sel(dear || fed_up, 6, 0)), sel(sick, 10, sel(grim, sel((dirt >= 6 : U32), 2, 1), 0)))
+    + sel(cheer, 3, 0) : U32)
   +en2 = sel(sitting && U32.is_eq(((t + id) .&. 1 : U32), 0), (en + 1 : U32), en)
   Guest{id, x2, y2, dir2, st3, tgt2, tmr2, cash, hu, th, en2, sel(sick, 60, na), ha2, lk2, mind2, bl}
 
@@ -1713,8 +1722,18 @@ def Bin.near.go(on: Bool, +q: Q, +i: U32, +j: U32) -> U32:
 
 # a guest's mess event this tick: a drop (kind 0 or 1), something into a
 # bin (kind 2, the bin's tile), or NONE
+# a miserable guest at a tile centre may smash the furniture there, unless
+# a Watch Knight has passed lately
+def Vandal.smash(+q: Q, +x: U32, +y: U32, +ha: U32, +id: U32, +t: U32) -> Bool:
+  +here = Land.get(q, (x >> 4n : U32), (y >> 4n : U32))
+  +a = Tile.a(here)
+  Guest.at_center(x, y) && (ha < 40 : U32) && U32.is_eq(Tile.obj(here), 1)
+    && Bool.not(U32.is_eq((a .&. 15 : U32), 0)) && U32.is_eq((a .&. 256 : U32), 0)
+    && Bool.not(Stamp.recent(((Tile.b(here) >> 16n) .&. 255 : U32), t))
+    && U32.is_eq((hash3(id, t, y) .&. 255 : U32), 0)
+
 def Mess.event(g: Guest, +plan: +List<Board>, +q: Q, +t: U32) -> U32:
-  Guest{+id, +x, +y, dir, +st, tgt, tmr, cash, hu, th, en, +na, ha, +lk, mind, bl} = g
+  Guest{+id, +x, +y, dir, +st, tgt, tmr, cash, hu, th, en, +na, +ha, +lk, mind, bl} = g
   +walking = Bool.not(U32.is_eq(st, 1)) && Bool.not(Boards.has(plan, id))
   +finish = walking && Guest.finish(id, t, x, lk)
   +bin = Bin.near.go(finish, q, (x >> 4n : U32), (y >> 4n : U32))
@@ -1722,7 +1741,8 @@ def Mess.event(g: Guest, +plan: +List<Board>, +q: Q, +t: U32) -> U32:
   +jy = (((hash(id, t) >> 3n) .&. 7) - 3 : U32)
   sel(walking && Guest.sick(st, na, id, t), Mess.at(1, (x + jx : U32), (y + jy : U32)),
     sel(finish, sel(U32.is_eq(bin, NONE()), Mess.at(0, (x + jx : U32), (y + jy : U32)), (2147483648 .|. bin : U32)),
-      NONE()))
+      sel(walking && Vandal.smash(q, x, y, ha, id, t), (3221225472 .|. pk((x >> 4n : U32), (y >> 4n : U32)) : U32),
+      NONE())))
 
 def Mess.put(on: Bool, +m: U32, +ms: +List<U32>) -> +List<U32>:
   match on:
@@ -1769,7 +1789,7 @@ def Mess.sweeps(+m: U32, +ss: +List<Staff>) -> Bool:
       False{}
     case s <> rest:
       Staff{id, +x, +y, dir, +kind, st, tgt, tmr, zone, look} = s
-      +near = U32.is_eq(kind, 1) && ((absd(x, Mess.x(m)) + absd(y, Mess.y(m))) <= 8 : U32)
+      +near = U32.is_eq(kind, 1) && ((absd(x, Mess.x(m)) + absd(y, Mess.y(m))) <= 12 : U32)
       near || Mess.sweeps(m, rest)
 
 # the mess still lying about, and what was swept up (together, all of it)
@@ -1820,7 +1840,10 @@ def Bin.take(+q: Q, +e: U32) -> Q:
   +i = ((e .&. 4095) >> 6n : U32)
   +j = (e .&. 63 : U32)
   +t = Land.get(q, i, j)
-  Land.set(q, i, j, Tile{Tile.h(t), Tile.ter(t), Tile.obj(t), (Tile.a(t) + 16 : U32), Tile.b(t)})
+  +a = Tile.a(t)
+  +smash = U32.is_eq((e >> 30n : U32), 3)
+  Land.set(q, i, j, Tile{Tile.h(t), Tile.ter(t), Tile.obj(t),
+    sel(smash, (a .|. 256 : U32), sel((((a >> 4n) .&. 15) < 15 : U32), (a + 16 : U32), a)), Tile.b(t)})
 
 def Bin.fill(+es: +List<U32>, +q: Q) -> Q:
   match es:
@@ -1832,10 +1855,19 @@ def Bin.fill(+es: +List<U32>, +q: Q) -> Q:
 # Money: every change to the park's gold is a ledger entry
 # ---------------------------------------------------------
 # kind: 1 ride tickets, 2 upkeep, 3 construction, 4 refunds, 5 food, 6 drinks,
-# 7 entry fees, 8 loans taken, 9 loans repaid, 10 loan interest
+# 7 entry fees, 8 loans taken, 9 loans repaid, 10 loan interest, 11 staff wages
 
+def Fix.has(+xs: +List<U32>, +i: U32) -> Bool:
+  match xs:
+    case []:
+      False{}
+    case x <> rest:
+      U32.is_eq(x, i) || Fix.has(rest, i)
+
+# a Brownie at a tile centre empties the bins on and beside it and mends
+# smashed furniture there
 def Ride.tick(r: Ride, +idx: U32, +q: Q, +ps: +List<Piece>, +occ: +List<U32>,
-  +plan: +List<Board>, +qt: +List<U32>, +fresh: Bool, +t: U32) -> Ride:
+  +plan: +List<Board>, +qt: +List<U32>, +fresh: Bool, +t: U32, +fx: +List<U32>) -> Ride:
   Ride{+kind, +x, +y, +w, h, +price, +open, +ph, +tm, ent, ex, +qlen, +wmin, +wmax, +total, +earned, +born, rate, +wear} = r
   +brk = Wear.broken(wear)
   +n = Seat.count((Tab.at(occ, idx) .|. Boards.mask(plan, idx, 0) : U32))
@@ -1845,15 +1877,15 @@ def Ride.tick(r: Ride, +idx: U32, +q: Q, +ps: +List<Piece>, +occ: +List<U32>,
   Ride{kind, x, y, w, h, price, open, sel(brk, ph, ph2), sel(brk, tm, sel(Ride.cycles(kind), Ride.next_tm(ph, ph2, tm, n), 0)),
     Ride.door(kind, q, ps, x, y, w, 7), Ride.door(kind, q, ps, x, y, w, 1), sel(fresh, Tab.at(qt, idx), qlen),
     wmin, wmax, (total + nb : U32), (earned + nb * price : U32), born, Ride.rating(kind, ps),
-    Wear.tick(wear, kind, open, idx, t, born)}
+    Wear.tick(wear, kind, open, idx, t, born, Fix.has(fx, idx))}
 
 def Rides.tick(+rs: +List<Ride>, +idx: U32, +q: Q, +ps: +List<Piece>, +occ: +List<U32>,
-  +plan: +List<Board>, +qt: +List<U32>, +fresh: Bool, +t: U32) -> +List<Ride>:
+  +plan: +List<Board>, +qt: +List<U32>, +fresh: Bool, +t: U32, +fx: +List<U32>) -> +List<Ride>:
   match rs:
     case []:
       []
     case r <> rest:
-      Ride.tick(r, idx, q, ps, occ, plan, qt, fresh, t) <> Rides.tick(rest, (idx + 1 : U32), q, ps, occ, plan, qt, fresh, t)
+      Ride.tick(r, idx, q, ps, occ, plan, qt, fresh, t, fx) <> Rides.tick(rest, (idx + 1 : U32), q, ps, occ, plan, qt, fresh, t, fx)
 
 # The coaster's ratings from its track: turns and drops thrill, height
 # thrills most, length adds a little; a track that isn't a circuit yet has
@@ -1924,15 +1956,40 @@ def Fin.loan(f: Fin) -> U32:
   Fin{fee, loan, rating, now, last, hist} = f
   loan
 
+def Staff.wage(+k: U32) -> U32:
+  match k:
+    case 1:
+      20
+    case 2:
+      35
+    case 3:
+      30
+    case 4:
+      25
+    case _:
+      0
+
+def Staff.kind(s: Staff) -> U32:
+  Staff{id, x, y, dir, kind, st, tgt, tmr, zone, look} = s
+  kind
+
+def Staff.wages(+ss: +List<Staff>) -> U32:
+  match ss:
+    case []:
+      0
+    case s <> rest:
+      (Staff.wage(Staff.kind(s)) + Staff.wages(rest) : U32)
+
 def Ledger.tick(+gs: +List<Guest>, +rs: +List<Ride>, +t: U32, +plan: +List<Board>,
-  +narr: U32, +f: Fin) -> +List<Txn>:
+  +narr: U32, +f: Fin, +ss: +List<Staff>) -> +List<Txn>:
   +monthly = U32.is_eq((t % MONTH() : U32), 0) && (t > 0 : U32)
   +fees = (narr * U32.min(Fin.fee(f), 40) : U32)
   +interest = (Fin.loan(f) / 80 : U32)
   Ledger.put(Bool.not(U32.is_eq(fees, 0)), Gain{7, fees},
     List.append(&2, Txn, Ledger.sales(plan, rs),
       Bool.pick(+List<Txn>, monthly,
-        Ledger.put(Bool.not(U32.is_eq(interest, 0)), Spend{10, interest}, Ledger.upkeep(rs)), [])))
+        Ledger.put(Bool.not(U32.is_eq(interest, 0)), Spend{10, interest},
+          Ledger.put(Bool.not(U32.is_eq(Staff.wages(ss), 0)), Spend{11, Staff.wages(ss)}, Ledger.upkeep(rs))), [])))
 
 # The books: every ledger entry is added to this month's column
 def Txn.book(t: Txn, +tab: +List<U32>) -> +List<U32>:
@@ -1998,7 +2055,7 @@ def Wins32.take(+n: Nat, +xs: +List<U32>) -> +List<U32>:
 def Fin.fresh(month: Bool, +now: +List<U32>) -> +List<U32>:
   match month:
     case True{}:
-      Tab.zero(10, [])
+      Tab.zero(11, [])
     case False{}:
       now
 
@@ -2204,7 +2261,7 @@ def Track.tick(t: Track) -> Track:
 # gold by ledger kind (index kind - 1); hist: the guest count, sampled eight
 # times a month, newest first (32 samples)
 def Fin.new() -> Fin:
-  Fin{0, 0, 600, Tab.zero(10, []), Tab.zero(10, []), []}
+  Fin{0, 0, 600, Tab.zero(11, []), Tab.zero(11, []), []}
 
 def Fin.now(f: Fin) -> +List<U32>:
   Fin{fee, loan, rating, now, last, hist} = f
@@ -2243,6 +2300,209 @@ def Track.pieces(t: Track) -> +List<Piece>:
   Track{pieces, open, blocks, start, end} = t
   pieces
 
+# Staff at work
+# -------------
+# Wages a month: Brownies 20, Tinkers 35, Watch Knights 30, Bards 25. Hired
+# staff start at the gate; each has a post (a ride's tile, taken in turn)
+# that they patrol around when they have nothing better to do.
+def Staff.count(+ss: +List<Staff>, +k: U32) -> U32:
+  match ss:
+    case []:
+      0
+    case s <> rest:
+      (sel(U32.is_eq(Staff.kind(s), k), 1, 0) + Staff.count(rest, k) : U32)
+
+def Staff.post(+rs: +List<Ride>, +n: U32) -> U32:
+  +m = len32(Ride, rs)
+  +r = Rides.get(rs, sel(U32.is_eq(m, 0), 0, (n % U32.max(m, 1) : U32)))
+  sel(U32.is_eq(m, 0), pk(GATE_X(), (GATE_Y() - 2 : U32)), pk(Ride.cx(r), Ride.cy(r)))
+
+def Staff.new(+k: U32, +t: U32, +n: U32, +post: U32) -> Staff:
+  Staff{(t * 64 + n : U32), (GATE_X() * 16 + 8 : U32), (GATE_Y() * 16 + 8 : U32), 3, k, 0, NONE(), 0,
+    post, hash(t, (n + 5 : U32))}
+
+def Staff.fire(+ss: +List<Staff>, +k: U32) -> +List<Staff>:
+  match ss:
+    case []:
+      []
+    case s <> rest:
+      Bool.pick(+List<Staff>, U32.is_eq(Staff.kind(s), k), rest, s <> Staff.fire(rest, k))
+
+# park ops 21-24 hire one of kind 1-4 (at most 40 staff), 31-34 let one go
+def Staff.op(+ss: +List<Staff>, +op: U32, +t: U32, +rs: +List<Ride>) -> +List<Staff>:
+  +hire = (op >= 21 : U32) && (op <= 24 : U32) && (len32(Staff, ss) < 40 : U32)
+  +fire = (op >= 31 : U32) && (op <= 34 : U32)
+  +k = sel(hire, (op - 20 : U32), (op - 30 : U32))
+  Bool.pick(+List<Staff>, hire,
+    List.append(&2, Staff, ss, [Staff.new(k, t, len32(Staff, ss), Staff.post(rs, Staff.count(ss, k)))]),
+    Bool.pick(+List<Staff>, fire, Staff.fire(ss, k), ss))
+
+# the tile of the mess nearest to both the Brownie and their post (within 12
+# tiles of the post, and scoring under 24), or NONE
+def Mess.near(+ms: +List<U32>, +i: U32, +j: U32, +zone: U32, +best: U32, +bd: U32) -> U32:
+  match ms:
+    case []:
+      sel((bd < 24 : U32), best, NONE())
+    case m <> rest:
+      +mi = (Mess.x(m) >> 4n : U32)
+      +mj = (Mess.y(m) >> 4n : U32)
+      +d = (absd(mi, i) + absd(mj, j) : U32)
+      +zd = (absd(mi, (zone >> 6n : U32)) + absd(mj, (zone .&. 63 : U32)) : U32)
+      +take = (d + zd < bd : U32) && (zd <= 12 : U32)
+      Mess.near(rest, i, j, zone, sel(take, pk(mi, mj), best), sel(take, (d + zd : U32), bd))
+
+# the nearest broken-down ride (its index), or NONE
+def Rides.broken_near(+rs: +List<Ride>, +idx: U32, +i: U32, +j: U32, +best: U32, +bd: U32) -> U32:
+  match rs:
+    case []:
+      best
+    case r <> rest:
+      +d = (absd(Ride.cx(r), i) + absd(Ride.cy(r), j) : U32)
+      +take = Wear.broken(Ride.wear(r)) && (d < bd : U32)
+      Rides.broken_near(rest, (idx + 1 : U32), i, j, sel(take, idx, best), sel(take, d, bd))
+
+# where a Tinker works on a ride: its exit, else its entrance
+def Ride.work_tile(r: Ride) -> U32:
+  +r2 = r
+  sel(U32.is_eq(Ride.ex(r2), NONE()), Ride.ent(r2), Ride.ex(r2))
+
+# a staff member's next job at a tile centre: tgt | ride << 12 | st << 20
+# (st 0 patrolling, 1 heading somewhere, 2 at work)
+def Staff.job.go(+k: U32, +rs: +List<Ride>, +ms: +List<U32>, +i: U32, +j: U32, +here: U32, +zone: U32, +patrol: U32) -> U32:
+  match k:
+    case 1:
+      +m = Mess.near(ms, i, j, zone, NONE(), 99999)
+      sel(U32.is_eq(m, NONE()), patrol, (m .|. (255 << 12n) .|. (sel(U32.is_eq(m, here), 2, 1) << 20n) : U32))
+    case 2:
+      +r = Rides.broken_near(rs, 0, i, j, NONE(), 99999)
+      +w = Ride.work_tile(Rides.get(rs, r))
+      +ok = Bool.not(U32.is_eq(r, NONE())) && Bool.not(U32.is_eq(w, NONE()))
+      sel(ok, ((w .&. 4095) .|. ((r .&. 255) << 12n) .|. (sel(U32.is_eq(w, here), 2, 1) << 20n) : U32), patrol)
+    case _:
+      patrol
+
+def Staff.job(+k: U32, +rs: +List<Ride>, +ms: +List<U32>, +i: U32, +j: U32, +zone: U32) -> U32:
+  +zd = (absd((zone >> 6n : U32), i) + absd((zone .&. 63 : U32), j) : U32)
+  Staff.job.go(k, rs, ms, i, j, pk(i, j), zone,
+    sel((zd > 6 : U32), (zone .|. (1 << 20n) : U32), (4095 .|. (255 << 12n) : U32)))
+
+def Staff.job_if(now: Bool, +k: U32, +rs: +List<Ride>, +ms: +List<U32>, +i: U32, +j: U32, +zone: U32,
+  +st: U32, +tgt: U32, +tmr: U32) -> U32:
+  match now:
+    case True{}:
+      Staff.job(k, rs, ms, i, j, zone)
+    case False{}:
+      ((tgt .&. 4095) .|. ((tmr .&. 255) << 12n) .|. (st << 20n) : U32)
+
+# a step: at a tile centre take the next job and pick a way; walk a pixel a
+# tick along the paths (queues too); a Tinker at work stands still
+def Staff.step(s: Staff, +q: Q, +rs: +List<Ride>, +ms: +List<U32>, +t: U32) -> Staff:
+  Staff{+id, +x, +y, +dir, +kind, +st, +tgt, +tmr, +zone, +look} = s
+  +i = (x >> 4n : U32)
+  +j = (y >> 4n : U32)
+  +here = Land.get(q, i, j)
+  +h = Tile.h(here)
+  +ctr = Guest.at_center(x, y)
+  +onq = U32.is_eq(Tile.obj(here), 7)
+  +fe = Bool.not(onq) || U32.is_eq(Tile.a(here), 1)
+  +job = Staff.job_if(ctr, kind, rs, ms, i, j, zone, st, tgt, tmr)
+  +tg = (job .&. 4095 : U32)
+  +st2 = (job >> 20n : U32)
+  +none = U32.is_eq(tg, 4095)
+  +tx = sel(none, i, (tg >> 6n : U32))
+  +ty = sel(none, j, (tg .&. 63 : U32))
+  +work = U32.is_eq(st2, 2) && U32.is_eq(kind, 2)
+  +dir2 = Guest.steer(ctr && Bool.not(work), q, i, j, h, dir, tx, ty, hash(id, t), True{}, onq, fe, 0)
+  +go = Bool.not(work) && (Bool.not(ctr) || Guest.can_step(q, i, j, h, dir2, True{}, onq, fe))
+  Staff{id, sel(go, (x + dx_of(dir2) : U32), x), sel(go, (y + dy_of(dir2) : U32), y), dir2, kind, st2,
+    sel(none, NONE(), tg), ((job >> 12n) .&. 255 : U32), zone, look}
+
+def Staff.steps(+ss: +List<Staff>, +q: Q, +rs: +List<Ride>, +ms: +List<U32>, +t: U32) -> +List<Staff>:
+  match ss:
+    case []:
+      []
+    case s <> rest:
+      Staff.step(s, q, rs, ms, t) <> Staff.steps(rest, q, rs, ms, t)
+
+# the rides Tinkers are working on
+def Staff.fixing(+ss: +List<Staff>) -> +List<U32>:
+  match ss:
+    case []:
+      []
+    case s <> rest:
+      Staff{id, x, y, dir, +kind, +st, tgt, +tmr, zone, look} = s
+      Mess.put(U32.is_eq(kind, 2) && U32.is_eq(st, 2), tmr, Staff.fixing(rest))
+
+def Tend.set(on: Bool, +q: Q, +i: U32, +j: U32, t: Tile) -> Q:
+  match on:
+    case True{}:
+      Land.set(q, i, j, t)
+    case False{}:
+      q
+
+def Tend.tile(+q: Q, +i: U32, +j: U32) -> Q:
+  +t = Land.get(q, i, j)
+  +a = Tile.a(t)
+  +need = U32.is_eq(Tile.obj(t), 1) && Bool.not(U32.is_eq((a .&. 15 : U32), 0))
+    && Bool.not(U32.is_eq(((a >> 4n) .&. 31 : U32), 0))
+  Tend.set(need, q, i, j, Tile{Tile.h(t), Tile.ter(t), 1, (a .&. 15 : U32), Tile.b(t)})
+
+def Tend.go(on: Bool, +q: Q, +i: U32, +j: U32) -> Q:
+  match on:
+    case True{}:
+      Tend.tile(Tend.tile(Tend.tile(Tend.tile(Tend.tile(q, i, j), (i + 1 : U32), j), (i - 1 : U32), j),
+        i, (j + 1 : U32)), i, (j - 1 : U32))
+    case False{}:
+      q
+
+def Staff.tend(+ss: +List<Staff>, +q: Q) -> Q:
+  match ss:
+    case []:
+      q
+    case s <> rest:
+      Staff{id, +x, +y, dir, +kind, st, tgt, tmr, zone, look} = s
+      Staff.tend(rest, Tend.go(U32.is_eq(kind, 1) && Guest.at_center(x, y), q, (x >> 4n : U32), (y >> 4n : U32)))
+
+# Watch Knights and Bards leave a mark on the paved tiles around them (tile
+# b bits 16-23 and 24-31: the time, in 64-tick steps, with bit 7 set), which
+# guests read: a Knight nearby keeps them from vandalism, a Bard cheers them
+def Stamp.tile(+q: Q, +i: U32, +j: U32, +sh: Nat, +v: U32) -> Q:
+  +t = Land.get(q, i, j)
+  +o = Tile.obj(t)
+  +paved = U32.is_eq(o, 1) || U32.is_eq(o, 5) || U32.is_eq(o, 7)
+  +b = Tile.b(t)
+  Tend.set(paved && inmap(i, j), q, i, j,
+    Tile{Tile.h(t), Tile.ter(t), o, Tile.a(t), ((b .&. (4294967295 - (255 << sh))) .|. (v << sh) : U32)})
+
+def Stamp.area(+n: Nat, +k: U32, +w: U32, +q: Q, +ci: U32, +cj: U32, +sh: Nat, +v: U32) -> Q:
+  match n:
+    case 0n:
+      q
+    case 1n+m:
+      +r = (w >> 1n : U32)
+      Stamp.area(m, (k + 1 : U32), w, Stamp.tile(q, (ci + (k % w) - r : U32), (cj + (k / w) - r : U32), sh, v),
+        ci, cj, sh, v)
+
+def Staff.stamp(+ss: +List<Staff>, +q: Q, +t: U32) -> Q:
+  match ss:
+    case []:
+      q
+    case s <> rest:
+      Staff{id, +x, +y, dir, +kind, st, tgt, tmr, zone, look} = s
+      +knight = U32.is_eq(kind, 3)
+      +bard = U32.is_eq(kind, 4)
+      +w = sel(knight, 5, 3)
+      Staff.stamp(rest, Bool.pick(Q, knight || bard,
+        Stamp.area(U32.to_nat((w * w : U32)), 0, w, q, (x >> 4n : U32), (y >> 4n : U32), Bool.pick(Nat, knight, 16n, 24n), Stamp.now(t)),
+        q), t)
+
+def Staff.stamp_if(now: Bool, +ss: +List<Staff>, +q: Q, +t: U32) -> Q:
+  match now:
+    case True{}:
+      Staff.stamp(ss, q, t)
+    case False{}:
+      q
+
 def Park.tick(p: Park) -> Out:
   Park{+map, +guests, +rides, +track, cash, +time, +nid, +fin, +mess, +staff} = p
   +stn = Track.stn(track)
@@ -2250,17 +2510,18 @@ def Park.tick(p: Park) -> Out:
   +plan = Boards.plan(guests, occ, map, rides, stn, [])
   +moved = Guests.step(guests, map, rides, time, plan, stn, Queue.list(guests, map, []))
   +arr = Guests.arrivals(guests, rides, time, nid, fin)
-  +led = Ledger.tick(guests, rides, time, plan, len32(Guest, arr), fin)
+  +led = Ledger.tick(guests, rides, time, plan, len32(Guest, arr), fin, staff)
   +evs = Mess.events(guests, plan, map, time)
   +drops = Mess.drops(evs, (len32(U32, mess) < 600 : U32))
   +swept = Mess.swept(mess, staff)
-  +map2 = Mess.mark(swept, False{}, Mess.mark(drops, True{}, Bin.fill(Mess.only(evs, False{}), map)))
+  +map1 = Mess.mark(swept, False{}, Mess.mark(drops, True{}, Bin.fill(Mess.only(evs, False{}), map)))
+  +map2 = Staff.stamp_if(U32.is_eq((time .&. 63 : U32), 0), staff, Staff.tend(staff, map1), time)
   Out{Park{map2, List.append(&2, Guest, arr, Guests.stay(moved)),
     Rides.tick(rides, 0, map, Track.pieces(track), occ, plan,
-      Qlen.fill_if(U32.is_eq((time .&. 15 : U32), 0), guests, map, len32(Ride, rides)), U32.is_eq((time .&. 15 : U32), 0), time),
+      Qlen.fill_if(U32.is_eq((time .&. 15 : U32), 0), guests, map, len32(Ride, rides)), U32.is_eq((time .&. 15 : U32), 0), time, Staff.fixing(staff)),
     Track.tick(track), Ledger.apply(led, cash), (time + 1 : U32),
     (nid + len32(Guest, arr) : U32), Fin.tick(fin, time, guests, rides, len32(U32, mess)),
-    List.append(&2, U32, drops, Mess.kept(mess, staff)), staff}, led, arr, Guests.left(moved), drops, swept}
+    List.append(&2, U32, drops, Mess.kept(mess, staff)), Staff.steps(staff, map, rides, mess, time)}, led, arr, Guests.left(moved), drops, swept}
 
 # Building
 # --------
@@ -2653,13 +2914,13 @@ def Fin.set(f: Fin, +op: U32, +borrow: Bool, +repay: Bool) -> Fin:
     sel(borrow, (loan + 1000 : U32), sel(repay, (loan - 1000 : U32), loan)), rating, now, last, hist}
 
 def Park.park_op(p: Park, +op: U32) -> Out:
-  Park{map, guests, rides, track, +cash, time, nid, +fin, mess, staff} = p
+  Park{map, guests, +rides, track, +cash, +time, nid, +fin, mess, +staff} = p
   +loan = Fin.loan(fin)
   +borrow = U32.is_eq(op, 2) && (loan + 1000 <= 20000 : U32)
   +repay = U32.is_eq(op, 3) && (loan >= 1000 : U32) && Bool.not(neg(cash)) && (cash >= 1000 : U32)
   +led = Bool.pick(+List<Txn>, borrow, [Gain{8, 1000}], Bool.pick(+List<Txn>, repay, [Spend{9, 1000}], []))
-  Out{Park{map, guests, rides, track, Ledger.apply(led, cash), time, nid, Fin.set(fin, op, borrow, repay), mess, staff},
-    led, [], [], [], []}
+  Out{Park{map, guests, rides, track, Ledger.apply(led, cash), time, nid, Fin.set(fin, op, borrow, repay), mess,
+    Staff.op(staff, op, time, rides)}, led, [], [], [], []}
 
 # every step's ledger goes into the books
 def Out.book(o: Out) -> Out:

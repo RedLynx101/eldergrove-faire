@@ -64,6 +64,25 @@ Small design decisions made while working, listed here so they can be revisited.
   think "stuck on the ...". Until Tinkers arrive (spike 6) a breakdown clears itself after 1800 ticks, and a
   repair adds 60 points, capped by age (the cap falls 3 points a month, to no lower than 47%). On the starter
   park, reliability settles between 60% and 80% over the first year. Shops and privies never break.
+- **Staff posts instead of drawn patrol zones.** Each hire gets a post, a ride's tile taken in turn, and
+  patrols within 6 tiles of it when idle. Brownies go for the litter that is nearest counting both their own
+  distance and their post's (within 12 tiles of the post), so two Brownies spread out. Drawing zones by
+  hand can come with the interface revamp if posts prove too coarse.
+- **What each job does.** Brownies sweep what lies within three quarters of a tile of them, empty bins on
+  and beside their tile and mend smashed furniture. Tinkers walk to a broken ride's exit (or entrance) and
+  repair it 30 times faster than it would repair itself (about a second). Watch Knights and Bards mark the
+  paved tiles around them every 64 ticks; guests read the marks: no vandalism within two tiles of a Knight's
+  recent path, and a Bard's music within one tile adds happiness.
+- **Vandalism came with the Knights.** A miserable guest (happiness under 40) at a tile centre may smash
+  the furniture there (1 in 256 per visit). A smashed bench can't be sat on, a smashed bin takes nothing and
+  a smashed lantern goes dark, until a Brownie mends it.
+- **Wages:** Brownies 20, Tinkers 35, Watch Knights 30, Bards 25 gold a month, paid as one ledger entry
+  (kind 11, "staff wages" in the finances window). At most 40 staff. The starter park comes with two
+  Brownies, a Tinker, a Knight and a Bard (130 a month). On the starter park at month 3 they cut litter from
+  118 pieces to 36 and raise happiness from 52% to 59%.
+- **wages_booked is stated over lists.** Proofs can't normalise arithmetic on symbolic numbers, so the law
+  says: the wage entries a step books are exactly one entry of the staff's monthly total when a tick turns
+  the month (none with no staff), and none otherwise. With money_conserved, that pins wages to the ledger.
 
 ## Done: M1, the vertical slice
 Isometric fantasy map, paths, terrain editing, 4 enchanted tree kinds, Dragon Carousel, Arcane Spire, Potion
@@ -176,7 +195,7 @@ machine: `PARK_PROF=1 ./park --live 700 1500`.
 - Guests may pick a ride whose queue is on the far side of the park.
 - There is no music volume control besides on/off.
 
-## M5: Controls, problems, staff and people (in progress: spikes 1-5 done)
+## M5: Controls, problems, staff and people (in progress: spikes 1-6 and the laws done)
 Spikes, in order:
 
 1. (Done) **Controls and camera.** WASD (and the arrows) move the camera. Zoom in and out, in three steps (close,
@@ -193,7 +212,7 @@ Spikes, in order:
 4. (Done) **The Privy.** Toilets, and a bathroom need.
 5. (Done) **Breakdowns.** Rides lose reliability with age and break down; riders get stuck and unhappy until a
    repair.
-6. **Staff**, hired from a staff window, with wages (through the ledger) and patrol areas:
+6. (Done) **Staff**, hired from a staff window, with wages (through the ledger) and patrol areas:
    - Brownies (handymen) sweep litter, empty bins and water flowers.
    - Dwarven Tinkers (mechanics) inspect and repair rides.
    - Watch Knights (security) deter vandals, who smash benches and lamps.
@@ -211,7 +230,7 @@ Spikes, in order:
    - an options window: window size (1024×640, 1280×800, 1600×1000), pixel scale, and dynamic resolution
      (the drawn resolution drops when the frame rate falls below 60, and comes back when it recovers);
    - music and effects volume.
-9. Laws: **litter_accounted** (litter appears only when a guest drops it or is sick, and disappears only when
+9. (Done) Laws: **litter_accounted** (litter appears only when a guest drops it or is sick, and disappears only when
    a Brownie sweeps it or a bin takes it) and **wages_booked** (every wage goes through the ledger).
 
 ## M6: More to build
@@ -256,8 +275,8 @@ Proven: money_conserved, headcount_conserved, needs_bounded, coaster_on_circuit,
 save_load_roundtrip, capacity_respected, riders_conserved.
 Proven in M4: board_only_when_loading, ride_until_unloading, seats_unique, purchase_is_transfer,
 prices_bounded (thirteen in all).
-Proven in M5: litter_accounted (fourteen in all).
-Planned: wages_booked (M5); open_only_tested, and coaster_on_circuit and no_collisions
+Proven in M5: litter_accounted, wages_booked (fifteen in all).
+Planned: open_only_tested, and coaster_on_circuit and no_collisions
 extended to every coaster (M8).
 Proof maintenance rule: keep the code field-wise (each park field updated by its own function) so
 existing proofs survive new features.

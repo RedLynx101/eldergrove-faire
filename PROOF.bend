@@ -902,17 +902,17 @@ def fee_cap_ok(+v: U32) -> {U32.is_le(C.Fee.cap(v), 40) == True{} : Bool}:
     e => Equal.sym(Bool, True{}, U32.is_le(v, 40), e), e => {==})
 
 def tick_ok(+rs: +List<C.Ride>, +idx: U32, +q: C.Q, +ps: +List<C.Piece>, +occ: +List<U32>,
-  +plan: +List<C.Board>, +qt: +List<U32>, +fr: Bool, +t: U32, +h: {Laws.prices_ok(rs) == True{} : Bool})
-  -> {Laws.prices_ok(C.Rides.tick(rs, idx, q, ps, occ, plan, qt, fr, t)) == True{} : Bool}:
+  +plan: +List<C.Board>, +qt: +List<U32>, +fr: Bool, +t: U32, +fx: +List<U32>, +h: {Laws.prices_ok(rs) == True{} : Bool})
+  -> {Laws.prices_ok(C.Rides.tick(rs, idx, q, ps, occ, plan, qt, fr, t, fx)) == True{} : Bool}:
   match rs:
     case []:
       {==}
     case r <> rest:
       match r:
         case C.Ride{kind, x, y, w, hh, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate, wear}:
-          and_i(U32.is_le(price, 20), Laws.prices_ok(C.Rides.tick(rest, (idx + 1 : U32), q, ps, occ, plan, qt, fr, t)),
+          and_i(U32.is_le(price, 20), Laws.prices_ok(C.Rides.tick(rest, (idx + 1 : U32), q, ps, occ, plan, qt, fr, t, fx)),
             and_l(U32.is_le(price, 20), Laws.prices_ok(rest), h),
-            tick_ok(rest, (idx + 1 : U32), q, ps, occ, plan, qt, fr, t, and_r(U32.is_le(price, 20), Laws.prices_ok(rest), h)))
+            tick_ok(rest, (idx + 1 : U32), q, ps, occ, plan, qt, fr, t, fx, and_r(U32.is_le(price, 20), Laws.prices_ok(rest), h)))
 
 def coaster_ok(+rs: +List<C.Ride>, +op: U32, +h: {Laws.prices_ok(rs) == True{} : Bool})
   -> {Laws.prices_ok(C.Rides.coaster(rs, op)) == True{} : Bool}:
@@ -1011,8 +1011,8 @@ def pb_go(+a: C.Act, +map: C.Q, +guests: +List<C.Guest>, +rides: +List<C.Ride>, 
       +pl = C.Boards.plan(guests, occ, map, rides, sn, [])
       +fr = U32.is_eq((time .&. 15 : U32), 0)
       +qt = C.Qlen.fill_if(fr, guests, map, C.len32(C.Ride, rides))
-      and_i(Laws.prices_ok(C.Rides.tick(rides, 0, map, C.Track.pieces(track), occ, pl, qt, fr, time)), U32.is_le(fee, 40),
-        tick_ok(rides, 0, map, C.Track.pieces(track), occ, pl, qt, fr, time, and_l(Laws.prices_ok(rides), U32.is_le(fee, 40), h)), and_r(Laws.prices_ok(rides), U32.is_le(fee, 40), h))
+      and_i(Laws.prices_ok(C.Rides.tick(rides, 0, map, C.Track.pieces(track), occ, pl, qt, fr, time, C.Staff.fixing(staff))), U32.is_le(fee, 40),
+        tick_ok(rides, 0, map, C.Track.pieces(track), occ, pl, qt, fr, time, C.Staff.fixing(staff), and_l(Laws.prices_ok(rides), U32.is_le(fee, 40), h)), and_r(Laws.prices_ok(rides), U32.is_le(fee, 40), h))
     case C.Build{tool, x, y, v}:
       and_i(Laws.prices_ok(C.Build.rides(C.Build.ok(map, track, cash, tool, x, y), map, rides, tool, x, y, time)),
         U32.is_le(fee, 40), build_ok(C.Build.ok(map, track, cash, tool, x, y), map, rides, tool, x, y, time, and_l(Laws.prices_ok(rides), U32.is_le(fee, 40), h)), and_r(Laws.prices_ok(rides), U32.is_le(fee, 40), h))
@@ -1097,3 +1097,117 @@ def Laws.litter_accounted(p, a):
           {==}
         case C.ParkOp{op}:
           {==}
+
+# Wages
+# -----
+# Only one entry any step books has kind 11: the monthly wage bill in
+# Ledger.tick. Sales and fees are gains; upkeep (2), construction (3),
+# loans repaid (9) and interest (10) are other kinds. So the wage list of a
+# step's ledger is that bill, or nothing.
+def wl_upkeep(+rs: +List<C.Ride>) -> {Laws.wage_list(C.Ledger.upkeep(rs)) == [] : List<U32>}:
+  match rs:
+    case []:
+      {==}
+    case r <> rest:
+      bcase(Bool.not(U32.is_eq(C.Ride.kind(r), 0)),
+        b => {Laws.wage_list(C.Ledger.put(b, C.Spend{2, C.Ride.upkeep(C.Ride.kind(r))}, C.Ledger.upkeep(rest))) == [] : List<U32>},
+        wl_upkeep(rest), wl_upkeep(rest))
+
+def wl_sales(+pl: +List<C.Board>, +rs: +List<C.Ride>, +ys: +List<C.Txn>)
+  -> {Laws.wage_list(List.append(&2, C.Txn, C.Ledger.sales(pl, rs), ys)) == Laws.wage_list(ys) : List<U32>}:
+  match pl:
+    case []:
+      {==}
+    case b <> rest:
+      match b:
+        case C.Board{g, ride, seat}:
+          wl_sales(rest, rs, ys)
+
+# the bill itself: there when there is one
+def wl_bill(+w: Bool, +v: U32, +rs: +List<C.Ride>)
+  -> {Laws.wage_list(C.Ledger.put(w, C.Spend{11, v}, C.Ledger.upkeep(rs))) == Bool.pick(List<U32>, w, [v], []) : List<U32>}:
+  bcase(w, b => {Laws.wage_list(C.Ledger.put(b, C.Spend{11, v}, C.Ledger.upkeep(rs))) == Bool.pick(List<U32>, b, [v], []) : List<U32>},
+    %Equal.sym(List<U32>, Laws.wage_list(C.Ledger.upkeep(rs)), [], wl_upkeep(rs)) : {v <> _ == [v] : List<U32>}
+    {==},
+    wl_upkeep(rs))
+
+def wl_month(+c: Bool, +i: U32, +w: Bool, +v: U32, +rs: +List<C.Ride>)
+  -> {Laws.wage_list(C.Ledger.put(c, C.Spend{10, i}, C.Ledger.put(w, C.Spend{11, v}, C.Ledger.upkeep(rs))))
+      == Bool.pick(List<U32>, w, [v], []) : List<U32>}:
+  bcase(c, b => {Laws.wage_list(C.Ledger.put(b, C.Spend{10, i}, C.Ledger.put(w, C.Spend{11, v}, C.Ledger.upkeep(rs))))
+      == Bool.pick(List<U32>, w, [v], []) : List<U32>},
+    wl_bill(w, v, rs), wl_bill(w, v, rs))
+
+def wl_fees(+c: Bool, +f: U32, +ys: +List<C.Txn>)
+  -> {Laws.wage_list(C.Ledger.put(c, C.Gain{7, f}, ys)) == Laws.wage_list(ys) : List<U32>}:
+  bcase(c, b => {Laws.wage_list(C.Ledger.put(b, C.Gain{7, f}, ys)) == Laws.wage_list(ys) : List<U32>}, {==}, {==})
+
+def wl_tick(+gs: +List<C.Guest>, +rs: +List<C.Ride>, +t: U32, +pl: +List<C.Board>, +narr: U32, +f: C.Fin,
+  +ss: +List<C.Staff>)
+  -> {Laws.wage_list(C.Ledger.tick(gs, rs, t, pl, narr, f, ss))
+      == Bool.pick(List<U32>, U32.is_eq((t % 3600 : U32), 0) && (t > 0 : U32) && Bool.not(U32.is_eq(C.Staff.wages(ss), 0)),
+        [C.Staff.wages(ss)], []) : List<U32>}:
+  +fees = (narr * U32.min(C.Fin.fee(f), 40) : U32)
+  +i = (C.Fin.loan(f) / 80 : U32)
+  +w = Bool.not(U32.is_eq(C.Staff.wages(ss), 0))
+  +inner = C.Ledger.put(Bool.not(U32.is_eq(i, 0)), C.Spend{10, i}, C.Ledger.put(w, C.Spend{11, C.Staff.wages(ss)}, C.Ledger.upkeep(rs)))
+  bcase(U32.is_eq((t % 3600 : U32), 0) && (t > 0 : U32),
+    m => {Laws.wage_list(C.Ledger.put(Bool.not(U32.is_eq(fees, 0)), C.Gain{7, fees},
+        List.append(&2, C.Txn, C.Ledger.sales(pl, rs), Bool.pick(+List<C.Txn>, m, inner, []))))
+      == Bool.pick(List<U32>, m && w, [C.Staff.wages(ss)], []) : List<U32>},
+    %Equal.sym(List<U32>, Laws.wage_list(C.Ledger.put(Bool.not(U32.is_eq(fees, 0)), C.Gain{7, fees}, List.append(&2, C.Txn, C.Ledger.sales(pl, rs), inner))),
+        Laws.wage_list(List.append(&2, C.Txn, C.Ledger.sales(pl, rs), inner)),
+        wl_fees(Bool.not(U32.is_eq(fees, 0)), fees, List.append(&2, C.Txn, C.Ledger.sales(pl, rs), inner))) : {_ == Bool.pick(List<U32>, w, [C.Staff.wages(ss)], []) : List<U32>}
+    %Equal.sym(List<U32>, Laws.wage_list(List.append(&2, C.Txn, C.Ledger.sales(pl, rs), inner)), Laws.wage_list(inner),
+        wl_sales(pl, rs, inner)) : {_ == Bool.pick(List<U32>, w, [C.Staff.wages(ss)], []) : List<U32>}
+    wl_month(Bool.not(U32.is_eq(i, 0)), i, w, C.Staff.wages(ss), rs),
+    %Equal.sym(List<U32>, Laws.wage_list(C.Ledger.put(Bool.not(U32.is_eq(fees, 0)), C.Gain{7, fees}, List.append(&2, C.Txn, C.Ledger.sales(pl, rs), []))),
+        Laws.wage_list(List.append(&2, C.Txn, C.Ledger.sales(pl, rs), [])),
+        wl_fees(Bool.not(U32.is_eq(fees, 0)), fees, List.append(&2, C.Txn, C.Ledger.sales(pl, rs), []))) : {_ == [] : List<U32>}
+    wl_sales(pl, rs, []))
+
+def wl_build(+ok: Bool, +q: C.Q, +rs: +List<C.Ride>, +tool: U32, +x: U32, +y: U32)
+  -> {Laws.wage_list(C.Build.ledger(ok, q, rs, tool, x, y)) == [] : List<U32>}:
+  match ok:
+    case True{}:
+      bcase(U32.is_eq(tool, 9),
+        b => {Laws.wage_list(Bool.pick(+List<C.Txn>, b, [C.Gain{4, C.Build.refund(q, rs, x, y)}], [C.Spend{3, C.Build.cost(tool)}])) == [] : List<U32>},
+        {==}, {==})
+    case False{}:
+      {==}
+
+def wl_track(+ok: Bool, +op: U32) -> {Laws.wage_list(C.TrackOp.ledger(ok, op)) == [] : List<U32>}:
+  match ok:
+    case True{}:
+      bcase((op < 7 : U32),
+        b => {Laws.wage_list(Bool.pick(+List<C.Txn>, b, [C.Spend{3, 40}],
+          Bool.pick(+List<C.Txn>, U32.is_eq(op, 7), [C.Gain{4, 20}], []))) == [] : List<U32>},
+        {==},
+        bcase(U32.is_eq(op, 7), b => {Laws.wage_list(Bool.pick(+List<C.Txn>, b, [C.Gain{4, 20}], [])) == [] : List<U32>},
+          {==}, {==}))
+    case False{}:
+      {==}
+
+def wl_loans(+b: Bool, +r: Bool)
+  -> {Laws.wage_list(Bool.pick(+List<C.Txn>, b, [C.Gain{8, 1000}], Bool.pick(+List<C.Txn>, r, [C.Spend{9, 1000}], []))) == [] : List<U32>}:
+  bcase(b, c => {Laws.wage_list(Bool.pick(+List<C.Txn>, c, [C.Gain{8, 1000}], Bool.pick(+List<C.Txn>, r, [C.Spend{9, 1000}], []))) == [] : List<U32>},
+    {==},
+    bcase(r, c => {Laws.wage_list(Bool.pick(+List<C.Txn>, c, [C.Spend{9, 1000}], [])) == [] : List<U32>}, {==}, {==}))
+
+def Laws.wages_booked(p, a):
+  match p:
+    case C.Park{map, guests, rides, track, cash, time, nid, fin, mess, staff}:
+      match a:
+        case C.Tick{}:
+          +sn = C.Track.stn(track)
+          +pl = C.Boards.plan(guests, C.Occ.table(guests, rides, sn), map, rides, sn, [])
+          wl_tick(guests, rides, time, pl, C.len32(C.Guest, C.Guests.arrivals(guests, rides, time, nid, fin)), fin, staff)
+        case C.Build{tool, x, y, v}:
+          wl_build(C.Build.ok(map, track, cash, tool, x, y), map, rides, tool, x, y)
+        case C.TrackOp{op}:
+          wl_track(C.TrackOp.ok(map, track, cash, op), op)
+        case C.RideOp{ride, op}:
+          {==}
+        case C.ParkOp{op}:
+          wl_loans(U32.is_eq(op, 2) && (C.Fin.loan(fin) + 1000 <= 20000 : U32),
+            U32.is_eq(op, 3) && (C.Fin.loan(fin) >= 1000 : U32) && Bool.not(C.neg(cash)) && (cash >= 1000 : U32))

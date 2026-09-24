@@ -226,3 +226,51 @@ law litter_accounted:
   for +a: C.Act
   {Nat.add(mcount(C.Park.mess(C.Out.park(C.Park.step(p, a)))), mcount(C.Out.swept(C.Park.step(p, a))))
     == Nat.add(mcount(C.Park.mess(p)), mcount(C.Out.dropped(C.Park.step(p, a)))) : Nat}
+
+# 15. WAGES GO THROUGH THE LEDGER. Staff are paid once a month, the whole
+# wage bill as one ledger entry (kind 11), and nothing else is ever booked
+# as wages: the wage entries of any step are the staff's monthly wages when
+# a tick turns the month (none if there are no staff), and none otherwise.
+def wage_keep(eleven: Bool, a: U32, rest: List<U32>) -> List<U32>:
+  match eleven:
+    case True{}:
+      a <> rest
+    case False{}:
+      rest
+
+def wage_put(t: C.Txn, rest: List<U32>) -> List<U32>:
+  match t:
+    case C.Gain{k, a}:
+      rest
+    case C.Spend{k, a}:
+      wage_keep(U32.is_eq(k, 11), a, rest)
+
+def wage_list(xs: +List<C.Txn>) -> List<U32>:
+  match xs:
+    case []:
+      []
+    case t <> rest:
+      wage_put(t, wage_list(rest))
+
+def wages_month(p: C.Park) -> List<U32>:
+  C.Park{map, guests, rides, track, cash, +time, nid, fin, mess, +staff} = p
+  Bool.pick(List<U32>, U32.is_eq((time % 3600 : U32), 0) && (time > 0 : U32)
+    && Bool.not(U32.is_eq(C.Staff.wages(staff), 0)), [C.Staff.wages(staff)], [])
+
+def wages_due(p: C.Park, a: C.Act) -> List<U32>:
+  match a:
+    case C.Tick{}:
+      wages_month(p)
+    case C.Build{tool, x, y, v}:
+      []
+    case C.TrackOp{op}:
+      []
+    case C.RideOp{ride, op}:
+      []
+    case C.ParkOp{op}:
+      []
+
+law wages_booked:
+  for +p: C.Park
+  for +a: C.Act
+  {wage_list(C.Out.ledger(C.Park.step(p, a))) == wages_due(p, a) : List<U32>}

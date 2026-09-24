@@ -609,7 +609,8 @@ def push_tile(+q: C.Q, +rs: +List<C.Ride>, +gs: RT, +ar: +List<U32>, +i: U32, +j
   +ta = C.Tile.a(t)
   +paved = U32.is_eq(o, 1) || U32.is_eq(o, 5) || U32.is_eq(o, 7)
   +messb = sel(paved, ((U32.min((mb .&. 255 : U32), 15) << 8n) .|. (U32.min(((mb >> 8n) .&. 255 : U32), 7) << 12n) : U32), 0)
-  +furn = sel(U32.is_eq(o, 1), (((ta .&. 3) << 16n) .|. sel(U32.is_eq(((ta >> 4n) .&. 15 : U32), 15), 262144, 0) : U32), 0)
+  +furn = sel(U32.is_eq(o, 1), (((ta .&. 3) << 16n) .|. sel(U32.is_eq(((ta >> 4n) .&. 15 : U32), 15), 262144, 0)
+    .|. sel(Bool.not(U32.is_eq((ta .&. 256 : U32), 0)), 524288, 0) : U32), 0)
   +blk = {DBlock{sx, sy, dl, dr, C.Tile.ter(t), C.Tile.obj(t),
     sel(U32.is_eq(hov, (i * 64 + j : U32)), 1, 0), (16 * i - 16 * j : U32),
     (8 * i + 8 * j : U32), (nbmask(q, i, j, C.Tile.obj(t), C.Tile.ter(t), C.Tile.a(t)) .|. arch .|. messb .|. furn : U32)} : Dr}
@@ -1141,7 +1142,7 @@ def hud(+p: C.Park, +ui: UI, +hov: U32) -> +List<Dr>:
     text(msg_text(msg), (B() + 324 : U32), (B() + 301 : U32), 16766282,
     text("INCOME " ++ money(inc), (B() + 410 : U32), (B() + 3 : U32), 11468718,
     text(U32.show(fps) ++ " FPS", (B() + 4 : U32), (B() + 14 : U32), 8421504,
-    button("PARK", 462, 294, 46, 5913248, button("FINANCES", 462, 305, 46, 5913248, [])))))))))))
+    button("STAFF", 414, 294, 46, 5913248, button("PARK", 462, 294, 46, 5913248, button("FINANCES", 462, 305, 46, 5913248, []))))))))))))
   +bars = {DRect{B(), B(), 512, 11, 1973802} <> DRect{B(), (B() + 11 : U32), 512, 1, 13148232}
     <> DRect{B(), (B() + 291 : U32), 512, 1, 13148232}
     <> DRect{B(), (B() + 292 : U32), 512, 28, 1973802} <> [] : +List<Dr>}
@@ -1185,7 +1186,9 @@ def Win.h(+k: U32) -> U32:
     case 2:
       132
     case 3:
-      148
+      157
+    case 5:
+      114
     case _:
       144
 
@@ -1589,13 +1592,13 @@ def fin_row(label: String, +i: U32, +spend: Bool, +now: +List<U32>, +last: +List
 # takings less costs (loans themselves aside)
 def profit(+xs: +List<U32>) -> U32:
   (fin_at(xs, 0) + fin_at(xs, 3) + fin_at(xs, 4) + fin_at(xs, 5) + fin_at(xs, 6)
-    - fin_at(xs, 1) - fin_at(xs, 2) - fin_at(xs, 9) : U32)
+    - fin_at(xs, 1) - fin_at(xs, 2) - fin_at(xs, 9) - fin_at(xs, 10) : U32)
 
 def fin_win(+p: C.Park, +x: U32, +y: U32, +acc: +List<Dr>) -> +List<Dr>:
   C.Park{map, guests, rides, track, cash, time, nid, +fin, mess, staff} = p
   +now = C.Fin.now(fin)
   +last = C.Fin.last(fin)
-  +frame = window_box("FINANCES", x, y, 224, 148, acc)
+  +frame = window_box("FINANCES", x, y, 224, 157, acc)
   T("THIS MONTH", (x + 110 : U32), (y + 14 : U32), 12648447,
   T("LAST MONTH", (x + 168 : U32), (y + 14 : U32), 12648447,
   fin_row("RIDE TICKETS", 0, False{}, now, last, x, (y + 26 : U32),
@@ -1606,14 +1609,31 @@ def fin_win(+p: C.Park, +x: U32, +y: U32, +acc: +List<Dr>) -> +List<Dr>:
   fin_row("CONSTRUCTION", 2, True{}, now, last, x, (y + 71 : U32),
   fin_row("REFUNDS", 3, False{}, now, last, x, (y + 80 : U32),
   fin_row("LOAN INTEREST", 9, True{}, now, last, x, (y + 89 : U32),
-  T("PROFIT", (x + 6 : U32), (y + 102 : U32), 16766282,
-  T(money(profit(now)), (x + 110 : U32), (y + 102 : U32), 16766282,
-  T(money(profit(last)), (x + 168 : U32), (y + 102 : U32), 16766282,
-  R((x + 6 : U32), (y + 99 : U32), 212, 1, 8421504,
-  T("LOAN *" ++ U32.show(C.Fin.loan(fin)), (x + 6 : U32), (y + 118 : U32), 16750480,
-  T("INTEREST 1/80 A MONTH", (x + 6 : U32), (y + 132 : U32), 8421504,
-  button("BORROW 1000", (x + 100 : U32), (y + 116 : U32), 54, 5913248,
-  button("REPAY 1000", (x + 160 : U32), (y + 116 : U32), 54, 5913248, frame))))))))))))))))))
+  fin_row("STAFF WAGES", 10, True{}, now, last, x, (y + 98 : U32),
+  T("PROFIT", (x + 6 : U32), (y + 111 : U32), 16766282,
+  T(money(profit(now)), (x + 110 : U32), (y + 111 : U32), 16766282,
+  T(money(profit(last)), (x + 168 : U32), (y + 111 : U32), 16766282,
+  R((x + 6 : U32), (y + 108 : U32), 212, 1, 8421504,
+  T("LOAN *" ++ U32.show(C.Fin.loan(fin)), (x + 6 : U32), (y + 127 : U32), 16750480,
+  T("INTEREST 1/80 A MONTH", (x + 6 : U32), (y + 141 : U32), 8421504,
+  button("BORROW 1000", (x + 100 : U32), (y + 125 : U32), 54, 5913248,
+  button("REPAY 1000", (x + 160 : U32), (y + 125 : U32), 54, 5913248, frame)))))))))))))))))))
+
+def staff_row(name: String, desc: String, +k: U32, +ss: +List<C.Staff>, +x: U32, +y: U32, +acc: +List<Dr>) -> +List<Dr>:
+  T(name ++ "  " ++ U32.show(C.Staff.count(ss, k)), (x + 6 : U32), y, 16766282,
+  T(desc, (x + 6 : U32), (y + 9 : U32), 11579568,
+  T("*" ++ U32.show(C.Staff.wage(k)) ++ "/MONTH", (x + 124 : U32), y, 16750480,
+  pm((x + 178 : U32), (y - 2 : U32), acc))))
+
+def staff_win(+p: C.Park, +x: U32, +y: U32, +acc: +List<Dr>) -> +List<Dr>:
+  +ss = C.Park.staff(p)
+  +frame = window_box("STAFF", x, y, 210, 114, acc)
+  staff_row("BROWNIES", "SWEEP, EMPTY BINS, MEND THINGS", 1, ss, x, (y + 16 : U32),
+  staff_row("DWARVEN TINKERS", "REPAIR RIDES THAT BREAK DOWN", 2, ss, x, (y + 38 : U32),
+  staff_row("WATCH KNIGHTS", "KEEP VANDALS FROM SMASHING", 3, ss, x, (y + 60 : U32),
+  staff_row("BARDS", "PLAY TO CHEER GUESTS UP", 4, ss, x, (y + 82 : U32),
+  T("WAGES *" ++ U32.show(C.Staff.wages(ss)) ++ " A MONTH   STAFF " ++ U32.show(C.len32(C.Staff, ss)) ++ "/40",
+    (x + 6 : U32), (y + 102 : U32), 12648447, frame)))))
 
 def win_dr.go(+k: U32, +x: U32, +y: U32, +a: U32, +p: C.Park, +acc: +List<Dr>) -> +List<Dr>:
   match k:
@@ -1625,6 +1645,8 @@ def win_dr.go(+k: U32, +x: U32, +y: U32, +a: U32, +p: C.Park, +acc: +List<Dr>) -
       fin_win(p, x, y, acc)
     case 4:
       guest_win(p, x, y, a, acc)
+    case 5:
+      staff_win(p, x, y, acc)
     case _:
       acc
 
@@ -1651,12 +1673,52 @@ def park_click(+lx: U32, +ly: U32) -> U32:
   sel(in_box(lx, ly, 110, 40, 11, 9), 201, sel(in_box(lx, ly, 124, 40, 11, 9), 200, 0))
 
 def fin_click(+lx: U32, +ly: U32) -> U32:
-  sel(in_box(lx, ly, 100, 116, 54, 9), 202, sel(in_box(lx, ly, 160, 116, 54, 9), 203, 0))
+  sel(in_box(lx, ly, 100, 125, 54, 9), 202, sel(in_box(lx, ly, 160, 125, 54, 9), 203, 0))
+
+# staff on screen, drawn as people in uniform (look bit 26, kind - 1 in
+# bits 27-28): Brownies small and bearded, Tinkers dwarves, Knights in
+# armour, Bards hooded
+def Staff.cls(+k: U32) -> U32:
+  match k:
+    case 1:
+      3
+    case 2:
+      3
+    case 3:
+      1
+    case _:
+      2
+
+def staff_dyn(+ss: +List<C.Staff>, +q: C.Q, +camx: U32, +camy: U32, +vw: U32, +vh: U32, +t: U32,
+  +acc: +List<Dyn>) -> +List<Dyn>:
+  match ss:
+    case []:
+      acc
+    case s <> rest:
+      C.Staff{+id, +x, +y, +dir, +kind, +st, tgt, tmr, zone, +look} = s
+      +i = (x >> 4n : U32)
+      +j = (y >> 4n : U32)
+      +h = C.Land.h(q, i, j)
+      +sx = ((B() + 1280 + x) - (y + camx) : U32)
+      +sy = ((B() + 512 + ((x + y) >> 1n)) - (8 * h + camy) : U32)
+      +vis = (sx + 8 > B() : U32) && (sx < B() + vw + 8 : U32) && (sy + 4 > B() : U32) && (sy < B() + vh + 28 : U32)
+      +working = U32.is_eq(kind, 2) && U32.is_eq(st, 2)
+      +lk = (Staff.cls(kind) .|. ((look .&. 3) << 8n) .|. ((dir .&. 3) << 12n) .|. sel(working, 0, 16777216)
+        .|. 67108864 .|. (((kind - 1) .&. 3) << 27n) : U32)
+      staff_dyn(rest, q, camx, camy, vw, vh, t,
+        Bool.pick(+List<Dyn>, vis, Dyn{(i + j : U32), DGuest{sx, sy, lk, (t + id : U32)}} <> acc, acc))
+
+# the staff window: hire (+) or let go (-) each kind, and the wage bill
+def staff_click(+lx: U32, +ly: U32) -> U32:
+  +r = sel((ly >= 14 : U32), ((ly - 14) / 22 : U32), 9)
+  +y0 = (14 + r * 22 : U32)
+  sel((r < 4 : U32) && in_box(lx, ly, 178, y0, 11, 9), (231 + r : U32),
+    sel((r < 4 : U32) && in_box(lx, ly, 192, y0, 11, 9), (221 + r : U32), 0))
 
 def win_code(+k: U32, +lx: U32, +ly: U32) -> U32:
   sel((ly < 10 : U32) && (lx + 10 >= Win.w(k) : U32), 1, sel((ly < 10 : U32), 2,
     sel(U32.is_eq(k, 1), ride_click(lx, ly), sel(U32.is_eq(k, 2), park_click(lx, ly),
-      sel(U32.is_eq(k, 3), fin_click(lx, ly), 0)))))
+      sel(U32.is_eq(k, 3), fin_click(lx, ly), sel(U32.is_eq(k, 5), staff_click(lx, ly), 0))))))
 
 # the act a window button asks for
 def ride_act(+p: C.Park, +idx: U32, +op: U32) -> C.Act:
@@ -1740,7 +1802,7 @@ def scene(+g: Game) -> +List<Dr>:
   +total = (C.len32(C.Piece, ps) * 256 : U32)
   +rt = RT.of(guests, rides)
   +dyn = trains_dyn(bs, ps, U32.max(total, 1), vx, vy, rt,
-    guests_dyn(guests, map, rides, vx, vy, vw, vh, time, []))
+    guests_dyn(guests, map, rides, vx, vy, vw, vh, time, staff_dyn(staff, map, vx, vy, vw, vh, time, [])))
   +sorted = List.sort(~Dyn, ~Dyn.le, dyn)
   +ar = Arches.of(rides, ps)
   # the back and front halves of the map are built in parallel
@@ -1861,7 +1923,8 @@ def on_key(+c: U32, +down: Bool, +ui: UI, +wm: WM, +q: C.Q) -> EV:
   EV{UI{cx, cy, keys2, mx, my, md, tool2, var2, sp2, msg2, fr, inc, last, io2, fps, tl},
     WM{Bool.pick(+List<Win>, esc && haswin, Wins.drop(ws, 0),
       Bool.pick(+List<Win>, down && U32.is_eq(c, 112), Wins.open(ws, 2, 0, 150, 40),
-      Bool.pick(+List<Win>, down && U32.is_eq(c, 102), Wins.open(ws, 3, 0, 140, 30), ws))), dg, gx, gy},
+      Bool.pick(+List<Win>, down && U32.is_eq(c, 102), Wins.open(ws, 3, 0, 140, 30),
+      Bool.pick(+List<Win>, down && U32.is_eq(c, 107), Wins.open(ws, 5, 0, 160, 50), ws)))), dg, gx, gy},
     Bool.pick(+List<C.Act>, tact, [C.TrackOp{op}], []),
     esc && Bool.not(haswin)}
 
@@ -1956,8 +2019,10 @@ def on_map(+lx: U32, +ly: U32, +button: U32, +down: Bool, +ui: UI, +wm: WM, +p: 
   +ws = WM.wins(wm)
   +parkb = down && in_box(lx, ly, 462, 294, 46, 9)
   +finb = down && in_box(lx, ly, 462, 305, 46, 9)
+  +staffb = down && in_box(lx, ly, 414, 294, 46, 9)
   +ws2 = Bool.pick(+List<Win>, parkb, Wins.open(ws, 2, 0, 150, 40),
-    Bool.pick(+List<Win>, finb, Wins.open(ws, 3, 0, 140, 30), ws))
+    Bool.pick(+List<Win>, finb, Wins.open(ws, 3, 0, 140, 30),
+    Bool.pick(+List<Win>, staffb, Wins.open(ws, 5, 0, 160, 50), ws)))
   EV{ui3, WM{Bool.pick(+List<Win>, inspect, inspect_at(ws2, p, hov, lx, ly, cx, cy, View.z(var)), ws2), 0, 0, 0},
     Bool.pick(+List<C.Act>, build, build_act(q, ui2), []), False{}}
 
@@ -2225,7 +2290,8 @@ def start_acts() -> List<C.Act>:
    C.Build{14, 32, 53, 0}, C.Build{13, 32, 52, 0}, C.Build{15, 32, 50, 0},
    C.Build{15, 32, 34, 0}, C.Build{14, 24, 36, 0}, C.Build{13, 26, 36, 0},
    C.Build{15, 28, 36, 0}, C.Build{14, 30, 46, 0}, C.Build{13, 34, 46, 0},
-   C.Build{16, 33, 50, 0}, C.Build{16, 13, 31, 0}]
+   C.Build{16, 33, 50, 0}, C.Build{16, 13, 31, 0},
+   C.ParkOp{21}, C.ParkOp{21}, C.ParkOp{22}, C.ParkOp{23}, C.ParkOp{24}]
 
 def Game.new() -> Game:
   +p0 = C.Park.run(start_acts(), C.Park.new())
@@ -2718,6 +2784,23 @@ def savetest.res(res: Result<&1, &1, U32 & String, List<&2, U32>>, +p: C.Park) -
     case Done{bs}:
       savetest.cmp(S.Load.file(bs), p)
 
+def staff_list(+ss: +List<C.Staff>) -> String:
+  match ss:
+    case []:
+      ""
+    case s <> rest:
+      C.Staff{id, +x, +y, dir, +kind, +st, +tgt, tmr, zone, look} = s
+      " k" ++ U32.show(kind) ++ "@" ++ U32.show(x) ++ "," ++ U32.show(y) ++ " st" ++ U32.show(st) ++ staff_list(rest)
+
+# smashed furniture on the map
+def smashed(+n: Nat, +k: U32, +q: C.Q, +acc: U32) -> U32:
+  match n:
+    case 0n:
+      acc
+    case 1n+m:
+      +t = C.Land.get(q, (k >> 6n : U32), (k .&. 63 : U32))
+      smashed(m, (k + 1 : U32), q, (acc + sel(U32.is_eq(C.Tile.obj(t), 1) && Bool.not(U32.is_eq((C.Tile.a(t) .&. 256 : U32), 0)), 1, 0) : U32))
+
 # the litter and sickness the paved tiles count (litter | sick << 16)
 def mess_sum(+n: Nat, +k: U32, +q: C.Q, +acc: U32) -> U32:
   match n:
@@ -2776,6 +2859,8 @@ def savetest.read(r: File & Result<&1, &1, U32 & String, List<&2, U32>>, +p: C.P
       ++ U32.show(((states(C.Park.guests(p)) >> 8n) .&. 255 : U32)) ++ " " ++ U32.show(((states(C.Park.guests(p)) >> 16n) .&. 255 : U32))
       ++ " " ++ U32.show((states(C.Park.guests(p)) >> 24n : U32)) ++ ", happy " ++ U32.show(happy_avg(C.Park.guests(p), 0, 0))
       ++ ", peak nausea " ++ U32.show(max_na(C.Park.guests(p))) ++ ", peak bladder " ++ U32.show(max_bl(C.Park.guests(p))))
+    IO.print("staff " ++ U32.show(C.len32(C.Staff, C.Park.staff(p))) ++ ", wages " ++ U32.show(C.Staff.wages(C.Park.staff(p)))
+      ++ ", smashed " ++ U32.show(smashed(4096n, 0, C.Park.map(p), 0)) ++ staff_list(C.Park.staff(p)))
 
 def savetest.go(+p: C.Park) -> IO(Unit):
   do IO<Unit>:
@@ -2828,9 +2913,9 @@ def ui.s3(g: Game) -> Game:
 def ui.s4(g: Game) -> Game:
   ui.step(g, [Key{27, True{}}])
 
-# F opens the finances window at (140, 30): BORROW 1000 at (240, 146)
+# F opens the finances window at (140, 30): BORROW 1000 at (240, 155)
 def ui.s5(g: Game) -> Game:
-  ui.step(ui.step(g, [Key{102, True{}}]), ui.click(245, 150, 0))
+  ui.step(ui.step(g, [Key{102, True{}}]), ui.click(245, 158, 0))
 
 # the PARK button, then entry fee + twice at (150 + 124, 40 + 40)
 def ui.s6(g: Game) -> Game:

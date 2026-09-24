@@ -43,7 +43,7 @@ Dev modes:
 | Click / drag | Use the tool on a tile (or pick a tab or tool in the bar) |
 | I | Inspect tool (the default): click a guest or a ride to open its window |
 | Right-click | Open a ride's window, whatever the tool |
-| P / F | The park window / the finances window (or the PARK and FINANCES buttons) |
+| P / F / K | The park, finances and staff windows (or the PARK, FINANCES and STAFF buttons) |
 | M / N | Music on or off / sound effects on or off |
 | 1 - 5 | Open a toolbar tab: paths and furniture, land, scenery, rides, shops. Press again for its next tool |
 | X | Demolish |
@@ -132,6 +132,14 @@ Rides wear out. The ride window shows reliability; a worn ride breaks down
 more often. A broken ride stops where it is, with its riders stuck aboard
 (growing cross) until it is repaired; a wrench sign and smoke mark it, and
 the message bar says so.
+
+Staff, hired and let go in the staff window (K), each for a monthly wage:
+Brownies sweep litter, empty bins and mend smashed furniture; Dwarven
+Tinkers hurry to rides that break down and repair them; Watch Knights
+patrol, and miserable guests won't smash benches, bins or lanterns while one
+is near; Bards play, cheering up the guests around them. Each has a post
+(one of the rides) to patrol near. Staff wear their own uniforms and carry
+their tools: broom, hammer, spear, lute.
 
 Coaster tool (key 4, third tool): `Enter` opens or closes the coaster; while closed, `T`
 ahead, `G`/`H` turn, `Y` up, `B` down, `L` lift hill, `Backspace` removes the
