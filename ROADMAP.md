@@ -247,6 +247,14 @@ Small design decisions made while working, listed here so they can be revisited.
   the track or a test run); the wages proof took one more branch for the refund.
 - **DEMOLISH asks twice:** the first click arms it for that ride (UI opt bits 19-31), the second removes the
   coaster; any other window click disarms it.
+- **Cars:** each car layer is tested in its own along/across coordinates, so details follow the heading:
+  the Wyrm's scales, spine ridge and (front car) a head with a gold jaw, horns and glowing eyes; the
+  Minecart's plank seams, iron bands, rivets, rim and a lantern that glows at night; the Flyer's stripe,
+  wing fins and a wheeled bogie on the rail. Every car except the Flyer's has a dark chassis with wheels.
+- **Coaster sound by type** rides on a second sound word (the first is full): the loudest train's type
+  picks the rumble (Wyrm timber clatter, Minecart iron rattle and buzz, Flyer deep whoosh). Riders
+  scream when a train of an open, tested coaster goes down a drop at speed 45 or more, louder the faster
+  it goes (a stand-in for the plan's "scaled by the biggest drop": speed on the drop tracks the drop).
 
 ## Done: M1, the vertical slice
 Isometric fantasy map, paths, terrain editing, 4 enchanted tree kinds, Dragon Carousel, Arcane Spire, Potion
@@ -436,7 +444,7 @@ Spikes, in order:
 - Frame time and simulation cost measured against M7: within noise (about 1.4 ms a tick at 200 guests;
   16 ms a frame).
 
-## M9: Fixes, polish and the deferred items (in progress: spikes 1-3 done)
+## M9: Fixes, polish and the deferred items (in progress: spikes 1-4 done)
 Decisions from the owner (2026-09-24): bridges are my call (walkways for guests over paths and track);
 1 to 20 cars per train, never more than the track allows; steep pieces only in the two headings that face
 the camera; a coaster can be demolished, and removing track re-runs the check and closes the ride if it no

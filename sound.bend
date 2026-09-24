@@ -841,6 +841,38 @@ def Fx.one(+k: U32, +start: U32, +t: U32) -> U32:
   +a = Fx.age(t, start)
   Fx.go(k, (a < Fx.dur(k) : U32), a, t)
 
+# each coaster type rumbles its own way (the loudest train's type): the
+# Wyrm's timber clatter, the Minecart's iron rattle, the Flyer's deep whoosh
+def Amb.rush(+ty: U32, +t: U32, +roar: U32) -> U32:
+  match ty:
+    case 1:
+      +p = U32.max((1100 - roar * 3 : U32), 400)
+      +c = (t % p : U32)
+      +tick = sel((c < 50 : U32), noise(t, ((50 - c) * roar / 3 : U32)), 0)
+      +buzz = sel(U32.is_eq(((t >> 9n) .&. 1 : U32), 0), sq((t * Tune.inc(50) : U32), (roar * 3 : U32)), 0)
+      (vnoise(t, 3n, (roar * 5 : U32)) + tick + buzz : U32)
+    case 2:
+      (vnoise(t, 6n, (roar * 11 : U32)) + vnoise(t, 2n, (roar * 2 : U32)) : U32)
+    case _:
+      +p = U32.max((2200 - roar * 6 : U32), 700)
+      +c = (t % p : U32)
+      +clat = sel((c < 90 : U32), noise(t, ((90 - c) * roar / 4 : U32)), 0)
+      (vnoise(t, 4n, (roar * 6 : U32)) + clat : U32)
+
+# riders screaming down a drop: two voices gliding down a few notes, with a
+# wobble and a breath of noise; v: how loud (0-63)
+def Fx.scream(+a: U32, +t: U32, +v: U32) -> U32:
+  +m = (86 - a / 3000 : U32)
+  +i = Tune.inc(m)
+  +wob = tri((a * 800 : U32), 60)
+  +w = (tri((a * i + a * wob : U32), 4200) + tri((a * (i + i / 29) : U32), 3000) + noise(t, 900) : U32)
+  +env = sel((a < 1500 : U32), (a * 255 / 1500 : U32), ((26000 - a) * 255 / 24500 : U32))
+  gain(gain(w, env), (v * 4 : U32))
+
+def Fx.scream_at(+start: U32, +t: U32, +v: U32) -> U32:
+  +a = Fx.age(t, start)
+  sel((a < 26000 : U32), Fx.scream(a, t, v), 0)
+
 # the crowd's murmur, the coaster's roar, and the lift hill's clacks
 def Amb.at(+t: U32, +lvl: U32) -> U32:
   +crowd = (lvl .&. 255 : U32)
@@ -848,7 +880,7 @@ def Amb.at(+t: U32, +lvl: U32) -> U32:
   +lift = Bool.not(U32.is_eq(((lvl >> 16n) .&. 1 : U32), 0))
   +swell = (160 + (hash((t >> 13n : U32)) .&. 95) : U32)
   +murmur = gain(vnoise(t, 6n, (crowd * 6 : U32)), swell)
-  +rush = vnoise(t, 4n, (roar * 8 : U32))
+  +rush = Amb.rush(((lvl >> 24n) .&. 3 : U32), t, roar)
   +c = (t % 1800 : U32)
   +clack = sel(lift && (c < 160 : U32), noise(t, ((160 - c) * 22 : U32)), 0)
   +rain = sel(U32.is_eq(((lvl >> 23n) .&. 1 : U32), 1), vnoise(t, 2n, 900), 0)
@@ -859,14 +891,15 @@ def Amb.at(+t: U32, +lvl: U32) -> U32:
 # t: samples made so far; q: frames queued at the last write; one start
 # (+1) per effect; lvl: crowd | roar << 8 | lift << 16 | music off << 17 |
 # effects off << 18 | music volume << 19 | effects volume << 21 (0 silent .. 3
-# full; each step down halves) | raining << 23
+# full; each step down halves) | raining << 23 | the roaring coaster's type
+# << 24 | the scream's loudness << 26
 
 type Snd is Data:
   Snd{t: U32, q: U32, coin: U32, click: U32, thud: U32, buzz: U32, bell: U32,
-    whoosh: U32, chime: U32, lvl: U32}
+    whoosh: U32, chime: U32, lvl: U32, scream: U32}
 
 def Snd.new() -> Snd:
-  Snd{0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+  Snd{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 
 def Snd.sar(+v: U32, +n: Nat) -> U32:
   sel(neg(v), (0 - ((0 - v) >> n) : U32), (v >> n : U32))
@@ -883,11 +916,12 @@ def Snd.vol(+v: U32, +k: U32) -> U32:
       0
 
 def Snd.mix(+s: Snd, +t: U32) -> U32:
-  Snd{t0, q, +coin, +click, +thud, +buzz, +bell, +whoosh, +chime, +lvl} = s
+  Snd{t0, q, +coin, +click, +thud, +buzz, +bell, +whoosh, +chime, +lvl, +scream} = s
   +music = sel(U32.is_eq(((lvl >> 17n) .&. 1 : U32), 0), Mus.at(t), 0)
   +fx = sel(U32.is_eq(((lvl >> 18n) .&. 1 : U32), 0),
     (Fx.one(0, coin, t) + Fx.one(1, click, t) + Fx.one(2, thud, t) + Fx.one(3, buzz, t)
-      + Fx.one(4, bell, t) + Fx.one(5, whoosh, t) + Fx.one(6, chime, t) + Amb.at(t, lvl) : U32), 0)
+      + Fx.one(4, bell, t) + Fx.one(5, whoosh, t) + Fx.one(6, chime, t) + Amb.at(t, lvl)
+      + Fx.scream_at(scream, t, (lvl >> 26n : U32)) : U32), 0)
   +v = (Snd.vol(music, ((lvl >> 19n) .&. 3 : U32)) + Snd.vol(fx, ((lvl >> 21n) .&. 3 : U32)) : U32)
   sel(neg(v), sel(((v + 32000) >= 2147483648 : U32), (0 - 32000 : U32), v), U32.min(v, 32000))
 
@@ -912,15 +946,15 @@ def Snd.want(+q: U32) -> U32:
   sel((q > 2400 : U32), C0.sub0(367, ((q - 2400) / 4 : U32)), U32.min((367 + (2400 - q) / 4 : U32), 1200))
 
 def Snd.render(s: Snd) -> Snd & List<&2, F32>:
-  Snd{+t, +q, +coin, +click, +thud, +buzz, +bell, +whoosh, +chime, +lvl} = s
+  Snd{+t, +q, +coin, +click, +thud, +buzz, +bell, +whoosh, +chime, +lvl, +scream} = s
   +n = Snd.want(q)
-  +s2 = {Snd{t, q, coin, click, thud, buzz, bell, whoosh, chime, lvl} : Snd}
-  (Snd{(t + n : U32), q, coin, click, thud, buzz, bell, whoosh, chime, lvl},
+  +s2 = {Snd{t, q, coin, click, thud, buzz, bell, whoosh, chime, lvl, scream} : Snd}
+  (Snd{(t + n : U32), q, coin, click, thud, buzz, bell, whoosh, chime, lvl, scream},
     Snd.frames(U32.to_nat(n), s2, t, []))
 
 def Snd.heard(s: Snd, +q: U32) -> Snd:
-  Snd{t, old, coin, click, thud, buzz, bell, whoosh, chime, lvl} = s
-  Snd{t, q, coin, click, thud, buzz, bell, whoosh, chime, lvl}
+  Snd{t, old, coin, click, thud, buzz, bell, whoosh, chime, lvl, scream} = s
+  Snd{t, q, coin, click, thud, buzz, bell, whoosh, chime, lvl, scream}
 
 # restart an effect when its event came, unless it just started
 def Snd.start(on: Bool, +t: U32, +old: U32, +gap: U32) -> U32:
@@ -931,15 +965,18 @@ def Snd.bit(+w: U32, +k: Nat) -> Bool:
 
 # this frame's events: bits 0 coin, 1 click, 2 thud, 3 buzz, 4 bell,
 # 5 whoosh, 6 chime; bits 8-15 crowd, 16-23 roar, 24 lift, 25 music off,
-# 26 effects off
-def Snd.cue(s: Snd, +w: U32) -> Snd:
-  Snd{+t, q, +coin, +click, +thud, +buzz, +bell, +whoosh, +chime, lvl} = s
+# 26 effects off; and w2: the roaring coaster's type (bits 0-1), a scream
+# (bit 2) and its loudness (bits 3-8)
+def Snd.cue(s: Snd, +w: U32, +w2: U32) -> Snd:
+  Snd{+t, q, +coin, +click, +thud, +buzz, +bell, +whoosh, +chime, lvl, +scream} = s
   Snd{t, q, Snd.start(Snd.bit(w, 0n), t, coin, 5000), Snd.start(Snd.bit(w, 1n), t, click, 0),
     Snd.start(Snd.bit(w, 2n), t, thud, 2000), Snd.start(Snd.bit(w, 3n), t, buzz, 5600),
     Snd.start(Snd.bit(w, 4n), t, bell, 15000), Snd.start(Snd.bit(w, 5n), t, whoosh, 22050),
     Snd.start(Snd.bit(w, 6n), t, chime, 12000),
     (((w >> 8n) .&. 255) .|. (((w >> 16n) .&. 255) << 8n) .|. (((w >> 24n) .&. 7) << 16n)
-      .|. (((w >> 27n) .&. 15) << 19n) .|. (((w >> 31n) .&. 1) << 23n) : U32)}
+      .|. (((w >> 27n) .&. 15) << 19n) .|. (((w >> 31n) .&. 1) << 23n)
+      .|. ((w2 .&. 3) << 24n) .|. (((w2 >> 3n) .&. 63) << 26n) : U32),
+    Snd.start(Snd.bit(w2, 2n), t, scream, 40000)}
 
 # Playing
 # -------
@@ -955,7 +992,7 @@ def Snd.write(audio: Audio, samples: List<&2, F32>) -> IO(Audio & U32):
 # A test recording (--wav): the music, with each effect in turn a second or
 # two apart, over a crowd and a coaster on its lift hill; mono 16-bit WAV
 def Wav.demo() -> Snd:
-  Snd{0, 0, 22051, 44101, 66151, 88201, 110251, 154351, 198451, (150 .|. (200 << 8n) .|. (1 << 16n) .|. (15 << 19n) : U32)}
+  Snd{0, 0, 22051, 44101, 66151, 88201, 110251, 154351, 198451, (150 .|. (200 << 8n) .|. (1 << 16n) .|. (15 << 19n) .|. (63 << 26n) : U32), 242551}
 
 def Wav.le(+n: Nat, +v: U32, +acc: +List<U32>) -> +List<U32>:
   match n:

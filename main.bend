@@ -3601,8 +3601,10 @@ def Rides.broke(+a: +List<C.Ride>, +b: +List<C.Ride>) -> U32:
     case _ _:
       0
 
-# the coaster: its fastest train (0..255) | a train climbing a lift hill << 8
-def Snd.slot(sl: C.Slot, +ps: +List<C.Piece>, +acc: U32) -> U32:
+# the coasters: the fastest train (0..255) | a train on a lift hill << 8 |
+# the fastest train's coaster type << 9 | a train of an open coaster going
+# down a drop fast << 11 | how loud its riders scream (0-63) << 12
+def Snd.slot(sl: C.Slot, +ps: +List<C.Piece>, +ty: U32, +serve: Bool, +acc: U32) -> U32:
   match sl:
     case C.Free{a, n, st}:
       acc
@@ -3611,22 +3613,32 @@ def Snd.slot(sl: C.Slot, +ps: +List<C.Piece>, +acc: U32) -> U32:
       +k = C.Piece.kind(C.Pieces.get(ps, (a + (prog >> 8n) : U32)))
       +roar = U32.min((speed * 255 / 90 : U32), 255)
       +lift = U32.is_eq(k, 6) && (speed > 0 : U32)
-      (U32.max((acc .&. 255 : U32), roar) .|. (acc .&. 256) .|. sel(lift, 256, 0) : U32)
+      +louder = (roar > (acc .&. 255) : U32)
+      +drop = serve && (U32.is_eq(k, 2) || U32.is_eq(k, 13)) && (speed >= 45 : U32)
+      +vol = U32.min((speed * 63 / 100 : U32), 63)
+      +old = ((acc >> 12n) .&. 63 : U32)
+      (U32.max((acc .&. 255 : U32), roar) .|. (acc .&. 256) .|. sel(lift, 256, 0)
+        .|. sel(louder, (ty << 9n : U32), (acc .&. 1536 : U32)) .|. (acc .&. 2048) .|. sel(drop, 2048, 0)
+        .|. (sel(drop, U32.max(old, vol), old) << 12n) : U32)
 
-def Snd.slots(+ss: +List<C.Slot>, +ps: +List<C.Piece>, +acc: U32) -> U32:
+def Snd.slots(+ss: +List<C.Slot>, +ps: +List<C.Piece>, +ty: U32, +serve: Bool, +acc: U32) -> U32:
   match ss:
     case []:
       acc
     case sl <> rest:
-      Snd.slots(rest, ps, Snd.slot(sl, ps, acc))
+      Snd.slots(rest, ps, ty, serve, Snd.slot(sl, ps, ty, serve, acc))
+
+# the second sound word (see Z.Snd.cue)
+def Snd.w2(+tr: U32) -> U32:
+  (((tr >> 9n) .&. 3) .|. (((tr >> 11n) .&. 1) << 2n) .|. (((tr >> 12n) .&. 63) << 3n) : U32)
 
 def Snd.tracks(+ts: +List<C.Track>, +acc: U32) -> U32:
   match ts:
     case []:
       acc
     case t <> rest:
-      C.Track{+ps, open, +ss, st, en, cfg, stats} = t
-      Snd.tracks(rest, Snd.slots(ss, ps, acc))
+      C.Track{+ps, open, +ss, st, en, +cfg, +stats} = t
+      Snd.tracks(rest, Snd.slots(ss, ps, C.Cfg.type(cfg), open && C.Test.passed(stats), acc))
 
 def snd_word(+p0: C.Park, +p1: C.Park, +inc0: U32, +inc1: U32, +msg0: U32, +msg1: U32,
   +clicked: Bool, +var: U32) -> U32:
@@ -3792,7 +3804,8 @@ def step_game.go(+p: C.Park, +ui: UI, +wm: WM, +acts: +List<C.Act>, quit: Bool,
   +wm2 = {WM{Bool.pick(+List<Win>, (gop > 0 : U32), Wins.open(ws1, 7, 0, 150, 90), ws1), WM.drag(wm), WM.gx(wm), WM.gy(wm)} : WM}
   +tmsg = Tracks.tested(C.Park.track(p0), C.Park.track(Res.park(r2)))
   Bool.pick(Maybe<Game>, quit, None{}, Some{Game{Res.park(r2), UI.said(ui2, sel((award > 0 : U32), award, sel((tmsg > 0 : U32), tmsg, bk))), wm2,
-    Z.Snd.cue(snd, (word .|. sel((gop > 0 : U32) || (award > 0 : U32) || U32.is_eq(tmsg, 17), 16, 0) : U32))}})
+    Z.Snd.cue(snd, (word .|. sel((gop > 0 : U32) || (award > 0 : U32) || U32.is_eq(tmsg, 17), 16, 0) : U32),
+      Snd.w2(Snd.tracks(C.Park.track(Res.park(r2)), 0)))}})
 
 def UI.tool(u: UI) -> U32:
   UI{cx, cy, keys, mx, my, md, tool, var, sp, msg, fr, inc, last, io, fps, tl, opt, fol} = u

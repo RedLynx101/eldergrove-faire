@@ -112,7 +112,7 @@ doing, their thoughts, needs, gold and what they carry.
 Sound: an original organ waltz with an oom-pah accompaniment plays over the
 park, and the park answers with its own sounds: coins when gold comes in, a
 bell when a ride starts, a rush of wind as the spire rises, the lift hill's
-clacks and the coaster's roar, the crowd's murmur (louder with more guests),
+clacks and each coaster's own rumble (timber, iron or wind) with screams on its drops, the crowd's murmur (louder with more guests),
 a chime each month, and clicks, thumps and buzzes for building. It is all
 made in `sound.bend` a sample at a time; `snd.c` plays it through PulseAudio
 (`pacat`, which WSLg provides), or stays silent if there is no pacat.

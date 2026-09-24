@@ -2174,20 +2174,71 @@ def Art.car_in(+X: U32, +Y: U32, +along_u: Bool) -> Bool:
 
 # lead: bit 0 the front car, bits 1-2 the coaster type (a Griffin Flyer's
 # car hangs from its rails on a bar)
+# one layer of a car (k levels up from its floor): along its travel, fa runs
+# -5 (back) .. 5 (front); across it, c runs -3 .. 3
+def Art.car_lay(+dx: U32, +dy: U32, +k: U32, +along_u: Bool, +fwd: Bool, +amin: U32, +amax: U32, +cmin: U32, +cmax: U32) -> Bool:
+  +Y = ((dy + k) * 2 : U32)
+  +u = iso_u(dx, Y)
+  +v = iso_v(dx, Y)
+  +a = sel(along_u, u, v)
+  +c = sel(along_u, v, u)
+  +fa = sel(fwd, a, (0 - a : U32))
+  between(fa, amin, amax) && between(sabs(c), cmin, cmax)
+
+# The cars. Every type has a floor-level chassis (bogies with wheels) unless
+# it hangs; the Wyrm's cars have scales and a spine ridge, the front one a
+# carved dragon head with glowing eyes and horns; the Minecart's are planked
+# with iron bands and rivets, the front one carrying a lantern that glows at
+# night; the Flyer's are gilded gondolas with blue wing fins and a stripe.
 def Art.car_body(+dx: U32, +dy: U32, +d: U32, +front: Bool, +ty: U32, +rd: U32) -> U32:
   +along_u = U32.is_eq((d .&. 1 : U32), 0)
+  +fwd = (d < 2 : U32)
   +topy = ((dy + 5) * 2 : U32)
   +ontop = Art.car_in(dx, topy, along_u)
+  +low = Art.car_in(dx, (dy * 2 : U32), along_u) && Bool.not(Art.car_in(dx, ((dy + 1) * 2 : U32), along_u))
   +side = Art.car_in(dx, (dy * 2 : U32), along_u) || Art.car_in(dx, ((dy + 1) * 2 : U32), along_u)
     || Art.car_in(dx, ((dy + 2) * 2 : U32), along_u) || Art.car_in(dx, ((dy + 3) * 2 : U32), along_u)
     || Art.car_in(dx, ((dy + 4) * 2 : U32), along_u)
   +body = sel(U32.is_eq(ty, 1), sel(front, 10053171, 7359264),
     sel(U32.is_eq(ty, 2), sel(front, 14329120, 3368652), sel(front, 13120044, 4172373)))
+  +wyrm = U32.is_eq(ty, 0)
+  +mine = U32.is_eq(ty, 1)
+  +fly = U32.is_eq(ty, 2)
+  # where on the car a side pixel is, along its length (middle layer)
+  +mu = iso_u(dx, ((dy + 2) * 2 : U32))
+  +mv = iso_v(dx, ((dy + 2) * 2 : U32))
+  +ma = sel(along_u, mu, mv)
+  +fam = sel(fwd, ma, (0 - ma : U32))
+  +wheel = low && Bool.not(fly) && (U32.is_eq(sabs(fam), 3) || U32.is_eq(sabs(fam), 4))
+  +chassis = low && Bool.not(fly)
+  +spine = wyrm && Art.car_lay(dx, dy, 5, along_u, fwd, (0 - 4 : U32), 3, 0, 0)
+  +scale = wyrm && side && U32.is_eq(((dx + dy) .&. 1 : U32), 0)
+  +band = mine && side && U32.is_eq(sabs(fam), 4)
+  +rivet = band && U32.is_eq(((dy + 256) .&. 1 : U32), 0)
+  +seam = mine && side && U32.is_eq((fam .&. 1 : U32), 0)
+  +rim = mine && ontop && Bool.not(Art.car_lay(dx, dy, 5, along_u, fwd, (0 - 4 : U32), 4, 0, 2))
+  +stripe = fly && Art.car_lay(dx, dy, 5, along_u, fwd, (0 - 5 : U32), 5, 0, 0)
+  +fin = fly && (Art.car_lay(dx, dy, 3, along_u, fwd, (0 - 3 : U32), 1, 4, 5) || Art.car_lay(dx, dy, 2, along_u, fwd, (0 - 2 : U32), 0, 4, 4))
+  # the Wyrm's head on the front car
+  +jaw = wyrm && front && (Art.car_lay(dx, dy, 2, along_u, fwd, 6, 10, 0, 1) || Art.car_lay(dx, dy, 3, along_u, fwd, 6, 10, 0, 1))
+  +head = wyrm && front && (Art.car_lay(dx, dy, 4, along_u, fwd, 6, 9, 0, 2) || Art.car_lay(dx, dy, 5, along_u, fwd, 6, 9, 0, 2)
+    || Art.car_lay(dx, dy, 6, along_u, fwd, 6, 8, 0, 1))
+  +eye = wyrm && front && Art.car_lay(dx, dy, 6, along_u, fwd, 8, 8, 1, 1)
+  +horn = wyrm && front && (Art.car_lay(dx, dy, 7, along_u, fwd, 6, 6, 1, 1) || Art.car_lay(dx, dy, 8, along_u, fwd, 5, 5, 1, 1)
+    || Art.car_lay(dx, dy, 9, along_u, fwd, 4, 4, 1, 1))
+  # the Minecart's lantern on the front car
+  +pole = mine && front && (Art.car_lay(dx, dy, 6, along_u, fwd, 5, 5, 0, 0) || Art.car_lay(dx, dy, 7, along_u, fwd, 5, 5, 0, 0)
+    || Art.car_lay(dx, dy, 8, along_u, fwd, 5, 5, 0, 0))
+  +lamp = mine && front && (Art.car_lay(dx, dy, 9, along_u, fwd, 5, 5, 0, 0) || Art.car_lay(dx, dy, 10, along_u, fwd, 5, 5, 0, 0))
   +sx = sel(along_u, 3, (0 - 3 : U32))
-  +front = Art.rider((dx - sx : U32), (dy + 5 - 1 : U32), ((rd >> 8n) .&. 255 : U32))
-  +back = Art.rider((dx + sx : U32), (dy + 5 + 1 : U32), (rd .&. 255 : U32))
-  over(front, over(back, sel(ontop, shade(body, 290), sel(side, shade(body,
-    sel(neg(dx), 210, 160)), TR()))))
+  +rfront = Art.rider((dx - sx : U32), (dy + 5 - 1 : U32), ((rd >> 8n) .&. 255 : U32))
+  +rback = Art.rider((dx + sx : U32), (dy + 5 + 1 : U32), (rd .&. 255 : U32))
+  +shell = sel(ontop, sel(spine, 8392720, sel(rim, 5125166, sel(stripe, 5072841, shade(body, 290)))),
+    sel(side, sel(wheel, 1118481, sel(chassis, 3355443, sel(rivet, 11579568, sel(band, 7368816,
+      shade(body, sel(neg(dx), sel(scale || seam, 170, 210), sel(scale || seam, 125, 160))))))), TR()))
+  +extra = sel(eye, E(16766282), sel(horn, 15263976, sel(head, shade(body, sel(neg(dx), 230, 180)), sel(jaw, 14329120,
+    sel(lamp, E(16768324), sel(pole, 4210752, sel(fin, 5072841, TR())))))))
+  over(rfront, over(rback, over(extra, shell)))
 
 # Adventurers
 # -----------
@@ -2196,8 +2247,11 @@ def Art.car_body(+dx: U32, +dy: U32, +d: U32, +front: Bool, +ty: U32, +rd: U32) 
 def Art.car(+dx: U32, +dy: U32, +d: U32, +lead: U32, +rd: U32) -> U32:
   +ty = ((lead >> 1n) .&. 3 : U32)
   +front = U32.is_eq((lead .&. 1 : U32), 1)
-  +hang = U32.is_eq(ty, 2) && (sabs(dx) <= 0 : U32) && between(dy, (0 - 18 : U32), (0 - 6 : U32))
-  sel(hang, 10526880, Art.car_body(dx, dy, d, front, ty, rd))
+  +hang = U32.is_eq(ty, 2) && (sabs(dx) <= 0 : U32) && between(dy, (0 - 16 : U32), (0 - 6 : U32))
+  # the Flyer's bogie, riding the rail above its bar
+  +bogie = U32.is_eq(ty, 2) && (sabs(dx) <= 2 : U32) && between(dy, (0 - 19 : U32), (0 - 17 : U32))
+  sel(bogie, sel(U32.is_eq(sabs(dx), 2) && U32.is_eq(dy, (0 - 18 : U32)), 1118481, 4210752),
+    sel(hang, 10526880, Art.car_body(dx, dy, d, front, ty, rd)))
 
 def bitmask(+k: U32) -> U32:
   match k:
