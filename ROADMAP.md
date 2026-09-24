@@ -15,12 +15,18 @@ Last updated: 2026-09-24 · M1-M4 done. Next: M5 (controls, problems, staff and 
 | Milestone order | Performance → riders + art → economy + UI → controls + problems + staff → content → structure → custom coasters. |
 | Controls | WASD and the arrows move the camera, always; coaster building gets its own construction window (M8) instead of the W/A/D/Q/Z keys. |
 | Placing things | Every tool shows a ghost of what it would place, tinted green where it can go and red where it can't, with the cost. |
-| Coaster crashes | *(pending)* |
+| Coaster crashes | None. A failed test reports where and why instead. A ride can be edited only while closed, and opened only when valid (circuit complete, tested); the safety laws are about open rides. |
+| Frame rate | 60 fps at the default zoom and window size; dynamic resolution keeps the rest smooth. |
+| Children | Yes, as individual guests (smaller; they prefer gentle rides). No families or groups for now. |
+| Working through M8 | Straight through, without stopping between milestones. Small design calls are made along the way and recorded in "Calls made along the way" below. |
 | Ride exits | Any path tile touching the ride is its exit, marked with an exit arch; the queue's front tile gets an entrance arch. Riders step off toward the exit. |
 | Complete rides | A ride runs only with both an entrance (queue) and an exit (path); a warning shows until then. Shops need neither. |
 | Ride cycles | Each ride has its own cycle (load, run, unload) with minimum and maximum waits. |
 | Sound | Yes: our own procedurally generated sounds and old-style music, made in code like the art. |
 | Version control | Git repo at `Desktop/CMU/Random/eldergrove-faire`, private GitHub repo `RedLynx101/eldergrove-faire`. Commit after every spike and milestone. |
+
+## Calls made along the way
+Small design decisions made while working, listed here so they can be revisited.
 
 ## Done: M1, the vertical slice
 Isometric fantasy map, paths, terrain editing, 4 enchanted tree kinds, Dragon Carousel, Arcane Spire, Potion
@@ -204,7 +210,8 @@ Spikes, in order:
 - **Follow cam:** a Follow button in ride, guest and staff windows. The camera rides along with a coaster
   car or a ride vehicle, or trails a guest or staff member; any camera key lets go.
 - Laws extended to every coaster: coaster_on_circuit and no_collisions for each track, and a new one,
-  **open_only_tested** (a coaster opens only after a test run completed).
+  **open_only_tested** (a coaster is open only if its track is a closed circuit and a test run completed).
+  Editing closes a ride first; no crashes (a failed test reports the problem).
 
 ## Laws
 Proven: money_conserved, headcount_conserved, needs_bounded, coaster_on_circuit, no_collisions,
