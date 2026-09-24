@@ -177,8 +177,7 @@ static void* pkfill_job(void* arg) {
 }
 
 // the 16 squares two levels down are filled on their own threads
-static void pkwindow_fill(Env e, u32* pix, u32 w, u32 h, Term image, u32 k) {
-  Corpus H = e.mem;
+static void pkwindow_fill(Corpus H, u32* pix, u32 w, u32 h, Term image, u32 k) {
   PkJob jobs[16];
   pthread_t th[16];
   u32 n = 0;
@@ -216,6 +215,13 @@ static void pkwindow_fill(Env e, u32* pix, u32 w, u32 h, Term image, u32 k) {
 // A frame waits for the next 60 Hz tick, as the Mac's display sync.
 static void pkwindow_pace(void) {
   static u64 due;
+  static int off = -1;
+  if (off < 0) {
+    off = getenv("PARK_NOPACE") != NULL;
+  }
+  if (off) {
+    return;
+  }
   u64 now = io_tick();
   if (due > now) {
     struct timespec ts = { 0, (long)(due - now) };
@@ -224,7 +230,16 @@ static void pkwindow_pace(void) {
   due = (due > now ? due : now) + 16666667;
 }
 
-static void pkwindow_show(Env e, BendWin* win, Term image) {
+// The frame runs on a helper thread (io_work), so the event loop, and the
+// worker pool, carry on with other computations -- the game computes its
+// next frame while this one is filled, paced and shown. Only the helper
+// touches X between the effect's start and its pack.
+typedef struct {
+  Corpus H;
+  Term   image;
+} PkArgs;
+
+static void pkwindow_show(Corpus H, BendWin* win, Term image) {
   static u64 n, tf, tp, tx, last;
   u32 w = win->img->width;
   u32 h = win->img->height;
@@ -233,7 +248,7 @@ static void pkwindow_show(Env e, BendWin* win, Term image) {
     k += 1;
   }
   u64 t0 = io_tick();
-  pkwindow_fill(e, (u32*)win->img->data, w, h, image, k);
+  pkwindow_fill(H, (u32*)win->img->data, w, h, image, k);
   u64 t1 = io_tick();
   pkwindow_pace();
   u64 t2 = io_tick();
@@ -242,6 +257,21 @@ static void pkwindow_show(Env e, BendWin* win, Term image) {
   XFlush(win->dpy);
   u64 t3 = io_tick();
   tf += t1 - t0; tp += t2 - t1; tx += t3 - t2;
+  // PARK_DUMP=path: write the 300th frame's pixels as it was shown (PPM)
+  static u64 shown;
+  const char* dump = getenv("PARK_DUMP");
+  if (dump && ++shown == 300) {
+    FILE* fp = fopen(dump, "wb");
+    if (fp) {
+      fprintf(fp, "P6\n%u %u\n255\n", w, h);
+      u32* px = (u32*)win->img->data;
+      for (u64 i = 0; i < (u64)w * h; i += 1) {
+        unsigned char rgb[3] = { (px[i] >> 16) & 255, (px[i] >> 8) & 255, px[i] & 255 };
+        fwrite(rgb, 1, 3, fp);
+      }
+      fclose(fp);
+    }
+  }
   if (getenv("PARK_PROF") && ++n % 64 == 0) {
     fprintf(stderr, "fill %.1fms pace %.1fms put %.1fms frame %.1fms\n", tf / 64e6,
       tp / 64e6, tx / 64e6, (t3 - last) / 64e6);
@@ -249,20 +279,33 @@ static void pkwindow_show(Env e, BendWin* win, Term image) {
   }
 }
 
-static Term pkwindow_frame(Env e, intptr_t at, Term image) {
-  BendWin* win = (BendWin*)at;
-  io_sync();
+static void pkframe_call(IoWork* w) {
+  BendWin* win = (BendWin*)w->hand;
+  PkArgs*  a   = (PkArgs*)w->data;
   pkwindow_pump(win);
-  pkwindow_show(e, win, image);
-  Term list = pkwindow_list(e, win->evs, win->n);
+  pkwindow_show(a->H, win, a->image);
+}
+
+static Term pkframe_pack(Env e, IoWork* w) {
+  BendWin* win   = (BendWin*)w->hand;
+  PkArgs*  a     = (PkArgs*)w->data;
+  Term     image = a->image;
+  Term     list  = pkwindow_list(e, win->evs, win->n);
   win->n = 0;
-  return list;
+  free(a);
+  w->data = NULL;
+  return io_tup(e, io_hand(w->hand), io_tup(e, image, list));
 }
 
 #endif
 Term win_frame_run(Env e, Term* f, IoWork* w) {
-  Term events = pkwindow_frame(e, (intptr_t)io_hand_v(f[0]), f[1]);
-  return io_tup(e, f[0], io_tup(e, f[1], events));
+  io_sync();
+  PkArgs* a = io_mem(malloc(sizeof *a));
+  a->H     = e.mem;
+  a->image = f[1];
+  w->hand  = (intptr_t)io_hand_v(f[0]);
+  w->data  = (char*)a;
+  return io_work(w, pkframe_call, pkframe_pack);
 }
 
 static void __attribute__((constructor)) win_frame_use(void) {

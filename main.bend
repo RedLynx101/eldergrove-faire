@@ -1171,7 +1171,21 @@ def bench.go(g: Game, +n: Nat, +mode: U32) -> IO(Unit):
     t0 : Nat <- IO.now()
     r : U32 = bench.loop(n, mode, g2)
     t1 : Nat <- IO.now()
-    IO.print(Nat.show(n) ++ " frames in " ++ Nat.show(Nat.sub(t1, t0)) ++ " ms (" ++ U32.show(r) ++ ")")
+    IO.print(Nat.show(n) ++ " frames in " ++ Nat.show(Nat.sub(t1, t0)) ++ " ms (" ++ U32.show(r) ++ "), guests " ++ U32.show(C.len32(C.Guest, C.Park.guests(Game.park(g2)))))
+
+# stress testing: a crowd of n extra adventurers at the gate
+def crowd.go(+n: Nat, +id: U32, +t: U32, +acc: +List<C.Guest>) -> +List<C.Guest>:
+  match n:
+    case 0n:
+      acc
+    case 1n+k:
+      crowd.go(k, (id + 1 : U32), t, C.Guest.new(id, (t + id * 7 : U32)) <> acc)
+
+def crowd(g: Game, +n: U32) -> Game:
+  Game{p, ui} = g
+  C.Park{map, guests, rides, track, cash, +time, +nid} = p
+  Game{C.Park{map, crowd.go(U32.to_nat(n), nid, time, guests), rides, track, cash, time,
+    (nid + n : U32)}, ui}
 
 def warm(g: Game, +n: Nat) -> Game:
   Game{+p, +ui} = g
@@ -1184,46 +1198,89 @@ def is_bench(+args: +List<String>) -> Bool:
     case a <> rest:
       String.eq(a, "--bench")
 
-# The frame loop: Base's App loop, but through Win.frame, whose blit fills
-# each quadtree square at once (win_frame.c)
+# The window effect: Base's Linux window with a parallel blit (win_frame.c)
 def Win.frame(window: Window, image: Image) ->
   IO(Window & Image & List<Event>):
   import "./win_frame.c"
   import "./win_frame.js"
 
-def Loop.next(window: Window, rest: Window -> Game -> IO(Unit),
-  next: Maybe<Game>) -> IO(Unit):
-  match next:
+# The frame loop, pipelined: while Win.frame fills and shows frame n on a
+# helper thread, a forked computation steps the game and draws frame n+1 on
+# the worker pool (from the input of frame n-1: one frame of latency).
+type Nx is Type:
+  Nx{m: Maybe<Game>, img: Image}
+
+def Loop.nx(m: Maybe<Game>) -> Nx:
+  match m:
+    case None{}:
+      Nx{None{}, Pix{0}}
+    case Some{g}:
+      +g2 = g
+      Nx{Some{g2}, frame(g2)}
+
+def Loop.pure.go(u: Unit, +g: Game, evs: List<Event>) -> Nx:
+  match u:
+    case Unit{}:
+      Loop.nx(step_game(g, evs))
+
+# the next frame: drop the frame before last, step the game, draw it
+def Loop.pure(old: Image, +g: Game, evs: List<Event>) -> Nx:
+  Loop.pure.go(Image.drop(old), g, evs)
+
+def Loop.compute(old: Image, g: Game, evs: List<Event>) -> IO(Nx):
+  IO.bind(Unit, Nx, IO.pure(Unit, Unit{}), u => IO.pure(Nx, Loop.pure(old, g, evs)))
+
+def Loop.again(m: Maybe<Game>, window: Window, shown: Image, events: List<Event>,
+  img: Image, rest: Window -> Game -> Image -> List<Event> -> Image -> IO(Unit))
+  -> IO(Unit):
+  match m:
     case None{}:
       Window.close(window)
     case Some{g}:
-      rest(window, g)
+      rest(window, g, img, events, shown)
 
-def Loop.turn(shown: Window & Image & List<Event>, g: Game,
-  rest: Window -> Game -> IO(Unit)) -> IO(Unit):
-  (window, image, events) = shown
-  do IO<Unit>:
-    Unit <- IO.pure(Unit, Image.drop(image))
-    IO.bind(Maybe<Game>, Unit, tick(events, g), Loop.next(window, rest))
+def Loop.after.go(m: Maybe<Game>, window: Window, shown: Image, events: List<Event>,
+  img: Image, rest: Window -> Game -> Image -> List<Event> -> Image -> IO(Unit))
+  -> IO(Unit):
+  match m:
+    case None{}:
+      Window.close(window)
+    case Some{g}:
+      do IO<Unit>:
+        now : Nat <- IO.now()
+        m2 : Maybe<Game> <- Game.io_m(Game.clock_m(Some{g}, now))
+        Loop.again(m2, window, shown, events, img, rest)
 
-def Loop.draw(window: Window, drawn: Game & Image,
-  rest: Window -> Game -> IO(Unit)) -> IO(Unit):
-  (g, image) = drawn
-  do IO<Unit>:
-    shown : Window & Image & List<Event> <- Win.frame(window, image)
-    Loop.turn(shown, g, rest)
+def Loop.after(shown: Window & Image & List<Event>, nx: Nx,
+  rest: Window -> Game -> Image -> List<Event> -> Image -> IO(Unit)) -> IO(Unit):
+  (window, simg, events) = shown
+  Nx{m, img} = nx
+  Loop.after.go(m, window, simg, events, img, rest)
 
-def Loop.go(fuel: Nat, window: Window, g: Game) -> IO(Unit):
+def Loop.go(fuel: Nat, window: Window, g: Game, img: Image, evs: List<Event>,
+  old: Image) -> IO(Unit):
   match fuel:
     case 0n:
       Window.close(window)
     case 1n+f:
-      Loop.draw(window, view(g), w => s => Loop.go(f, w, s))
+      do IO<Unit>:
+        chan : Chan(Nx) <- IO.fork(Nx, Loop.compute(old, g, evs))
+        shown : Window & Image & List<Event> <- Win.frame(window, img)
+        nx : Nx <- IO.join(Nx, chan)
+        Loop.after(shown, nx, w => g2 => i2 => e2 => o2 => Loop.go(f, w, g2, i2, e2, o2))
 
 def Loop.run(g: Game) -> IO(Unit):
+  +g2 = g
   do IO<Unit>:
     window : Window <- IO.try(Window, Window.open("Eldergrove Faire", 1024, 640))
-    Loop.go(U32.to_nat(4294967295), window, g)
+    Loop.go(U32.to_nat(4294967295), window, g2, frame(g2), [], Pix{0})
+
+def is_arg(+args: +List<String>, s: String) -> Bool:
+  match args:
+    case []:
+      False{}
+    case a <> rest:
+      String.eq(a, s)
 
 def run(go: Bool, +args: +List<String>) -> IO(Unit):
   match go:
@@ -1231,7 +1288,8 @@ def run(go: Bool, +args: +List<String>) -> IO(Unit):
       shot(nth(args, 1), arg_nat(nth(args, 2)), arg_u32(nth(args, 3)),
         arg_or(nth(args, 4), 930), arg_or(nth(args, 5), 880))
     case False{}:
-      Loop.run(Game.new())
+      Loop.run(Bool.pick(Game, is_arg(args, "--live"),
+        warm(crowd(Game.new(), arg_or(nth(args, 1), 0)), arg_nat(nth(args, 2))), Game.new()))
 
 def share(xs: List<String>) -> +List<String>:
   match xs:
@@ -1302,13 +1360,6 @@ def savetest.go(+p: C.Park) -> IO(Unit):
     r : File & Result<&1, &1, U32 & String, List<&2, U32>> <- File.read_bytes(g, 16000000)
     savetest.read(r, p)
 
-def is_arg(+args: +List<String>, s: String) -> Bool:
-  match args:
-    case []:
-      False{}
-    case a <> rest:
-      String.eq(a, s)
-
 def start.test(test: Bool, +args: +List<String>) -> IO(Unit):
   match test:
     case True{}:
@@ -1319,7 +1370,8 @@ def start.test(test: Bool, +args: +List<String>) -> IO(Unit):
 def start.go(bench: Bool, +args: +List<String>) -> IO(Unit):
   match bench:
     case True{}:
-      bench.go(warm(Game.new(), arg_nat(nth(args, 2))), arg_nat(nth(args, 1)), arg_or(nth(args, 3), 0))
+      bench.go(warm(crowd(Game.new(), arg_or(nth(args, 4), 0)), arg_nat(nth(args, 2))),
+        arg_nat(nth(args, 1)), arg_or(nth(args, 3), 0))
     case False{}:
       start.test(is_arg(args, "--savetest"), args)
 
