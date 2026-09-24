@@ -176,13 +176,13 @@ def len_app(+xs: +List<C.Guest>, +ys: +List<C.Guest>)
       {==}
 
 def len_step(+g: +List<C.Guest>, +q: C.Q, +rs: +List<C.Ride>, +t: U32,
-  +pl: +List<C.Board>, +sn: C.Stn, +qs: +List<U32>, +en: +List<U32>)
-  -> {glen(C.Guests.step(g, q, rs, t, pl, sn, qs, en)) == glen(g) : Nat}:
+  +pl: +List<C.Board>, +sn: C.Stn, +qs: +List<U32>)
+  -> {glen(C.Guests.step(g, q, rs, t, pl, sn, qs)) == glen(g) : Nat}:
   match g:
     case []:
       {==}
     case x <> r:
-      %len_step(r, q, rs, t, pl, sn, qs, en) : {1n+glen(C.Guests.step(r, q, rs, t, pl, sn, qs, en)) == 1n+_ : Nat}
+      %len_step(r, q, rs, t, pl, sn, qs) : {1n+glen(C.Guests.step(r, q, rs, t, pl, sn, qs)) == 1n+_ : Nat}
       {==}
 
 def part_t(+r: +List<C.Guest>,
@@ -210,15 +210,15 @@ def part(+m: +List<C.Guest>)
         part_t(r, part(r)), part_f(r, part(r)))
 
 def hc_tick(+arr: +List<C.Guest>, +g: +List<C.Guest>, +q: C.Q, +rs: +List<C.Ride>,
-  +t: U32, +pl: +List<C.Board>, +sn: C.Stn, +qs: +List<U32>, +en: +List<U32>)
-  -> {Nat.add(glen(List.append(&2, C.Guest, arr, C.Guests.stay(C.Guests.step(g, q, rs, t, pl, sn, qs, en)))),
-    glen(C.Guests.left(C.Guests.step(g, q, rs, t, pl, sn, qs, en)))) == Nat.add(glen(g), glen(arr)) : Nat}:
-  +m = C.Guests.step(g, q, rs, t, pl, sn, qs, en)
+  +t: U32, +pl: +List<C.Board>, +sn: C.Stn, +qs: +List<U32>)
+  -> {Nat.add(glen(List.append(&2, C.Guest, arr, C.Guests.stay(C.Guests.step(g, q, rs, t, pl, sn, qs)))),
+    glen(C.Guests.left(C.Guests.step(g, q, rs, t, pl, sn, qs)))) == Nat.add(glen(g), glen(arr)) : Nat}:
+  +m = C.Guests.step(g, q, rs, t, pl, sn, qs)
   +st = C.Guests.stay(m)
   +lf = C.Guests.left(m)
   +lhs = Nat.add(glen(List.append(&2, C.Guest, arr, st)), glen(lf))
   %add_comm(glen(arr), glen(g)) : {lhs == _ : Nat}
-  %len_step(g, q, rs, t, pl, sn, qs, en) : {lhs == Nat.add(glen(arr), _) : Nat}
+  %len_step(g, q, rs, t, pl, sn, qs) : {lhs == Nat.add(glen(arr), _) : Nat}
   %part(m) : {lhs == Nat.add(glen(arr), _) : Nat}
   %add_assoc(glen(arr), glen(st), glen(lf)) : {lhs == _ : Nat}
   %len_app(arr, st) : {lhs == Nat.add(_, glen(lf)) : Nat}
@@ -231,8 +231,8 @@ def Laws.headcount_conserved(p, a):
         case C.Tick{}:
           +sn = C.Track.stn(track)
           hc_tick(C.Guests.arrivals(guests, rides, time, nid), guests, map, rides, time,
-            C.Boards.plan(guests, C.Occ.table(guests, rides, sn), map, rides, sn, C.Rides.ents(map, rides), []), sn,
-            C.Queue.list(guests, map, []), C.Rides.ents(map, rides))
+            C.Boards.plan(guests, C.Occ.table(guests, rides, sn), map, rides, sn, []), sn,
+            C.Queue.list(guests, map, []))
         case C.Build{tool, x, y, v}:
           {==}
         case C.TrackOp{op}:
@@ -336,15 +336,15 @@ def all_stay(+m: +List<C.Guest>, +h: {Laws.all_needs_ok(m) == True{} : Bool})
         all_stay_f(x, r, and_l(Laws.needs_ok(x), Laws.all_needs_ok(r), h), ih))
 
 def all_step(+g: +List<C.Guest>, +q: C.Q, +rs: +List<C.Ride>, +t: U32,
-  +pl: +List<C.Board>, +sn: C.Stn, +qs: +List<U32>, +en: +List<U32>)
-  -> {Laws.all_needs_ok(C.Guests.step(g, q, rs, t, pl, sn, qs, en)) == True{} : Bool}:
+  +pl: +List<C.Board>, +sn: C.Stn, +qs: +List<U32>)
+  -> {Laws.all_needs_ok(C.Guests.step(g, q, rs, t, pl, sn, qs)) == True{} : Bool}:
   match g:
     case []:
       {==}
     case x <> r:
-      and_i(Laws.needs_ok(C.Guest.step(x, q, rs, t, pl, sn, qs, en)),
-        Laws.all_needs_ok(C.Guests.step(r, q, rs, t, pl, sn, qs, en)),
-        ok_clamp(C.Guest.needs(C.Guest.move(x, q, rs, t, pl, sn, qs, en), t)), all_step(r, q, rs, t, pl, sn, qs, en))
+      and_i(Laws.needs_ok(C.Guest.step(x, q, rs, t, pl, sn, qs)),
+        Laws.all_needs_ok(C.Guests.step(r, q, rs, t, pl, sn, qs)),
+        ok_clamp(C.Guest.needs(C.Guest.move(x, q, rs, t, pl, sn, qs), t)), all_step(r, q, rs, t, pl, sn, qs))
 
 def all_arrive(+go: Bool, +id: U32, +t: U32)
   -> {Laws.all_needs_ok(C.Guests.arrive(go, id, t)) == True{} : Bool}:
@@ -360,11 +360,11 @@ def Laws.needs_bounded(p, a, h):
       match a:
         case C.Tick{}:
           +sn = C.Track.stn(track)
-          +pl = C.Boards.plan(guests, C.Occ.table(guests, rides, sn), map, rides, sn, C.Rides.ents(map, rides), [])
-          +m = C.Guests.step(guests, map, rides, time, pl, sn, C.Queue.list(guests, map, []), C.Rides.ents(map, rides))
+          +pl = C.Boards.plan(guests, C.Occ.table(guests, rides, sn), map, rides, sn, [])
+          +m = C.Guests.step(guests, map, rides, time, pl, sn, C.Queue.list(guests, map, []))
           all_app(C.Guests.arrivals(guests, rides, time, nid), C.Guests.stay(m),
             all_arrive(C.Guests.come(guests, rides, time), nid, time),
-            all_stay(m, all_step(guests, map, rides, time, pl, sn, C.Queue.list(guests, map, []), C.Rides.ents(map, rides))))
+            all_stay(m, all_step(guests, map, rides, time, pl, sn, C.Queue.list(guests, map, []))))
         case C.Build{tool, x, y, v}:
           h
         case C.TrackOp{op}:
@@ -492,7 +492,7 @@ def rt_guest(+g: C.Guest, +rest: List<&2, U32>, +more: List<&2, C.Guest>, +st: L
 def rt_ride(+r: C.Ride, +rest: List<&2, U32>, +more: List<&2, C.Ride>, +st: List<&2, S.Item>)
   -> {S.dec(S.Enc.ride(r, rest), S.IR{more} <> st) == S.dec(rest, S.IR{r <> more} <> st) : List<&2, S.Item>}:
   match r:
-    case C.Ride{kind, x, y, w, h, price, open}:
+    case C.Ride{kind, x, y, w, h, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born}:
       {==}
 
 def rt_piece(+p: C.Piece, +rest: List<&2, U32>, +more: List<&2, C.Piece>, +st: List<&2, S.Item>)
@@ -674,33 +674,88 @@ def try_ok(+want: Bool, +g: C.Guest, +occ: +List<U32>, +rs: +List<C.Ride>, +sn: 
       h
 
 def plan_ok(+gs: +List<C.Guest>, +occ: +List<U32>, +q: C.Q, +rs: +List<C.Ride>, +sn: C.Stn,
-  +ne: +List<U32>, +acc: +List<C.Board>, +h: {Laws.all_boards_ok(rs, acc) == True{} : Bool})
-  -> {Laws.all_boards_ok(rs, C.Boards.plan(gs, occ, q, rs, sn, ne, acc)) == True{} : Bool}:
+  +acc: +List<C.Board>, +h: {Laws.all_boards_ok(rs, acc) == True{} : Bool})
+  -> {Laws.all_boards_ok(rs, C.Boards.plan(gs, occ, q, rs, sn, acc)) == True{} : Bool}:
   match gs:
     case []:
       h
     case g <> rest:
-      plan_ok(rest, occ, q, rs, sn, ne, C.Boards.try(C.Guest.wants(g, q, rs, sn, ne), g, occ, rs, sn, acc),
-        try_ok(C.Guest.wants(g, q, rs, sn, ne), g, occ, rs, sn, acc, h))
+      plan_ok(rest, occ, q, rs, sn, C.Boards.try(C.Guest.wants(g, q, rs, sn), g, occ, rs, sn, acc),
+        try_ok(C.Guest.wants(g, q, rs, sn), g, occ, rs, sn, acc, h))
 
-def Laws.capacity_respected(gs, occ, q, rs, stn, ents):
-  plan_ok(gs, occ, q, rs, stn, ents, [], {==})
+def Laws.capacity_respected(gs, occ, q, rs, stn):
+  plan_ok(gs, occ, q, rs, stn, [], {==})
 
 # Riders: a rider's tick is Guest.off, which sets st to 0 (got off) or 1
 # (still riding) -- never 3 (gone) -- and the needs and clamp keep st.
 def riders_one(+id: U32, +x: U32, +y: U32, +dir: U32, +tgt: U32, +tmr: U32, +cash: U32,
   +hu: U32, +th: U32, +en: U32, +na: U32, +ha: U32, +lk: U32, +q: C.Q, +rs: +List<C.Ride>,
-  +t: U32, +pl: +List<C.Board>, +sn: C.Stn, +qs: +List<U32>, +ne: +List<U32>)
+  +t: U32, +pl: +List<C.Board>, +sn: C.Stn, +qs: +List<U32>)
   -> {C.Guest.gone(C.Guest.step(C.Guest{id, x, y, dir, 1, tgt, tmr, cash, hu, th, en, na, ha, lk},
-    q, rs, t, pl, sn, qs, ne)) == False{} : Bool}:
+    q, rs, t, pl, sn, qs)) == False{} : Bool}:
   bcase(C.Guest.done(tmr, dir, tgt, rs, sn),
     b => {C.Guest.gone(C.Guest.clamp(C.Guest.needs(C.Guest.off(b, id, x, y, dir, tgt, tmr, cash,
       hu, th, en, na, ha, lk, q, rs), t))) == False{} : Bool},
     {==}, {==})
 
-def Laws.riders_conserved(g, q, rs, t, plan, stn, qs, ents, h):
+def Laws.riders_conserved(g, q, rs, t, plan, stn, qs, h):
   match g:
     case C.Guest{id, x, y, dir, st, tgt, tmr, cash, hu, th, en, na, ha, lk}:
       %Equal.sym(U32, st, 1, h) : {C.Guest.gone(C.Guest.step(C.Guest{id, x, y, dir, _, tgt, tmr, cash,
-        hu, th, en, na, ha, lk}, q, rs, t, plan, stn, qs, ents)) == False{} : Bool}
-      riders_one(id, x, y, dir, tgt, tmr, cash, hu, th, en, na, ha, lk, q, rs, t, plan, stn, qs, ents)
+        hu, th, en, na, ha, lk}, q, rs, t, plan, stn, qs)) == False{} : Bool}
+      riders_one(id, x, y, dir, tgt, tmr, cash, hu, th, en, na, ha, lk, q, rs, t, plan, stn, qs)
+
+# Boarding only while loading: Guest.wants puts Ride.loading first, so a
+# guest the plan seats has a loading ride; the plan keeps that for every
+# board it adds (the same shape as capacity).
+def load_put(+s: U32, +id: U32, +r: U32, +rs: +List<C.Ride>, +sn: C.Stn, +acc: +List<C.Board>,
+  +hl: {C.Ride.loading(C.Rides.get(rs, r), sn) == True{} : Bool},
+  +h: {Laws.all_boards_loading(rs, sn, acc) == True{} : Bool})
+  -> {Laws.all_boards_loading(rs, sn, C.Boards.put(s, id, r, acc)) == True{} : Bool}:
+  bcase_eq(U32.is_eq(s, C.NONE()),
+    c => {Laws.all_boards_loading(rs, sn, Bool.pick(+List<C.Board>, c, acc, C.Board{id, r, s} <> acc)) == True{} : Bool},
+    e => h,
+    e => and_i(C.Ride.loading(C.Rides.get(rs, r), sn), Laws.all_boards_loading(rs, sn, acc), hl, h))
+
+def load_try(+want: Bool, +g: C.Guest, +occ: +List<U32>, +rs: +List<C.Ride>, +sn: C.Stn,
+  +acc: +List<C.Board>, +h: {Laws.all_boards_loading(rs, sn, acc) == True{} : Bool},
+  hw: {want == True{} : Bool} -> {C.Ride.loading(C.Rides.get(rs, C.Guest.tgt(g)), sn) == True{} : Bool})
+  -> {Laws.all_boards_loading(rs, sn, C.Boards.try(want, g, occ, rs, sn, acc)) == True{} : Bool}:
+  match want:
+    case True{}:
+      +r = C.Guest.tgt(g)
+      +cap = C.Ride.seats(C.Ride.kind(C.Rides.get(rs, r)))
+      +m = (C.Tab.at(occ, r) .|. C.Boards.mask(acc, r, 0) : U32)
+      load_put(C.Seat.free(m, cap), C.Guest.id(g), r, rs, sn, acc, hw({==}), h)
+    case False{}:
+      h
+
+def load_plan(+gs: +List<C.Guest>, +occ: +List<U32>, +q: C.Q, +rs: +List<C.Ride>, +sn: C.Stn,
+  +acc: +List<C.Board>, +h: {Laws.all_boards_loading(rs, sn, acc) == True{} : Bool})
+  -> {Laws.all_boards_loading(rs, sn, C.Boards.plan(gs, occ, q, rs, sn, acc)) == True{} : Bool}:
+  match gs:
+    case []:
+      h
+    case g <> rest:
+      match g:
+        case C.Guest{id, x, y, dir, st, tgt, tmr, cash, hu, th, en, na, ha, lk}:
+          +gg = {C.Guest{id, x, y, dir, st, tgt, tmr, cash, hu, th, en, na, ha, lk} : C.Guest}
+          load_plan(rest, occ, q, rs, sn, C.Boards.try(C.Guest.wants(gg, q, rs, sn), gg, occ, rs, sn, acc),
+            load_try(C.Guest.wants(gg, q, rs, sn), gg, occ, rs, sn, acc, h,
+              e => and_l(C.Ride.loading(C.Rides.get(rs, tgt), sn),
+                C.Guest.ready(C.Rides.get(rs, tgt), st, tgt, x, y, cash), e)))
+
+def Laws.board_only_when_loading(gs, occ, q, rs, stn):
+  load_plan(gs, occ, q, rs, stn, [], {==})
+
+# Riding until unloading: a rider's tick is Guest.off(Guest.done(...)), and
+# Guest.done is Ride.unloading; while that is False, Guest.off keeps st at 1.
+def Laws.ride_until_unloading(g, q, rs, t, plan, stn, qs, h, u):
+  match g:
+    case C.Guest{id, x, y, dir, st, tgt, tmr, cash, hu, th, en, na, ha, lk}:
+      %Equal.sym(U32, st, 1, h) : {C.Guest.st(C.Guest.step(C.Guest{id, x, y, dir, _, tgt, tmr, cash,
+        hu, th, en, na, ha, lk}, q, rs, t, plan, stn, qs)) == 1 : U32}
+      %Equal.sym(Bool, C.Ride.unloading(C.Rides.get(rs, tgt), stn, dir, tmr), False{}, u)
+        : {C.Guest.st(C.Guest.clamp(C.Guest.needs(C.Guest.off(_, id, x, y, dir, tgt, tmr, cash,
+          hu, th, en, na, ha, lk, q, rs), t))) == 1 : U32}
+      {==}

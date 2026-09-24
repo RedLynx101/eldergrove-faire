@@ -252,15 +252,43 @@ def Art.rails.go(on: Bool, +x: U32, +y: U32, +nb: U32, +px: U32, +py: U32) -> U3
     case False{}:
       TR()
 
+# a ride's entrance or exit arch on the path tile's edge toward the ride
+# (nb bits 4-5: that edge, 6-7: 1 entrance, 2 exit): two posts and a banner,
+# green in, red out
+def Art.arch.go(on: Bool, +x: U32, +y: U32, +nb: U32, +px: U32, +py: U32) -> U32:
+  match on:
+    case True{}:
+      +side = ((nb >> 4n) .&. 3 : U32)
+      +kind = ((nb >> 6n) .&. 3 : U32)
+      +X = (px - x : U32)
+      +Y = (py - y : U32)
+      +e = sel(U32.is_eq(side, 0), (0 - X : U32), sel(U32.is_eq(side, 1), (16 - X : U32),
+        sel(U32.is_eq(side, 2), X, (X + 16 : U32))))
+      +yb = sel(U32.is_eq(side, 1) || U32.is_eq(side, 3), (8 + (e >> 1n) : U32), (e >> 1n : U32))
+      +rel = (Y - yb : U32)
+      +post = (between(e, 1, 3) || between(e, 13, 15)) && between(rel, (0 - 20 : U32), 0)
+      +knob = post && between(rel, (0 - 21 : U32), (0 - 20 : U32)) && (U32.is_eq(e, 2) || U32.is_eq(e, 14))
+      +banner = between(e, 1, 15) && between(rel, (0 - 19 : U32), (0 - 13 : U32))
+      +trim = banner && (U32.is_eq(rel, (0 - 19 : U32)) || U32.is_eq(rel, (0 - 13 : U32)))
+      +mark = banner && (U32.is_eq(rel, (0 - 16 : U32)) && between(e, 6, 10)
+        || U32.is_eq(rel, (0 - 17 : U32)) && between(e, 7, 9) && U32.is_eq(kind, 1)
+        || U32.is_eq(rel, (0 - 15 : U32)) && between(e, 7, 9) && U32.is_eq(kind, 2))
+      +col = sel(U32.is_eq(kind, 1), 3831360, 12595248)
+      sel(knob, 14725184, sel(post, sel(U32.is_eq(e, 1) || U32.is_eq(e, 13), 8014378, 5125410),
+        sel(trim, 14725184, sel(mark, 16316664, sel(banner, col, TR())))))
+    case False{}:
+      TR()
+
 def Art.block(+x: U32, +y: U32, +dl: U32, +dr: U32, +ter: U32, +obj: U32,
   +hov: U32, +wx: U32, +wy: U32, +t: U32, +px: U32, +py: U32, +nb: U32) -> U32:
   +X = (px - x : U32)
   +Y = ((py - y) * 2 : U32)
   +u = iso_u(X, Y)
   +v = iso_v(X, Y)
-  over(Art.rails.go(U32.is_eq(obj, 7), x, y, nb, px, py),
+  over(Art.arch.go(Bool.not(U32.is_eq((nb >> 6n : U32), 0)), x, y, nb, px, py),
+    over(Art.rails.go(U32.is_eq(obj, 7), x, y, nb, px, py),
     Art.block.go((u < 16 : U32) && (v < 16 : U32), x, y, dl, dr, ter, obj, hov,
-      wx, wy, t, px, py, u, v, nb))
+      wx, wy, t, px, py, u, v, nb)))
 
 # Trees (anchored at the tile centre)
 # -----------------------------------
@@ -704,7 +732,16 @@ def Art.code(+ra: U32, +rb: U32, +s: U32) -> U32:
 # UI
 # --
 
-def Art.carousel(+dx: U32, +dy: U32, +t: U32, +ra: U32, +rb: U32) -> U32:
+# the carousel's turn while running: it speeds up, turns, slows down, and
+# stops where it started (three turns in 448 ticks)
+def Art.spin(+st: U32) -> U32:
+  +ph = ((st >> 16n) .&. 3 : U32)
+  +tm = U32.min((st .&. 65535 : U32), 447)
+  +r = (448 - tm : U32)
+  sel(U32.is_eq(ph, 1), sel((tm < 64 : U32), ((tm * tm) >> 6n : U32),
+    sel((tm < 384 : U32), (64 + 2 * (tm - 64) : U32), (768 - ((r * r) >> 6n) : U32))), 0)
+
+def Art.carousel(+dx: U32, +dy: U32, +t: U32, +ra: U32, +rb: U32, +st: U32) -> U32:
   +canopy = Art.cone(dx, dy, (0 - 30 : U32), 28, 16, 8077216, 15253568)
   +pole = (sabs(dx) <= 1 : U32) && between(dy, (0 - 32 : U32), (0 - 4 : U32))
   +top = ell(dx, (dy + 4 : U32), 26, 13)
@@ -712,7 +749,7 @@ def Art.carousel(+dx: U32, +dy: U32, +t: U32, +ra: U32, +rb: U32) -> U32:
   +plank = U32.is_eq(((dx + dy * 2 + 256) .&. 7 : U32), 0)
   +flagp = U32.is_eq(dx, 0) && between(dy, (0 - 53 : U32), (0 - 46 : U32))
   +flag = between(dx, 1, 5) && between(dy, (0 - 53 : U32), (0 - 50 : U32))
-  +a0 = (t * 2 : U32)
+  +a0 = Art.spin(st)
   +a1 = (a0 + 32 : U32)
   +a2 = (a0 + 64 : U32)
   +a3 = (a0 + 96 : U32)
@@ -763,14 +800,16 @@ def Art.sseat(+dx: U32, +dy: U32, +ringy: U32, +s: U32, +code: U32) -> U32:
   +ey = (dy - (ringy + wsin(a, 4)) : U32)
   Art.rider(ex, ey, sel((sabs(ex) <= 3 : U32) && between(ey, (0 - 14 : U32), 0), code, 0))
 
-def Art.spire(+dx: U32, +dy: U32, +t: U32, +ra: U32, +rb: U32) -> U32:
+def Art.spire(+dx: U32, +dy: U32, +t: U32, +ra: U32, +rb: U32, +st: U32) -> U32:
   +base = Art.box(dx, dy, 0, 12, 5, 9602196, 8418172, 6708076)
   +tower = Art.cyl(dx, dy, (0 - 4 : U32), 5, 60, 7100042)
   +rune = (sabs(dx) <= 1 : U32) && U32.is_eq((((dy + 1024) + (t >> 1n)) .&. 15 : U32), 0)
   +orb = ell(dx, (dy + 70 : U32), 4, 4)
   +core = ell(dx, (dy + 71 : U32), 1, 1)
-  +ph = (t .&. 511 : U32)
-  +up = sel((ph < 384 : U32), (div3(ph) >> 1n : U32), ((512 - ph) >> 1n : U32))
+  # the ring rises slowly while running and drops back at the end
+  +ph = U32.min((st .&. 65535 : U32), 511)
+  +running = U32.is_eq(((st >> 16n) .&. 3 : U32), 1)
+  +up = sel(running, sel((ph < 384 : U32), (div3(ph) >> 1n : U32), ((512 - ph) >> 1n : U32)), 0)
   +ringy = (0 - 8 - up : U32)
   +ring = ell(dx, (dy - ringy : U32), 10, 5) && Bool.not(ell(dx, (dy - ringy : U32), 6, 3))
   +ringside = ell(dx, (dy - ringy - 2 : U32), 10, 5) && Bool.not(ell(dx, (dy - ringy : U32), 10, 5))
@@ -847,18 +886,36 @@ def Art.tavern(+dx: U32, +dy: U32, +t: U32) -> U32:
     over(sel(smoke, 13421772, TR()), over(sel(chim, 8016192, TR()),
     sel(roof, roofc, sel(door, 5913120, wallc)))))
 
-def Art.ride(+k: U32, +dx: U32, +dy: U32, +t: U32, +ra: U32, +rb: U32) -> U32:
+def Art.ride.go(+k: U32, +dx: U32, +dy: U32, +t: U32, +ra: U32, +rb: U32, +st: U32) -> U32:
   match k:
     case 1:
-      Art.carousel(dx, dy, t, ra, rb)
+      Art.carousel(dx, dy, t, ra, rb, st)
     case 2:
-      Art.spire(dx, dy, t, ra, rb)
+      Art.spire(dx, dy, t, ra, rb, st)
     case 3:
       Art.potion(dx, dy, t)
     case 4:
       Art.tavern(dx, dy, t)
     case _:
       TR()
+
+# a blinking warning over a ride that can't run (no entrance or no exit)
+def Art.warn(on: Bool, +dx: U32, +dy: U32, +t: U32) -> U32:
+  match on:
+    case True{}:
+      +cy = (dy + 84 : U32)
+      +disc = ell(dx, cy, 5, 5)
+      +rim = disc && Bool.not(ell(dx, cy, 4, 4))
+      +bang = U32.is_eq(dx, 0) && (between(dy, (0 - 87 : U32), (0 - 83 : U32)) || U32.is_eq(dy, (0 - 81 : U32)))
+      +vis = Bool.not(U32.is_eq(((t >> 4n) .&. 3 : U32), 0))
+      sel(vis && disc, sel(bang, 16777215, sel(rim, 8392720, 14163020)), TR())
+    case False{}:
+      TR()
+
+# st: phase << 16 | ticks into it, bit 30 when the ride lacks a door
+def Art.ride(+k: U32, +dx: U32, +dy: U32, +t: U32, +ra: U32, +rb: U32, +st: U32) -> U32:
+  over(Art.warn(Bool.not(U32.is_eq((st .&. 1073741824 : U32), 0)), dx, dy, t),
+    Art.ride.go(k, dx, dy, t, ra, rb, st))
 
 # Coaster track
 # -------------

@@ -50,11 +50,17 @@ Guests face the way they walk, carry what they buy (potions, tankards of
 ale), and now and then show what they think in a bubble: hungry, thirsty,
 queasy, tired, cross or delighted.
 
-Queue lines (U): a queue tile beside a ride is its entrance. Once a ride has
-one, guests board only from the entrance, so they walk the line single file;
-they can join a line only at its free end (the tile away from the ride), and
-riders leave onto a path tile beside the ride. Rope rails close every other
-side of the line.
+Rides need a door in and a door out. The entrance is a queue tile (U) beside
+the ride, marked by a green arch; guests walk the line single file, join it
+only at its free end (the tile away from the ride), and leave it only there.
+The exit is any path tile beside the ride, marked by a red arch; riders step
+off onto it. A ride without both shows a blinking warning and doesn't run
+(shops need neither). For the coaster, both go beside its station.
+
+The carousel and spire run in cycles: they load until full (or until the
+first rider has waited long enough), run start to finish with no one getting
+on or off, unload everyone, then load again. The coaster's station unloads a
+returning train before loading it. Hover over a ride to see its state.
 
 Coaster tool (0): `Enter` opens or closes the coaster; while closed, `W`
 ahead, `A`/`D` turn, `Q` up, `Z` down, `L` lift hill, `Backspace` removes the
@@ -84,9 +90,11 @@ coaster per park for now (the Wyrm Coaster comes pre-built).
 6. **save_load_roundtrip**: loading a save gives back exactly the park that was saved.
 7. **capacity_respected**: the boarding plan (the only way anyone gets a seat) never seats a guest at or past their ride's seat count.
 8. **riders_conserved**: nobody leaves the park from a ride: a guest riding at the start of a tick is still in the park after it.
+9. **board_only_when_loading**: the boarding plan seats guests only on rides that are loading (a cycling ride between runs, the coaster's train standing in the station after unloading, or a shop).
+10. **ride_until_unloading**: a rider stays aboard until their ride unloads.
 
 Laws 1-4 quantify over every possible `Park.step` (tick, build, track edit),
 so they hold for anything a player or the clock can do.
-Laws 7 and 8 hold for every possible input to the boarding plan and to a
+Laws 7-10 hold for every possible input to the boarding plan and to a
 rider's tick. Not yet proven: that no two guests are planned into the same
 seat (the plan skips taken seats, but no law checks it).

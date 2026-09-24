@@ -29,7 +29,7 @@ type Dr is Data:
   DBlock{x: U32, y: U32, dl: U32, dr: U32, ter: U32, obj: U32, hov: U32,
     wx: U32, wy: U32, nb: U32}
   DTree{x: U32, y: U32, v: U32, n: U32}
-  DRide{x: U32, y: U32, k: U32, ra: U32, rb: U32}
+  DRide{x: U32, y: U32, k: U32, ra: U32, rb: U32, st: U32}
   DGate{x: U32, y: U32}
   DTrack{x: U32, y: U32, code: U32, zr: U32}
   DGuest{x: U32, y: U32, look: U32, ph: U32}
@@ -44,12 +44,13 @@ def ov(+x0: U32, +y0: U32, +x1: U32, +y1: U32, +bx: U32, +by: U32, +s: U32)
 
 def Dr.hits(d: Dr, +bx: U32, +by: U32, +s: U32) -> Bool:
   match d:
-    case DBlock{+x, +y, +dl, +dr, ter, obj, hov, wx, wy, nb}:
-      ov((x - 16 : U32), (y - 7 : U32), (x + 17 : U32), (y + 17 + U32.max(dl, dr) : U32), bx, by, s)
+    case DBlock{+x, +y, +dl, +dr, ter, obj, hov, wx, wy, +nb}:
+      +top = sel(U32.is_eq((nb >> 6n : U32), 0), 7, 30)
+      ov((x - 16 : U32), (y - top : U32), (x + 17 : U32), (y + 17 + U32.max(dl, dr) : U32), bx, by, s)
     case DTree{+x, +y, v, n}:
       ov((x - 13 : U32), (y - 40 : U32), (x + 14 : U32), (y + 6 : U32), bx, by, s)
-    case DRide{+x, +y, k, ra, rb}:
-      ov((x - 30 : U32), (y - 78 : U32), (x + 31 : U32), (y + 16 : U32), bx, by, s)
+    case DRide{+x, +y, k, ra, rb, st}:
+      ov((x - 30 : U32), (y - 92 : U32), (x + 31 : U32), (y + 16 : U32), bx, by, s)
     case DGate{+x, +y}:
       ov((x - 20 : U32), (y - 48 : U32), (x + 20 : U32), (y + 6 : U32), bx, by, s)
     case DTrack{+x, +y, code, +zr}:
@@ -72,8 +73,8 @@ def Dr.shade(d: Dr, +px: U32, +py: U32, +t: U32) -> U32:
       A.Art.block(x, y, dl, dr, ter, obj, hov, wx, wy, t, px, py, nb)
     case DTree{x, y, v, n}:
       A.Art.tree(v, (px - x : U32), (py - y : U32), n, t)
-    case DRide{x, y, k, ra, rb}:
-      A.Art.ride(k, (px - x : U32), (py - y : U32), t, ra, rb)
+    case DRide{x, y, k, ra, rb, st}:
+      A.Art.ride(k, (px - x : U32), (py - y : U32), t, ra, rb, st)
     case DGate{x, y}:
       A.Art.gate((px - x : U32), (py - y : U32), t)
     case DTrack{x, y, code, zr}:
@@ -131,8 +132,8 @@ def Dr.cp(d: Dr) -> Dr:
       DBlock{x, y, dl, dr, ter, obj, hov, wx, wy, nb}
     case DTree{x, y, v, n}:
       DTree{x, y, v, n}
-    case DRide{x, y, k, ra, rb}:
-      DRide{x, y, k, ra, rb}
+    case DRide{x, y, k, ra, rb, st}:
+      DRide{x, y, k, ra, rb, st}
     case DGate{x, y}:
       DGate{x, y}
     case DTrack{x, y, code, zr}:
@@ -402,8 +403,17 @@ def RT.hi(t: RT) -> +List<U32>:
   RT{ra, rb, lo, hi} = t
   hi
 
+# what a ride shows: its phase and time into it, and bit 30 when it can't run
+# for want of an entrance or an exit
+def ride_st(r: C.Ride) -> U32:
+  +r2 = r
+  +k = C.Ride.kind(r2)
+  +broken = Bool.not(C.Ride.shop(k)) && Bool.not(U32.is_eq(k, 0))
+    && (U32.is_eq(C.Ride.ent(r2), C.NONE()) || U32.is_eq(C.Ride.ex(r2), C.NONE()))
+  ((C.Ride.ph(r2) << 16n) .|. U32.min(C.Ride.tm(r2), 65535) .|. sel(broken, 1073741824, 0) : U32)
+
 def obj_dr.go(+obj: U32, +a: U32, +b: U32, +h: U32, +i: U32, +j: U32,
-  +sx: U32, +sy: U32, +k: U32, +rt: RT) -> +List<Dr>:
+  +sx: U32, +sy: U32, +k: U32, +st: U32, +rt: RT) -> +List<Dr>:
   match obj:
     case 2:
       [DTree{sx, (sy + 8 : U32), a, A.hash(i, j)}]
@@ -412,7 +422,7 @@ def obj_dr.go(+obj: U32, +a: U32, +b: U32, +h: U32, +i: U32, +j: U32,
     case 3:
       Bool.pick(+List<Dr>, U32.is_eq(b, 1),
         [DRide{sx, sel(U32.is_eq(C.Ride.size(k), 2), sy, (sy + 8 : U32)), k,
-          C.Tab.at(RT.ra(rt), a), C.Tab.at(RT.rb(rt), a)}], [])
+          C.Tab.at(RT.ra(rt), a), C.Tab.at(RT.rb(rt), a), st}], [])
     case 6:
       [DTrack{sx, sy, a, (b - h : U32)}]
     case _:
@@ -421,7 +431,8 @@ def obj_dr.go(+obj: U32, +a: U32, +b: U32, +h: U32, +i: U32, +j: U32,
 def obj_dr(+t: C.Tile, +i: U32, +j: U32, +sx: U32, +sy: U32,
   +rs: +List<C.Ride>, +rt: RT) -> +List<Dr>:
   C.Tile{+h, ter, +obj, +a, +b} = t
-  obj_dr.go(obj, a, b, h, i, j, sx, sy, C.Ride.kind(C.Rides.get(rs, a)), rt)
+  +rd = C.Rides.get(rs, a)
+  obj_dr.go(obj, a, b, h, i, j, sx, sy, C.Ride.kind(rd), ride_st(rd), rt)
 
 # which neighbours a path or queue joins (paths, queues, the gate, rides),
 # or which neighbours of water are water: bit 1 i-1, 2 i+1, 4 j-1, 8 j+1
@@ -449,12 +460,47 @@ def nbmask(+q: C.Q, +i: U32, +j: U32, +obj: U32, +ter: U32) -> U32:
   +qm = sel(U32.is_eq(obj, 7), sel(C.Land.qend(U32.is_eq(obj, 7), q, i, j), 4, 3), 0)
   nb.go(sel(U32.is_eq(obj, 1), 1, sel((qm > 0 : U32), qm, sel(U32.is_eq(ter, 2), 2, 0))), q, i, j)
 
+# Entrance and exit arches: each ride's door tiles, packed tile << 4 | 1
+# (entrance) or 2 (exit)
+def Arches.put(+e: U32, +k: U32, +acc: +List<U32>) -> +List<U32>:
+  Bool.pick(+List<U32>, U32.is_eq(e, C.NONE()), acc, ((e << 4n) .|. k : U32) <> acc)
+
+def Arches.of(+rs: +List<C.Ride>) -> +List<U32>:
+  match rs:
+    case []:
+      []
+    case r <> rest:
+      +r2 = r
+      Arches.put(C.Ride.ent(r2), 1, Arches.put(C.Ride.ex(r2), 2, Arches.of(rest)))
+
+def Arches.find(+ar: +List<U32>, +e: U32) -> U32:
+  match ar:
+    case []:
+      0
+    case a <> rest:
+      sel(U32.is_eq((a >> 4n : U32), e), (a .&. 15 : U32), Arches.find(rest, e))
+
+def is_ride_side(+q: C.Q, +i: U32, +j: U32) -> Bool:
+  +o = C.Land.obj(q, i, j)
+  U32.is_eq(o, 3) || U32.is_eq(o, 6)
+
+# the arch stands on the edge toward the ride: 0 i-1, 1 i+1, 2 j-1, 3 j+1
+def arch_side(on: Bool, +q: C.Q, +i: U32, +j: U32) -> U32:
+  match on:
+    case True{}:
+      sel(is_ride_side(q, (i - 1 : U32), j), 0, sel(is_ride_side(q, (i + 1 : U32), j), 1,
+        sel(is_ride_side(q, i, (j - 1 : U32)), 2, 3)))
+    case False{}:
+      0
+
 def face(+h: U32, +nh: U32, +edge: Bool) -> U32:
   sel(edge, (h * 8 + 6 : U32), sel((h > nh : U32), ((h - nh) * 8 : U32), 0))
 
-def push_tile(+q: C.Q, +rs: +List<C.Ride>, +gs: RT, +i: U32, +j: U32,
+def push_tile(+q: C.Q, +rs: +List<C.Ride>, +gs: RT, +ar: +List<U32>, +i: U32, +j: U32,
   +camx: U32, +camy: U32, +hov: U32, +acc: +List<Dr>) -> +List<Dr>:
   +t = C.Land.get(q, i, j)
+  +ak = Arches.find(ar, (i * 64 + j : U32))
+  +arch = ((ak << 6n) .|. (arch_side(Bool.not(U32.is_eq(ak, 0)), q, i, j) << 4n) : U32)
   +h = C.Tile.h(t)
   +sx = scr_x(i, j, camx)
   +sy = scr_y(i, j, h, camy)
@@ -462,17 +508,17 @@ def push_tile(+q: C.Q, +rs: +List<C.Ride>, +gs: RT, +i: U32, +j: U32,
   +dr = face(h, C.Land.h(q, (i + 1 : U32), j), U32.is_eq(i, 63))
   +blk = {DBlock{sx, sy, dl, dr, C.Tile.ter(t), C.Tile.obj(t),
     sel(U32.is_eq(hov, (i * 64 + j : U32)), 1, 0), (16 * i - 16 * j : U32),
-    (8 * i + 8 * j : U32), nbmask(q, i, j, C.Tile.obj(t), C.Tile.ter(t))} : Dr}
+    (8 * i + 8 * j : U32), (nbmask(q, i, j, C.Tile.obj(t), C.Tile.ter(t)) .|. arch : U32)} : Dr}
   List.append(&2, Dr, obj_dr(t, i, j, sx, sy, rs, gs), blk <> acc)
 
-def row(+n: Nat, +i: U32, +k: U32, +q: C.Q, +rs: +List<C.Ride>, +gs: RT,
+def row(+n: Nat, +i: U32, +k: U32, +q: C.Q, +rs: +List<C.Ride>, +gs: RT, +ar: +List<U32>,
   +camx: U32, +camy: U32, +hov: U32, +acc: +List<Dr>) -> +List<Dr>:
   match n:
     case 0n:
       acc
     case 1n+p:
-      row(p, (i + 1 : U32), k, q, rs, gs, camx, camy, hov,
-        push_tile(q, rs, gs, i, (k - i : U32), camx, camy, hov, acc))
+      row(p, (i + 1 : U32), k, q, rs, gs, ar, camx, camy, hov,
+        push_tile(q, rs, gs, ar, i, (k - i : U32), camx, camy, hov, acc))
 
 def Dyn.key(a: Dyn) -> U32:
   Dyn{k, d} = a
@@ -517,17 +563,17 @@ def diag_rows(+k: U32, +camx: U32, +camy: U32) -> U32:
   +hi = U32.min(U32.min(hi0, k), 63)
   sel(vis && (hi >= lo : U32), ((hi - lo + 1) * 256 + lo : U32), 0)
 
-def diags(+n: Nat, +k: U32, +q: C.Q, +rs: +List<C.Ride>, +gs: RT,
+def diags(+n: Nat, +k: U32, +q: C.Q, +rs: +List<C.Ride>, +gs: RT, +ar: +List<U32>,
   +camx: U32, +camy: U32, +hov: U32, +ds: +List<Dyn>, +acc: +List<Dr>) -> +List<Dr>:
   match n:
     case 0n:
       acc
     case 1n+p:
       +r = diag_rows(k, camx, camy)
-      +acc2 = row(U32.to_nat((r >> 8n : U32)), (r .&. 255 : U32), k, q, rs, gs,
+      +acc2 = row(U32.to_nat((r >> 8n : U32)), (r .&. 255 : U32), k, q, rs, gs, ar,
         camx, camy, hov, acc)
       +dp = take(ds, heads(ds, k), k, acc2)
-      diags(p, (k + 1 : U32), q, rs, gs, camx, camy, hov, DP.ds(dp), DP.acc(dp))
+      diags(p, (k + 1 : U32), q, rs, gs, ar, camx, camy, hov, DP.ds(dp), DP.acc(dp))
 
 # guests on screen, keyed by their diagonal
 def shopping(+st: U32, +tgt: U32, +rs: +List<C.Ride>) -> Bool:
@@ -723,6 +769,17 @@ def riders(+gs: +List<C.Guest>, +idx: U32) -> U32:
       C.Guest{id, x, y, dir, +st, +tgt, tmr, cash, hu, th, en, na, ha, lk} = g
       (sel(U32.is_eq(st, 1) && U32.is_eq(tgt, idx), 1, 0) + riders(rest, idx) : U32)
 
+def ride_state(r: C.Ride) -> String:
+  +r2 = r
+  +k = C.Ride.kind(r2)
+  +ph = C.Ride.ph(r2)
+  Bool.pick(String, C.Ride.shop(k), "",
+    Bool.pick(String, U32.is_eq(C.Ride.ent(r2), C.NONE()), "  NEEDS AN ENTRANCE (QUEUE)",
+    Bool.pick(String, U32.is_eq(C.Ride.ex(r2), C.NONE()), "  NEEDS AN EXIT (PATH)",
+    Bool.pick(String, Bool.not(C.Ride.cycles(k)), "",
+    Bool.pick(String, U32.is_eq(ph, 0), "  LOADING",
+    Bool.pick(String, U32.is_eq(ph, 1), "  RUNNING", "  UNLOADING"))))))
+
 def hover_info(+p: C.Park, +hov: U32, +acc: +List<Dr>) -> +List<Dr>:
   C.Park{+map, +guests, +rides, track, cash, time, nid} = p
   +i = (hov >> 6n : U32)
@@ -732,10 +789,10 @@ def hover_info(+p: C.Park, +hov: U32, +acc: +List<Dr>) -> +List<Dr>:
   +rd = C.Rides.get(rides, C.Tile.a(t))
   +k = C.Ride.kind(rd)
   +line = ride_name(k) ++ "  RIDERS " ++ U32.show(riders(guests, C.Tile.a(t)))
-    ++ "  FEE *" ++ U32.show(C.Ride.price(rd))
+    ++ "  FEE *" ++ U32.show(C.Ride.price(rd)) ++ ride_state(rd)
   Bool.pick(+List<Dr>, isride,
-    DRect{(B() + 150 : U32), (B() + 16 : U32), 212, 10, 2763330}
-      <> text(line, (B() + 154 : U32), (B() + 18 : U32), 16777215, acc), acc)
+    DRect{(B() + 110 : U32), (B() + 16 : U32), 300, 10, 2763330}
+      <> text(line, (B() + 114 : U32), (B() + 18 : U32), 16777215, acc), acc)
 
 def coaster_help(+tool: U32, +acc: +List<Dr>) -> +List<Dr>:
   Bool.pick(+List<Dr>, U32.is_eq(tool, 10),
@@ -803,9 +860,10 @@ def scene(+g: Game) -> +List<Dr>:
   +dyn = trains_dyn(bs, ps, U32.max(total, 1), camx, camy, rt,
     guests_dyn(guests, map, rides, camx, camy, time, []))
   +sorted = List.sort(~Dyn, ~Dyn.le, dyn)
+  +ar = Arches.of(rides)
   # the back and front halves of the map are built in parallel
-  hi lo = diags(63n, 64, map, rides, rt, camx, camy, hov, dyn_from(sorted, 64), [])
-    diags(64n, 0, map, rides, rt, camx, camy, hov, dyn_below(sorted, 64), [])
+  hi lo = diags(63n, 64, map, rides, rt, ar, camx, camy, hov, dyn_from(sorted, 64), [])
+    diags(64n, 0, map, rides, rt, ar, camx, camy, hov, dyn_below(sorted, 64), [])
   List.append(&2, Dr, hud(p, ui, hov), List.append(&2, Dr, hi, lo))
 
 def Game.park(g: Game) -> C.Park:
@@ -1477,7 +1535,9 @@ def ride_report(+rs: +List<C.Ride>, +gs: +List<C.Guest>, +i: U32) -> String:
       ""
     case r <> rest:
       " [" ++ U32.show(i) ++ " k" ++ U32.show(C.Ride.kind(r)) ++ " open" ++ Bool.show(C.Ride.is_open(r))
-        ++ " riding " ++ U32.show(riders(gs, i)) ++ " heading " ++ U32.show(heading(gs, i)) ++ "]"
+        ++ " riding " ++ U32.show(riders(gs, i)) ++ " heading " ++ U32.show(heading(gs, i))
+        ++ " ph" ++ U32.show(C.Ride.ph(r)) ++ " q" ++ U32.show(C.Ride.qlen(r)) ++ " total " ++ U32.show(C.Ride.total(r))
+        ++ ride_state(r) ++ "]"
         ++ ride_report(rest, gs, (i + 1 : U32))
 
 def savetest.cmp(m: Maybe<&2, C.Park>, +p: C.Park) -> String:

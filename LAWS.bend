@@ -99,8 +99,7 @@ law capacity_respected:
   for +q: C.Q
   for +rs: List<&2, C.Ride>
   for +stn: C.Stn
-  for +ents: List<&2, U32>
-  {all_boards_ok(rs, C.Boards.plan(gs, occ, q, rs, stn, ents, [])) == True{} : Bool}
+  {all_boards_ok(rs, C.Boards.plan(gs, occ, q, rs, stn, [])) == True{} : Bool}
 
 # 8. RIDERS. Nobody leaves the park from a ride: a guest riding at the start
 # of a tick is still in the park after it (still riding, or just got off).
@@ -112,6 +111,44 @@ law riders_conserved:
   for +plan: List<&2, C.Board>
   for +stn: C.Stn
   for +qs: List<&2, U32>
-  for +ents: List<&2, U32>
   for h: {C.Guest.st(g) == 1 : U32}
-  {C.Guest.gone(C.Guest.step(g, q, rs, t, plan, stn, qs, ents)) == False{} : Bool}
+  {C.Guest.gone(C.Guest.step(g, q, rs, t, plan, stn, qs)) == False{} : Bool}
+
+# 9. RIDES RUN START TO FINISH: BOARDING. Each tick's boarding plan seats
+# guests only on rides that are loading -- a cycling ride between runs, the
+# coaster while a train stands in the station after its riders got off, or
+# a shop. No one climbs aboard a ride in motion.
+def board_loading(+rs: +List<C.Ride>, +stn: C.Stn, b: C.Board) -> Bool:
+  C.Board{g, ride, seat} = b
+  C.Ride.loading(C.Rides.get(rs, ride), stn)
+
+def all_boards_loading(+rs: +List<C.Ride>, +stn: C.Stn, bs: +List<C.Board>) -> Bool:
+  match bs:
+    case []:
+      True{}
+    case b <> rest:
+      board_loading(rs, stn, b) && all_boards_loading(rs, stn, rest)
+
+law board_only_when_loading:
+  for +gs: List<&2, C.Guest>
+  for +occ: List<&2, U32>
+  for +q: C.Q
+  for +rs: List<&2, C.Ride>
+  for +stn: C.Stn
+  {all_boards_loading(rs, stn, C.Boards.plan(gs, occ, q, rs, stn, [])) == True{} : Bool}
+
+# 10. RIDES RUN START TO FINISH: RIDING. A rider stays aboard until their
+# ride unloads: no one gets off a cycling ride while it loads or runs, or off
+# the coaster before their own train is back and stopped in the station.
+law ride_until_unloading:
+  for +g: C.Guest
+  for +q: C.Q
+  for +rs: List<&2, C.Ride>
+  for +t: U32
+  for +plan: List<&2, C.Board>
+  for +stn: C.Stn
+  for +qs: List<&2, U32>
+  for h: {C.Guest.st(g) == 1 : U32}
+  for u: {C.Ride.unloading(C.Rides.get(rs, C.Guest.tgt(g)), stn, C.Guest.dir(g), C.Guest.tmr(g))
+    == False{} : Bool}
+  {C.Guest.st(C.Guest.step(g, q, rs, t, plan, stn, qs)) == 1 : U32}
