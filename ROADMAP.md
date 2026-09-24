@@ -122,6 +122,16 @@ Small design decisions made while working, listed here so they can be revisited.
   variants 4 and up. Each decoration adds 3 to the park rating (at most 150, counted every 64 ticks), and a
   guest passing a decoration now and then gains a little happiness. The starter park gets statues, flower
   beds and a fountain by the crossing, a short wall and a fence.
+- **Stairs** need no tool: path tiles a level apart join, and the higher tile's face toward the lower one is
+  drawn as a flight of steps. Only paths climb (queues, the gate and rides stay level), one level per tile.
+  Guests' pathfinding follows the height of each step. Guests still pop up or down a level as they cross a
+  tile edge rather than walking up the steps.
+- **Bridges:** the path tool builds over water, drawn as planks with wooden rails on the open sides; the
+  water stays beneath (demolishing gives it back). Bridges sit at water level and join the banks by stairs.
+  Bridges over lower paths or coaster track are not done: the map keeps one height per tile, and a raised
+  path above another object would need a second layer.
+- The starter park gets a bridge across the lake joining the north and middle paths, and a stepped path up
+  the hill to a griffin statue.
 
 ## Done: M1, the vertical slice
 Isometric fantasy map, paths, terrain editing, 4 enchanted tree kinds, Dragon Carousel, Arcane Spire, Potion
@@ -272,7 +282,7 @@ Spikes, in order:
 9. (Done) Laws: **litter_accounted** (litter appears only when a guest drops it or is sick, and disappears only when
    a Brownie sweeps it or a bin takes it) and **wages_booked** (every wage goes through the ledger).
 
-## M6: More to build (in progress: tabs, shops, rides and scenery done)
+## Done: M6, more to build
 - **Rides:** Griffin Swing (swinging ship), Wheel of Stars (Ferris wheel), Lich's Crypt (haunted dark ride),
   Golem Bumpers (dodgems), Hedge Labyrinth (maze), Dragon's Eyrie (observation tower), Wizard's Whirl
   (top spin), Mermaid Flume (log flume).

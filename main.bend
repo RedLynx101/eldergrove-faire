@@ -638,6 +638,19 @@ def Arches.find_if(on: Bool, +ar: +List<U32>, +e: U32) -> U32:
 def face(+h: U32, +nh: U32, +edge: Bool) -> U32:
   sel(edge, (h * 8 + 6 : U32), sel((h > nh : U32), ((h - nh) * 8 : U32), 0))
 
+# stairs down from a path to the path in front (nb bit 20: toward j+1, the
+# left face; bit 21: toward i+1, the right face)
+def Stairs.down(+q: C.Q, +i: U32, +j: U32, +h: U32) -> Bool:
+  +t = C.Land.get(q, i, j)
+  U32.is_eq(C.Tile.obj(t), 1) && U32.is_eq((C.Tile.h(t) + 1 : U32), h)
+
+def Stairs.flags(path: Bool, +q: C.Q, +i: U32, +j: U32, +h: U32) -> U32:
+  match path:
+    case True{}:
+      (sel(Stairs.down(q, i, (j + 1 : U32), h), 1048576, 0) .|. sel(Stairs.down(q, (i + 1 : U32), j, h), 2097152, 0) : U32)
+    case False{}:
+      0
+
 def push_tile(+q: C.Q, +rs: +List<C.Ride>, +gs: RT, +ar: +List<U32>, +i: U32, +j: U32,
   +camx: U32, +camy: U32, +hov: U32, +acc: +List<Dr>) -> +List<Dr>:
   +t = C.Land.get(q, i, j)
@@ -655,9 +668,10 @@ def push_tile(+q: C.Q, +rs: +List<C.Ride>, +gs: RT, +ar: +List<U32>, +i: U32, +j
   +messb = sel(paved, ((U32.min((mb .&. 255 : U32), 15) << 8n) .|. (U32.min(((mb >> 8n) .&. 255 : U32), 7) << 12n) : U32), 0)
   +furn = sel(U32.is_eq(o, 1), (((ta .&. 3) << 16n) .|. sel(U32.is_eq(((ta >> 4n) .&. 15 : U32), 15), 262144, 0)
     .|. sel(Bool.not(U32.is_eq((ta .&. 256 : U32), 0)), 524288, 0) : U32), 0)
+  +stairs = Stairs.flags(U32.is_eq(o, 1), q, i, j, h)
   +blk = {DBlock{sx, sy, dl, dr, C.Tile.ter(t), C.Tile.obj(t),
     sel(U32.is_eq(hov, (i * 64 + j : U32)), 1, 0), (16 * i - 16 * j : U32),
-    (8 * i + 8 * j : U32), (nbmask(q, i, j, C.Tile.obj(t), C.Tile.ter(t), C.Tile.a(t)) .|. arch .|. messb .|. furn : U32)} : Dr}
+    (8 * i + 8 * j : U32), (nbmask(q, i, j, C.Tile.obj(t), C.Tile.ter(t), C.Tile.a(t)) .|. arch .|. messb .|. furn .|. stairs : U32)} : Dr}
   List.append(&2, Dr, obj_dr(t, i, j, sx, sy, rs, gs, q), blk <> acc)
 
 def row(+n: Nat, +i: U32, +k: U32, +q: C.Q, +rs: +List<C.Ride>, +gs: RT, +ar: +List<U32>,
@@ -2682,6 +2696,18 @@ def start_acts() -> List<C.Act>:
    C.Build{41, 31, 33, 0}, C.Build{41, 33, 33, 2}, C.Build{43, 31, 35, 0}, C.Build{43, 33, 35, 2},
    C.Build{42, 29, 38, 0}, C.Build{44, 35, 22, 0}, C.Build{44, 36, 22, 0}, C.Build{44, 37, 22, 0},
    C.Build{44, 37, 23, 0}, C.Build{45, 27, 25, 0}, C.Build{45, 27, 26, 0}, C.Build{45, 27, 27, 0},
+   C.Build{2, 44, 19, 0}, C.Build{9, 44, 19, 0}, C.Build{1, 44, 19, 0}, C.Build{9, 44, 18, 0},
+   C.Build{1, 44, 18, 0}, C.Build{9, 44, 17, 0}, C.Build{1, 44, 17, 0}, C.Build{9, 44, 16, 0},
+   C.Build{1, 44, 16, 0}, C.Build{9, 44, 15, 0}, C.Build{1, 44, 15, 0}, C.Build{9, 44, 14, 0},
+   C.Build{1, 44, 14, 0}, C.Build{9, 44, 13, 0}, C.Build{41, 44, 13, 3},
+   C.Build{9, 22, 21, 0}, C.Build{1, 22, 21, 0}, C.Build{9, 22, 22, 0}, C.Build{1, 22, 22, 0},
+   C.Build{9, 22, 23, 0}, C.Build{1, 22, 23, 0}, C.Build{9, 22, 24, 0}, C.Build{1, 22, 24, 0},
+   C.Build{9, 22, 25, 0}, C.Build{1, 22, 25, 0}, C.Build{9, 22, 26, 0}, C.Build{1, 22, 26, 0},
+   C.Build{9, 22, 27, 0}, C.Build{1, 22, 27, 0}, C.Build{9, 22, 28, 0}, C.Build{1, 22, 28, 0},
+   C.Build{9, 22, 29, 0}, C.Build{1, 22, 29, 0}, C.Build{9, 22, 30, 0}, C.Build{1, 22, 30, 0},
+   C.Build{9, 22, 31, 0}, C.Build{1, 22, 31, 0}, C.Build{9, 22, 32, 0}, C.Build{1, 22, 32, 0},
+   C.Build{9, 22, 33, 0}, C.Build{1, 22, 33, 0}, C.Build{9, 22, 34, 0}, C.Build{1, 22, 34, 0},
+   C.Build{9, 22, 35, 0}, C.Build{1, 22, 35, 0},
    C.ParkOp{21}, C.ParkOp{21}, C.ParkOp{22}, C.ParkOp{23}, C.ParkOp{24}]
 
 def Game.new() -> Game:

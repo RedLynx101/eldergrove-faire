@@ -123,6 +123,9 @@ Healer's Tent (for queasy guests), Wisp Seller, Enchanted Ices.
 Scenery: enchanted trees, statues, fountains, flower beds, castle walls and fences (walls and fences join
 up); decorations raise the park rating. Hover a button to see its name on the strip above the bar.
 
+Paths a level apart join by stairs by themselves, so a path can climb the terraces one level per tile.
+The path tool also builds over water: a plank bridge with rails.
+
 Mess: guests drop wrappers when they finish what they carry, and very queasy
 guests are sick. Both lie on the path until swept (Brownies, coming in M5's
 staff spike), dirty paths wear guests' happiness down and lower the park

@@ -172,10 +172,19 @@ def Art.open_edge(+nb: U32, +u: U32, +v: U32, +w: U32) -> Bool:
   (U32.is_eq((nb .&. 1 : U32), 0) && (u < w : U32)) || (U32.is_eq((nb .&. 2 : U32), 0) && (u + w > 15 : U32))
     || (U32.is_eq((nb .&. 4 : U32), 0) && (v < w : U32)) || (U32.is_eq((nb .&. 8 : U32), 0) && (v + w > 15 : U32))
 
+def Art.planks(+u: U32, +v: U32, +nb: U32) -> U32:
+  +along_u = Bool.not(U32.is_eq((nb .&. 3 : U32), 0)) || U32.is_eq((nb .&. 12 : U32), 0)
+  +a = sel(along_u, v, u)
+  +gap = U32.is_eq((sel(along_u, u, v) .&. 3 : U32), 3)
+  +grain = U32.is_eq(((a * 7 + sel(along_u, u, v)) .&. 7 : U32), 0)
+  sel(gap, 4221152, sel(grain, 8014378, 10119226))
+
 def Art.paving(+obj: U32, +u: U32, +v: U32, +seed: U32, +nb: U32) -> U32:
   match obj:
     case 7:
       Art.flag(u, v, seed)
+    case 8:
+      Art.planks(u, v, nb)
     case _:
       sel(Art.open_edge(nb, u, v, 2), shade(Art.cobble(u, v, seed), 176), Art.cobble(u, v, seed))
 
@@ -218,7 +227,7 @@ def Art.surface(paved: Bool, +ter: U32, +u: U32, +v: U32, +wx: U32, +wy: U32,
     case True{}:
       +seed = ((wx - u + v) >> 4n : U32)
       over(Art.mess.go(Bool.not(U32.is_eq(((nb >> 8n) .&. 127 : U32), 0)), u, v, seed, nb),
-        Art.paving(obj, u, v, seed, nb))
+        Art.paving(sel(U32.is_eq(ter, 2) && U32.is_eq(obj, 1), 8, obj), u, v, seed, nb))
     case False{}:
       +n = hash(wx, (wy >> 1n : U32))
       +edge = sel((u < 1 : U32) || (v < 1 : U32), 272, sel((u > 14 : U32) || (v > 14 : U32), 236, 256))
@@ -233,13 +242,26 @@ def Art.top(outline: Bool, +ter: U32, +obj: U32, +u: U32, +v: U32, +wx: U32,
     case False{}:
       Art.surface(U32.is_eq(obj, 1) || U32.is_eq(obj, 5) || U32.is_eq(obj, 7), ter, u, v, wx, wy, t, obj, nb)
 
+# a flight of four steps down a face (d: rows below its top edge)
+def Art.stairs(+d: U32, +left: Bool) -> U32:
+  +tread = U32.is_eq((d .&. 1 : U32), 0)
+  +c = sel(tread, 13287330, 9340018)
+  sel(left, c, shade(c, 200))
+
+def Art.face(stairs: Bool, +d: U32, +px: U32, +left: Bool, +wild: Bool) -> U32:
+  match stairs:
+    case True{}:
+      Art.stairs(d, left)
+    case False{}:
+      Art.cliff(d, px, left, wild)
+
 def Art.faces(onl: Bool, onr: Bool, +dl: U32, +dr: U32, +le: U32, +re: U32,
-  +px: U32, +py: U32, +wild: Bool) -> U32:
+  +px: U32, +py: U32, +wild: Bool, +nb: U32) -> U32:
   match onl onr:
     case True{} _:
-      Art.cliff((py - le : U32), px, True{}, wild)
+      Art.face(Bool.not(U32.is_eq((nb .&. 1048576 : U32), 0)), (py - le : U32), px, True{}, wild)
     case False{} True{}:
-      Art.cliff((py - re : U32), px, False{}, wild)
+      Art.face(Bool.not(U32.is_eq((nb .&. 2097152 : U32), 0)), (py - re : U32), px, False{}, wild)
     case False{} False{}:
       TR()
 
@@ -257,11 +279,11 @@ def Art.block.go(top: Bool, +x: U32, +y: U32, +dl: U32, +dr: U32, +ter: U32,
       +re = (y + 16 - (rx >> 1n) : U32)
       Art.faces((lx < 16 : U32) && (py >= le : U32) && (py < le + dl : U32),
         (rx < 16 : U32) && (py >= re : U32) && (py < re + dr : U32), dl, dr, le, re,
-        px, py, U32.is_eq(ter, 4))
+        px, py, U32.is_eq(ter, 4), nb)
 
 # queue railings: posts at the corners and a rope 4 px up along each edge
 # that joins nothing
-def Art.rails.go(on: Bool, +x: U32, +y: U32, +nb: U32, +px: U32, +py: U32) -> U32:
+def Art.rails.go(on: Bool, +x: U32, +y: U32, +nb: U32, +px: U32, +py: U32, +wood: Bool) -> U32:
   match on:
     case True{}:
       +X = (px - x : U32)
@@ -276,7 +298,7 @@ def Art.rails.go(on: Bool, +x: U32, +y: U32, +nb: U32, +px: U32, +py: U32) -> U3
         || U32.is_eq(cx, 16) && between((py - y : U32), 2, 8)
       +knob = post && (U32.is_eq((py - y : U32), (0 - 6 : U32)) || U32.is_eq((py - y : U32), 10)
         || U32.is_eq((py - y : U32), 2))
-      sel(knob, 14725184, sel(post, 7031339, sel(rope, sel(U32.is_eq(((u + v) .&. 1 : U32), 0), 8011680, 5582448), TR())))
+      sel(knob, 14725184, sel(post, 7031339, sel(rope, sel(wood, 9062442, sel(U32.is_eq(((u + v) .&. 1 : U32), 0), 8011680, 5582448)), TR())))
     case False{}:
       TR()
 
@@ -366,7 +388,7 @@ def Art.block(+x: U32, +y: U32, +dl: U32, +dr: U32, +ter: U32, +obj: U32,
   over(Art.prop(((nb >> 16n) .&. 3 : U32), Bool.not(U32.is_eq((nb .&. 262144 : U32), 0)),
     Bool.not(U32.is_eq((nb .&. 524288 : U32), 0)), x, y, px, py, t),
     over(Art.arch.go(Bool.not(U32.is_eq(((nb >> 6n) .&. 3 : U32), 0)), x, y, nb, px, py),
-    over(Art.rails.go(U32.is_eq(obj, 7), x, y, nb, px, py),
+    over(Art.rails.go(U32.is_eq(obj, 7) || U32.is_eq(obj, 1) && U32.is_eq(ter, 2), x, y, nb, px, py, U32.is_eq(obj, 1)),
     Art.block.go((u < 16 : U32) && (v < 16 : U32), x, y, dl, dr, ter, obj, hov,
       wx, wy, t, px, py, u, v, nb))))
 

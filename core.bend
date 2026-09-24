@@ -261,16 +261,20 @@ def Land.fix(+q: Q) -> Q:
 # queue (fq) only at its free end (fe) -- and onto a queue tile only when
 # heading for a ride (qok), from outside it only at its free end.
 # 0: blocked, 1: path, 2: queue, 3: a queue's free end (a queue tile's `a`
-# says so; see Land.fix)
+# says so; see Land.fix), with the tile's height << 4 when it can be
+# stepped on. Paths a level apart join by stairs; the rest must be level.
 def Land.step(+q: Q, +x: U32, +y: U32, +h: U32, +qok: Bool, +fq: Bool, +fe: Bool) -> U32:
   +t = Land.get(q, x, y)
   +o = Tile.obj(t)
+  +th = Tile.h(t)
   +isq = U32.is_eq(o, 7)
   +end = isq && U32.is_eq(Tile.a(t), 1)
-  +ok = inmap(x, y) && U32.is_eq(Tile.h(t), h)
-    && ((U32.is_eq(o, 1) || U32.is_eq(o, 5)) && (Bool.not(fq) || fe)
+  +path = U32.is_eq(o, 1)
+  +level = U32.is_eq(th, h) || path && (U32.is_eq(th, (h + 1 : U32)) || U32.is_eq((th + 1 : U32), h))
+  +ok = inmap(x, y) && level
+    && ((path || U32.is_eq(o, 5)) && (Bool.not(fq) || fe)
       || qok && isq && (fq || end))
-  sel(ok, sel(isq, sel(end, 3, 2), 1), 0)
+  sel(ok, (sel(isq, sel(end, 3, 2), 1) .|. (th << 4n) : U32), 0)
 
 # Map generation: the starting land of Eldergrove
 # -----------------------------------------------
@@ -837,21 +841,21 @@ def Guest.reach(+n: Nat, ok: Bool, arr: Bool, +q: Q, +i: U32, +j: U32, +h: U32, 
       +j1 = (j + 1 : U32)
       +j0 = (j - 1 : U32)
       +c0 = Land.step(q, i1, j, h, qok, fq, fe)
-      +r0 = Guest.reach(p, Bool.not(U32.is_eq(back, 0)) && Bool.not(U32.is_eq(c0, 0)),
-        Guest.arr(i1, j, tx, ty, lim), q, i1, j, h, 0, tx, ty, qok,
-        U32.is_eq(c0, 2) || U32.is_eq(c0, 3), Bool.not(U32.is_eq(c0, 2)), lim)
+      +r0 = Guest.reach(p, Bool.not(U32.is_eq(back, 0)) && Bool.not(U32.is_eq((c0 .&. 15 : U32), 0)),
+        Guest.arr(i1, j, tx, ty, lim), q, i1, j, (c0 >> 4n : U32), 0, tx, ty, qok,
+        U32.is_eq((c0 .&. 15 : U32), 2) || U32.is_eq((c0 .&. 15 : U32), 3), Bool.not(U32.is_eq((c0 .&. 15 : U32), 2)), lim)
       +c1 = Land.step(q, i, j1, h, qok, fq, fe)
-      +r1 = Guest.reach(p, Bool.not(U32.is_eq(back, 1)) && Bool.not(U32.is_eq(c1, 0)),
-        Guest.arr(i, j1, tx, ty, lim), q, i, j1, h, 1, tx, ty, qok,
-        U32.is_eq(c1, 2) || U32.is_eq(c1, 3), Bool.not(U32.is_eq(c1, 2)), lim)
+      +r1 = Guest.reach(p, Bool.not(U32.is_eq(back, 1)) && Bool.not(U32.is_eq((c1 .&. 15 : U32), 0)),
+        Guest.arr(i, j1, tx, ty, lim), q, i, j1, (c1 >> 4n : U32), 1, tx, ty, qok,
+        U32.is_eq((c1 .&. 15 : U32), 2) || U32.is_eq((c1 .&. 15 : U32), 3), Bool.not(U32.is_eq((c1 .&. 15 : U32), 2)), lim)
       +c2 = Land.step(q, i0, j, h, qok, fq, fe)
-      +r2 = Guest.reach(p, Bool.not(U32.is_eq(back, 2)) && Bool.not(U32.is_eq(c2, 0)),
-        Guest.arr(i0, j, tx, ty, lim), q, i0, j, h, 2, tx, ty, qok,
-        U32.is_eq(c2, 2) || U32.is_eq(c2, 3), Bool.not(U32.is_eq(c2, 2)), lim)
+      +r2 = Guest.reach(p, Bool.not(U32.is_eq(back, 2)) && Bool.not(U32.is_eq((c2 .&. 15 : U32), 0)),
+        Guest.arr(i0, j, tx, ty, lim), q, i0, j, (c2 >> 4n : U32), 2, tx, ty, qok,
+        U32.is_eq((c2 .&. 15 : U32), 2) || U32.is_eq((c2 .&. 15 : U32), 3), Bool.not(U32.is_eq((c2 .&. 15 : U32), 2)), lim)
       +c3 = Land.step(q, i, j0, h, qok, fq, fe)
-      +r3 = Guest.reach(p, Bool.not(U32.is_eq(back, 3)) && Bool.not(U32.is_eq(c3, 0)),
-        Guest.arr(i, j0, tx, ty, lim), q, i, j0, h, 3, tx, ty, qok,
-        U32.is_eq(c3, 2) || U32.is_eq(c3, 3), Bool.not(U32.is_eq(c3, 2)), lim)
+      +r3 = Guest.reach(p, Bool.not(U32.is_eq(back, 3)) && Bool.not(U32.is_eq((c3 .&. 15 : U32), 0)),
+        Guest.arr(i, j0, tx, ty, lim), q, i, j0, (c3 >> 4n : U32), 3, tx, ty, qok,
+        U32.is_eq((c3 .&. 15 : U32), 2) || U32.is_eq((c3 .&. 15 : U32), 3), Bool.not(U32.is_eq((c3 .&. 15 : U32), 2)), lim)
       +best = U32.min(U32.min(r0, r1), U32.min(r2, r3))
       +d0 = (absd(i, tx) + absd(j, ty) : U32)
       sel((best < 99999 : U32), U32.min(d0, best), 99999)
@@ -863,9 +867,10 @@ def Guest.score(+q: Q, +i: U32, +j: U32, +h: U32, +d: U32, +back: U32,
   +ni = (i + dx_of(d) : U32)
   +nj = (j + dy_of(d) : U32)
   +c = Land.step(q, ni, nj, h, qok, fq, fe)
-  +ok = Bool.not(U32.is_eq(c, 0))
-  +v = Guest.reach(12n, ok, Guest.arr(ni, nj, tx, ty, lim), q, ni, nj, h, d, tx, ty, qok,
-    U32.is_eq(c, 2) || U32.is_eq(c, 3), Bool.not(U32.is_eq(c, 2)), lim)
+  +code = (c .&. 15 : U32)
+  +ok = Bool.not(U32.is_eq(code, 0))
+  +v = Guest.reach(12n, ok, Guest.arr(ni, nj, tx, ty, lim), q, ni, nj, (c >> 4n : U32), d, tx, ty, qok,
+    U32.is_eq(code, 2) || U32.is_eq(code, 3), Bool.not(U32.is_eq(code, 2)), lim)
   +pen = sel(U32.is_eq(d, back), 7, 0)
   +jit = (hash(r, d) .&. 7 : U32)
   sel(ok, sel((v >= 99999 : U32), (90000 + pen : U32), (v * 4 + pen + jit : U32)), 99999)
@@ -2748,7 +2753,7 @@ def Build.legal.go(+tool: U32, +q: Q, +trk: Track, +x: U32, +y: U32, +o: U32,
   +h: U32, +dry: Bool, +empty: Bool, +a: U32) -> Bool:
   match tool:
     case 1:
-      empty && dry
+      empty
     case 2:
       empty && (h < 6 : U32)
     case 3:
@@ -2841,7 +2846,7 @@ def Build.land.go(+tool: U32, +q: Q, +rs: +List<Ride>, +x: U32, +y: U32,
   +v: U32, +h: U32, +ter: U32, +b: U32) -> Q:
   match tool:
     case 1:
-      Land.set(q, x, y, Tile{h, 1, 1, 0, 0})
+      Land.set(q, x, y, Tile{h, sel(U32.is_eq(ter, 2), 2, 1), 1, 0, 0})
     case 2:
       Land.set(q, x, y, Tile{sel(U32.is_eq(ter, 2), h, (h + 1 : U32)), 0, 0, 0, 0})
     case 3:
