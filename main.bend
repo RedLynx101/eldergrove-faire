@@ -517,11 +517,24 @@ def Coaster.down(+rs: +List<C.Ride>, +i: U32, +j: U32) -> Bool:
   +c = C.Rides.get(rs, Rides.kind_at(rs, 5, 0))
   C.Wear.broken(C.Ride.wear(c)) && U32.is_eq(C.Ride.cx(c), i) && U32.is_eq(C.Ride.cy(c), j)
 
+def Scen.same(+q: C.Q, +i: U32, +j: U32, +a: U32) -> Bool:
+  +t = C.Land.get(q, i, j)
+  U32.is_eq(C.Tile.obj(t), 2) && U32.is_eq(C.Tile.a(t), a)
+
+# a tree's variation, or which neighbours a wall or fence joins
+def Scen.n(joins: Bool, +q: C.Q, +i: U32, +j: U32, +a: U32) -> U32:
+  match joins:
+    case True{}:
+      (sel(Scen.same(q, (i - 1 : U32), j, a), 1, 0) .|. sel(Scen.same(q, (i + 1 : U32), j, a), 2, 0)
+        .|. sel(Scen.same(q, i, (j - 1 : U32), a), 4, 0) .|. sel(Scen.same(q, i, (j + 1 : U32), a), 8, 0) : U32)
+    case False{}:
+      A.hash(i, j)
+
 def obj_dr.go(+obj: U32, +a: U32, +b: U32, +h: U32, +i: U32, +j: U32,
-  +sx: U32, +sy: U32, +k: U32, +st: U32, +rt: RT, +rs: +List<C.Ride>) -> +List<Dr>:
+  +sx: U32, +sy: U32, +k: U32, +st: U32, +rt: RT, +rs: +List<C.Ride>, +q: C.Q) -> +List<Dr>:
   match obj:
     case 2:
-      [DTree{sx, (sy + 8 : U32), a, A.hash(i, j)}]
+      [DTree{sx, (sy + 8 : U32), a, Scen.n(U32.is_eq(a, 12) || U32.is_eq(a, 13), q, i, j, a)}]
     case 5:
       [DGate{sx, (sy + 8 : U32)}]
     case 3:
@@ -534,10 +547,10 @@ def obj_dr.go(+obj: U32, +a: U32, +b: U32, +h: U32, +i: U32, +j: U32,
       []
 
 def obj_dr(+t: C.Tile, +i: U32, +j: U32, +sx: U32, +sy: U32,
-  +rs: +List<C.Ride>, +rt: RT) -> +List<Dr>:
+  +rs: +List<C.Ride>, +rt: RT, +q: C.Q) -> +List<Dr>:
   C.Tile{+h, ter, +obj, +a, +b} = t
   +rd = C.Rides.get(rs, a)
-  obj_dr.go(obj, a, b, h, i, j, sx, sy, C.Ride.kind(rd), ride_st(rd), rt, rs)
+  obj_dr.go(obj, a, b, h, i, j, sx, sy, C.Ride.kind(rd), ride_st(rd), rt, rs, q)
 
 # which neighbours a path or queue joins (paths, queues, the gate, rides),
 # or which neighbours of water are water: bit 1 i-1, 2 i+1, 4 j-1, 8 j+1
@@ -645,7 +658,7 @@ def push_tile(+q: C.Q, +rs: +List<C.Ride>, +gs: RT, +ar: +List<U32>, +i: U32, +j
   +blk = {DBlock{sx, sy, dl, dr, C.Tile.ter(t), C.Tile.obj(t),
     sel(U32.is_eq(hov, (i * 64 + j : U32)), 1, 0), (16 * i - 16 * j : U32),
     (8 * i + 8 * j : U32), (nbmask(q, i, j, C.Tile.obj(t), C.Tile.ter(t), C.Tile.a(t)) .|. arch .|. messb .|. furn : U32)} : Dr}
-  List.append(&2, Dr, obj_dr(t, i, j, sx, sy, rs, gs), blk <> acc)
+  List.append(&2, Dr, obj_dr(t, i, j, sx, sy, rs, gs, q), blk <> acc)
 
 def row(+n: Nat, +i: U32, +k: U32, +q: C.Q, +rs: +List<C.Ride>, +gs: RT, +ar: +List<U32>,
   +camx: U32, +camy: U32, +hov: U32, +acc: +List<Dr>) -> +List<Dr>:
@@ -910,6 +923,16 @@ def tool_name(+t: U32) -> String:
       "HEDGE LABYRINTH  700*"
     case 40:
       "MERMAID FLUME  1900*"
+    case 41:
+      "STATUE  60*  R: KNIGHT, DRAGON, WIZARD, GRIFFIN"
+    case 42:
+      "FOUNTAIN  120*"
+    case 43:
+      "FLOWER BED  15*  R: COLOUR"
+    case 44:
+      "CASTLE WALL  25*"
+    case 45:
+      "FENCE  8*"
     case _:
       "INSPECT (I): CLICK A RIDE OR A GUEST"
 
@@ -1004,6 +1027,16 @@ def Cat.tool.go(+code: U32) -> U32:
       3
     case 16:
       4
+    case 17:
+      41
+    case 18:
+      42
+    case 19:
+      43
+    case 20:
+      44
+    case 21:
+      45
     case 24:
       5
     case 25:
@@ -1051,7 +1084,7 @@ def Cat.len(+c: U32) -> U32:
     case 1:
       2
     case 2:
-      1
+      6
     case 3:
       6
     case 4:
@@ -1078,6 +1111,16 @@ def Cat.of(+t: U32) -> U32:
     case 3:
       1
     case 4:
+      2
+    case 41:
+      2
+    case 42:
+      2
+    case 43:
+      2
+    case 44:
+      2
+    case 45:
       2
     case 5:
       3
@@ -1128,6 +1171,16 @@ def Cat.pos(+t: U32) -> U32:
       4
     case 3:
       1
+    case 41:
+      1
+    case 42:
+      2
+    case 43:
+      3
+    case 44:
+      4
+    case 45:
+      5
     case 34:
       1
     case 37:
@@ -2626,6 +2679,9 @@ def start_acts() -> List<C.Act>:
    C.Build{15, 28, 36, 0}, C.Build{14, 30, 46, 0}, C.Build{13, 34, 46, 0},
    C.Build{16, 33, 50, 0}, C.Build{16, 13, 31, 0}, C.Build{30, 33, 47, 0}, C.Build{32, 31, 37, 0}, C.Build{31, 35, 37, 0},
    C.Build{34, 33, 38, 0}, C.Build{11, 34, 37, 0},
+   C.Build{41, 31, 33, 0}, C.Build{41, 33, 33, 2}, C.Build{43, 31, 35, 0}, C.Build{43, 33, 35, 2},
+   C.Build{42, 29, 38, 0}, C.Build{44, 35, 22, 0}, C.Build{44, 36, 22, 0}, C.Build{44, 37, 22, 0},
+   C.Build{44, 37, 23, 0}, C.Build{45, 27, 25, 0}, C.Build{45, 27, 26, 0}, C.Build{45, 27, 27, 0},
    C.ParkOp{21}, C.ParkOp{21}, C.ParkOp{22}, C.ParkOp{23}, C.ParkOp{24}]
 
 def Game.new() -> Game:

@@ -1547,6 +1547,18 @@ def Stamp.now(+t: U32) -> U32:
 def Stamp.recent(+s: U32, +t: U32) -> Bool:
   U32.is_eq(s, Stamp.now(t)) || U32.is_eq(s, Stamp.now((t - 64 : U32)))
 
+# scenery on a neighbouring tile (statues, fountains, flowers, walls)
+def Scen.at(+q: Q, +i: U32, +j: U32) -> Bool:
+  +t = Land.get(q, i, j)
+  U32.is_eq(Tile.obj(t), 2) && (Tile.a(t) >= 4 : U32)
+
+def Scen.near_if(now: Bool, +q: Q, +i: U32, +j: U32) -> Bool:
+  match now:
+    case True{}:
+      Scen.at(q, (i + 1 : U32), j) || Scen.at(q, (i - 1 : U32), j) || Scen.at(q, i, (j + 1 : U32)) || Scen.at(q, i, (j - 1 : U32))
+    case False{}:
+      False{}
+
 def Guest.walk(g: Guest, +q: Q, +rs: +List<Ride>, +t: U32, +qs: +List<U32>) -> Guest:
   Guest{+id, +x, +y, +dir, +st, +tgt, +tmr, +cash, +hu, +th, +en, +na, +ha,
     +lk, +mind, +bl} = g
@@ -1620,8 +1632,9 @@ def Guest.walk(g: Guest, +q: Q, +rs: +List<Ride>, +t: U32, +qs: +List<U32>) -> G
   +lk2 = (sel(finish, (lk .&. 4277731327 : U32), (lk .&. 4278190079 : U32)) .|. sel(go, 16777216, 0) : U32)
   # a Bard playing nearby cheers them up
   +cheer = Stamp.recent(((Tile.b(here) >> 24n) .&. 255 : U32), t) && U32.is_eq(((t + id) .&. 31 : U32), 0)
+  +pretty = Scen.near_if(ctr && U32.is_eq(((t + id) .&. 63 : U32), 0), q, i, j)
   +ha2 = (sub0(sub0(ha, sel(dear || fed_up, 6, 0)), sel(sick, 10, sel(grim, sel((dirt >= 6 : U32), 2, 1), 0)))
-    + sel(cheer, 3, 0) : U32)
+    + sel(cheer, 3, 0) + sel(pretty, 2, 0) : U32)
   +en2 = sel(sitting && U32.is_eq(((t + id) .&. 1 : U32), 0), (en + 1 : U32), en)
   Guest{id, x2, y2, dir2, st3, tgt2, tmr2, cash, hu, th, en2, sel(sick, 60, na), ha2, lk2, mind2, bl}
 
@@ -2171,16 +2184,25 @@ def Guests.sick_sum(+gs: +List<Guest>, +acc: U32) -> U32:
 
 # the park's rating: happy guests and attractions raise it; sick guests
 # and mess on the paths (nm pieces) lower it
-def Park.rate(+gs: +List<Guest>, +rs: +List<Ride>, +nm: U32) -> U32:
+def Scen.count(+n: Nat, +k: U32, +q: Q, +acc: U32) -> U32:
+  match n:
+    case 0n:
+      acc
+    case 1n+m:
+      +t = Land.get(q, (k >> 6n : U32), (k .&. 63 : U32))
+      Scen.count(m, (k + 1 : U32), q, (acc + sel(U32.is_eq(Tile.obj(t), 2) && (Tile.a(t) >= 4 : U32), 1, 0) : U32))
+
+def Park.rate(+gs: +List<Guest>, +rs: +List<Ride>, +nm: U32, +sc: U32) -> U32:
   +n = len32(Guest, gs)
   +happy = sel(U32.is_eq(n, 0), 200, (Guests.happy_sum(gs, 0) / U32.max(n, 1) : U32))
   +sick = sel(U32.is_eq(n, 0), 0, (Guests.sick_sum(gs, 0) / U32.max(n, 1) : U32))
-  U32.min(sub0(sub0((150 + happy * 2 + U32.min((Rides.attractions(rs) * 30 : U32), 240) : U32), sick), (U32.min(nm, 300) >> 1n : U32)), 999)
+  U32.min(sub0(sub0((150 + happy * 2 + U32.min((Rides.attractions(rs) * 30 : U32), 240) + U32.min((sc * 3 : U32), 150) : U32), sick),
+    (U32.min(nm, 300) >> 1n : U32)), 999)
 
-def Park.rate_if(now: Bool, +gs: +List<Guest>, +rs: +List<Ride>, +nm: U32, +old: U32) -> U32:
+def Park.rate_if(now: Bool, +gs: +List<Guest>, +rs: +List<Ride>, +nm: U32, +q: Q, +old: U32) -> U32:
   match now:
     case True{}:
-      Park.rate(gs, rs, nm)
+      Park.rate(gs, rs, nm, Scen.count(4096n, 0, q, 0))
     case False{}:
       old
 
@@ -2216,11 +2238,11 @@ def Fin.sample(go: Bool, +gs: +List<Guest>, +hist: +List<U32>) -> +List<U32>:
 
 # each tick: the rating now and then, the guest count sampled, and at a
 # month's turn this month's column becomes last month's
-def Fin.tick(f: Fin, +t: U32, +gs: +List<Guest>, +rs: +List<Ride>, +nm: U32) -> Fin:
+def Fin.tick(f: Fin, +t: U32, +gs: +List<Guest>, +rs: +List<Ride>, +nm: U32, +q: Q) -> Fin:
   Fin{fee, loan, +rating, +now, +last, +hist} = f
   +month = U32.is_eq((t % MONTH() : U32), 0) && (t > 0 : U32)
   +sample = U32.is_eq((t % 450 : U32), 0)
-  Fin{fee, loan, Park.rate_if(U32.is_eq((t .&. 63 : U32), 0), gs, rs, nm, rating),
+  Fin{fee, loan, Park.rate_if(U32.is_eq((t .&. 63 : U32), 0), gs, rs, nm, q, rating),
     Fin.fresh(month, now), Fin.roll(month, now, last), Fin.sample(sample, gs, hist)}
 
 # The Wyrm Coaster: track pieces and block sections
@@ -2661,7 +2683,7 @@ def Park.tick(p: Park) -> Out:
     Rides.tick(rides, 0, map, Track.pieces(track), occ, plan,
       Qlen.fill_if(U32.is_eq((time .&. 15 : U32), 0), guests, map, len32(Ride, rides)), U32.is_eq((time .&. 15 : U32), 0), time, Staff.fixing(staff)),
     Track.tick(track), Ledger.apply(led, cash), (time + 1 : U32),
-    (nid + len32(Guest, arr) : U32), Fin.tick(fin, time, guests, rides, len32(U32, mess)),
+    (nid + len32(Guest, arr) : U32), Fin.tick(fin, time, guests, rides, len32(U32, mess), map),
     List.append(&2, U32, drops, Mess.kept(mess, staff)), Staff.steps(staff, map, rides, mess, time)}, led, arr, Guests.left(moved), drops, swept}
 
 # Building
@@ -2705,6 +2727,16 @@ def Build.cost(+tool: U32) -> U32:
       30
     case 15:
       25
+    case 41:
+      60
+    case 42:
+      120
+    case 43:
+      15
+    case 44:
+      25
+    case 45:
+      8
     case _:
       Ride.cost(Tool.kind(tool))
 
@@ -2733,6 +2765,16 @@ def Build.legal.go(+tool: U32, +q: Q, +trk: Track, +x: U32, +y: U32, +o: U32,
       U32.is_eq(o, 1) && U32.is_eq((a .&. 15 : U32), 0)
     case 15:
       U32.is_eq(o, 1) && U32.is_eq((a .&. 15 : U32), 0)
+    case 41:
+      empty && dry
+    case 42:
+      empty && dry
+    case 43:
+      empty && dry
+    case 44:
+      empty && dry
+    case 45:
+      empty && dry
     case 10:
       empty && dry && U32.is_eq(len32(Piece, Track.pieces(trk)), 0)
     case _:
@@ -2818,6 +2860,16 @@ def Build.land.go(+tool: U32, +q: Q, +rs: +List<Ride>, +x: U32, +y: U32,
       Land.set(q, x, y, Tile{h, ter, 1, 2, b})
     case 15:
       Land.set(q, x, y, Tile{h, ter, 1, 3, b})
+    case 41:
+      Land.set(q, x, y, Tile{h, ter, 2, (4 + (v .&. 3) : U32), 0})
+    case 42:
+      Land.set(q, x, y, Tile{h, ter, 2, 8, 0})
+    case 43:
+      Land.set(q, x, y, Tile{h, ter, 2, (9 + sel(U32.is_eq((v .&. 3 : U32), 3), 0, (v .&. 3 : U32)) : U32), 0})
+    case 44:
+      Land.set(q, x, y, Tile{h, ter, 2, 12, 0})
+    case 45:
+      Land.set(q, x, y, Tile{h, ter, 2, 13, 0})
     case _:
       Land.ride(q, Tool.kind(tool), x, y, len32(Ride, rs))
 

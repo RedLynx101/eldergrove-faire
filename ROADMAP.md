@@ -117,6 +117,11 @@ Small design decisions made while working, listed here so they can be revisited.
   to find. The Lich's Crypt hides its riders while they are inside; the flume is drawn as a raised loop on
   the ride's own square rather than a track of its own. `./park --rides out.ppm T` draws all eight at T ticks
   into a run with every seat taken. The starter park gets a Wheel of Stars at the central crossing.
+- **Scenery** (scenery tab): statues (knight, dragon, wizard, griffin; R picks), a fountain, flower beds (R
+  picks red, blue or gold), castle walls and fences that join their neighbours. They are tree tiles with
+  variants 4 and up. Each decoration adds 3 to the park rating (at most 150, counted every 64 ticks), and a
+  guest passing a decoration now and then gains a little happiness. The starter park gets statues, flower
+  beds and a fountain by the crossing, a short wall and a fence.
 
 ## Done: M1, the vertical slice
 Isometric fantasy map, paths, terrain editing, 4 enchanted tree kinds, Dragon Carousel, Arcane Spire, Potion
@@ -267,7 +272,7 @@ Spikes, in order:
 9. (Done) Laws: **litter_accounted** (litter appears only when a guest drops it or is sick, and disappears only when
    a Brownie sweeps it or a bin takes it) and **wages_booked** (every wage goes through the ledger).
 
-## M6: More to build (in progress: tabs, shops and rides done)
+## M6: More to build (in progress: tabs, shops, rides and scenery done)
 - **Rides:** Griffin Swing (swinging ship), Wheel of Stars (Ferris wheel), Lich's Crypt (haunted dark ride),
   Golem Bumpers (dodgems), Hedge Labyrinth (maze), Dragon's Eyrie (observation tower), Wizard's Whirl
   (top spin), Mermaid Flume (log flume).

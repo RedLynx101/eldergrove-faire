@@ -120,7 +120,8 @@ Gentle rides: Dragon Carousel, Wheel of Stars, Hedge Labyrinth, Dragon's Eyrie, 
 Crypt. Thrill rides: Arcane Spire, Griffin Swing, Wizard's Whirl, Mermaid Flume, Wyrm Coaster. Shops:
 Potion Stall, Troll Tavern, Privy,
 Healer's Tent (for queasy guests), Wisp Seller, Enchanted Ices.
-Hover a button to see its name on the strip above the bar.
+Scenery: enchanted trees, statues, fountains, flower beds, castle walls and fences (walls and fences join
+up); decorations raise the park rating. Hover a button to see its name on the strip above the bar.
 
 Mess: guests drop wrappers when they finish what they carry, and very queasy
 guests are sick. Both lie on the path until swept (Brownies, coming in M5's

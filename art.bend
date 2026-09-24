@@ -523,6 +523,147 @@ def Art.crystal(+dx: U32, +dy: U32, +n: U32, +t: U32) -> U32:
     over(Art.spike(dx, dy, (0 - 5 : U32), 14, 2), over(Art.spike(dx, (dy - 1 : U32), 5, 12, 2),
       over(Art.spike(dx, (dy + 1 : U32), 2, 8, 1), sel(rocks, rockc, TR()))))))
 
+# Scenery (tree tiles with variants 4 and up): statues of a knight, a dragon,
+# a wizard and a griffin on plinths; a fountain; flower beds; castle walls
+# and fences that join their neighbours (n: bit 1 i-1, 2 i+1, 4 j-1, 8 j+1)
+def Art.box2(+dx: U32, +dy: U32, +base: U32, +r: U32, +h: U32, +top: U32, +left: U32, +right: U32) -> U32:
+  +ax = sabs(dx)
+  +cy = (base - h : U32)
+  +ontop = ((ax + 2 * sabs((dy - cy : U32))) <= r : U32)
+  +lowtop = (cy + ((r - ax) >> 1n) : U32)
+  +lowbot = (base + ((r - ax) >> 1n) : U32)
+  +side = (ax <= r : U32) && sle(lowtop, dy) && sle(dy, lowbot)
+  sel(ontop, top, sel(side, sel(neg(dx), left, right), TR()))
+
+# The Lich's Crypt: a dark ride inside a mossy crypt, green light flickering
+# in its windows while the riders are inside; their carts wait at the door
+def Art.plinth(+dx: U32, +dy: U32) -> U32:
+  Art.box2(dx, dy, 0, 7, 4, 11579568, 9474192, 7368816)
+
+def Art.statue.fig(+k: U32, +dx: U32, +dy: U32, +t: U32) -> U32:
+  match k:
+    case 0:
+      # a knight, sword raised
+      +legs = (U32.is_eq(dx, (0 - 1 : U32)) || U32.is_eq(dx, 1)) && between(dy, (0 - 8 : U32), (0 - 5 : U32))
+      +body = between(dx, (0 - 2 : U32), 2) && between(dy, (0 - 13 : U32), (0 - 9 : U32))
+      +head = between(dx, (0 - 1 : U32), 1) && between(dy, (0 - 16 : U32), (0 - 14 : U32))
+      +shield = between(dx, (0 - 4 : U32), (0 - 3 : U32)) && between(dy, (0 - 13 : U32), (0 - 9 : U32))
+      +sword = U32.is_eq(dx, 3) && between(dy, (0 - 22 : U32), (0 - 11 : U32)) || U32.is_eq(dy, (0 - 13 : U32)) && between(dx, 2, 4)
+      sel(sword, 13684944, sel(legs || body || head || shield, sel(neg(dx), 10132122, 8421512), TR()))
+    case 1:
+      # a coiled dragon, wings up, bronze gone green
+      +coil = ell(dx, (dy + 7 : U32), 5, 2)
+      +neck = between(dx, 1, 3) && between(dy, (0 - 14 : U32), (0 - 8 : U32))
+      +head = between(dx, 2, 6) && between(dy, (0 - 17 : U32), (0 - 15 : U32))
+      +wing = between(dx, (0 - 6 : U32), 0) && U32.is_eq(dy, (0 - 10 + (dx >> 1n) : U32)) || between(dx, (0 - 5 : U32), (0 - 1 : U32)) && U32.is_eq(dy, (0 - 11 + (dx >> 1n) : U32))
+      sel(coil || neck || head, 5282906, sel(wing, 4225616, TR()))
+    case 2:
+      # a robed wizard with a staff, its crystal glowing
+      +robe = between(dy, (0 - 13 : U32), (0 - 5 : U32)) && ((sabs(dx) * 3 + 2) <= (0 - dy) : U32)
+      +head = between(dx, (0 - 1 : U32), 1) && between(dy, (0 - 16 : U32), (0 - 14 : U32))
+      +hat = U32.is_eq(dy, (0 - 17 : U32)) && (sabs(dx) <= 2 : U32) || U32.is_eq(dy, (0 - 18 : U32)) && (sabs(dx) <= 1 : U32)
+        || U32.is_eq(dx, 0) && between(dy, (0 - 20 : U32), (0 - 19 : U32))
+      +staff = U32.is_eq(dx, 4) && between(dy, (0 - 19 : U32), (0 - 5 : U32))
+      +gem = U32.is_eq(dx, 4) && between(dy, (0 - 21 : U32), (0 - 20 : U32))
+      +pulse = U32.is_eq(((t >> 4n) .&. 1 : U32), 0)
+      sel(gem, sel(pulse, 12640255, 6352127), sel(staff, 8421512, sel(robe || head || hat, sel(neg(dx), 10132122, 8421512), TR())))
+    case _:
+      # a gilded griffin, one foreleg raised
+      +body = ell(dx, (dy + 9 : U32), 4, 2)
+      +legs = (U32.is_eq(dx, (0 - 3 : U32)) || U32.is_eq(dx, 2)) && between(dy, (0 - 7 : U32), (0 - 5 : U32))
+      +head = between(dx, 2, 5) && between(dy, (0 - 15 : U32), (0 - 11 : U32))
+      +beak = U32.is_eq(dx, 6) && U32.is_eq(dy, (0 - 13 : U32))
+      +wing = between(dx, (0 - 4 : U32), 1) && between(dy, (0 - 17 : U32), (0 - 11 : U32)) && sle((0 - 17 : U32), (dy - dx : U32))
+      sel(beak, 12595248, sel(body || legs || head, 14725184, sel(wing, 12092939, TR())))
+
+def Art.statue(+k: U32, +dx: U32, +dy: U32, +t: U32) -> U32:
+  over(Art.statue.fig(k, dx, (dy + 4 : U32), t), Art.plinth(dx, dy))
+
+def Art.fountain(+dx: U32, +dy: U32, +t: U32) -> U32:
+  +rim = ell(dx, (dy + 2 : U32), 11, 6) && Bool.not(ell(dx, (dy + 2 : U32), 9, 5))
+  +wall = Bool.not(ell(dx, (dy + 2 : U32), 11, 6)) && ell(dx, dy, 11, 6) && sle((0 - 2 : U32), dy)
+  +water = ell(dx, (dy + 2 : U32), 9, 5)
+  +ripple = water && U32.is_eq((((dx * dx + dy * dy * 4) + (t >> 1n)) .&. 15 : U32), 0)
+  +col = (sabs(dx) <= 1 : U32) && between(dy, (0 - 12 : U32), (0 - 2 : U32))
+  +bowl = ell(dx, (dy + 12 : U32), 4, 2)
+  +s = (t .&. 15 : U32)
+  +drop1 = U32.is_eq(dx, (0 - 3 - (s >> 2n) : U32)) && U32.is_eq(dy, (0 - 14 + ((s * s) >> 4n) : U32))
+  +drop2 = U32.is_eq(dx, (3 + (s >> 2n) : U32)) && U32.is_eq(dy, (0 - 14 + ((s * s) >> 4n) : U32))
+  +spout = U32.is_eq(dx, 0) && between(dy, (0 - 17 : U32), (0 - 13 : U32))
+  sel(drop1 || drop2 || spout, 12640255, sel(bowl, 10132122, sel(col, sel(neg(dx), 11579568, 9474192),
+    sel(ripple, 12640255, sel(water, 4221152, sel(rim, 11579568, sel(wall, 8421512, TR())))))))
+
+def Art.flowers(+k: U32, +dx: U32, +dy: U32) -> U32:
+  +d = (sabs(dx) + 2 * sabs(dy) : U32)
+  +bed = (d <= 12 : U32)
+  +edge = bed && (d >= 11 : U32)
+  +h = hash((dx + 64 : U32), (dy + 64 : U32))
+  +bloom = bed && Bool.not(edge) && U32.is_eq((h .&. 3 : U32), 0)
+  +c = sel(U32.is_eq(k, 0), 14168128, sel(U32.is_eq(k, 1), 6320595, 16766282))
+  sel(edge, 9062442, sel(bloom, sel(U32.is_eq(((h >> 4n) .&. 3 : U32), 0), 16316664, c), sel(bed, sel(U32.is_eq(((h >> 6n) .&. 1 : U32), 0), 3834938, 5214768), TR())))
+
+# a run of wall or fence from the tile centre toward its edge: (gx, gy) the
+# ground under the pixel along direction d (0 i-1, 1 i+1, 2 j-1, 3 j+1)
+def Art.run.on(+n: U32, +d: U32, +dx: U32) -> Bool:
+  +bit = sel(U32.is_eq(d, 0), 1, sel(U32.is_eq(d, 1), 2, sel(U32.is_eq(d, 2), 4, 8)))
+  +pos = U32.is_eq(d, 1) || U32.is_eq(d, 2)
+  +half = pos && between(dx, 0, 8) || Bool.not(pos) && between(dx, (0 - 8 : U32), 0)
+  Bool.not(U32.is_eq((n .&. bit : U32), 0)) && half
+
+def sar(+v: U32, +n: Nat) -> U32:
+  sel(neg(v), (0 - ((0 - v) >> n) : U32), (v >> n : U32))
+
+# a ride's phase and time into it (st: phase << 16 | ticks)
+def Art.run.gy(+d: U32, +dx: U32) -> U32:
+  sel(U32.is_eq(d, 0) || U32.is_eq(d, 1), sar(dx, 1n), (0 - sar(dx, 1n) : U32))
+
+def Art.wall.part(+n: U32, +d: U32, +dx: U32, +dy: U32) -> U32:
+  +gy = Art.run.gy(d, dx)
+  +r = (dy - gy : U32)
+  +on = Art.run.on(n, d, dx) && between(r, (0 - 11 : U32), 1)
+  +crenel = between(r, (0 - 11 : U32), (0 - 10 : U32)) && U32.is_eq(((dx + 64) .&. 2 : U32), 0)
+  +top = U32.is_eq(r, (0 - 9 : U32))
+  +mortar = U32.is_eq(((r + 64) .&. 3 : U32), 0) || U32.is_eq(((dx + ((r + 64) >> 2n) * 2 + 64) .&. 3 : U32), 0)
+  sel(on && Bool.not(between(r, (0 - 11 : U32), (0 - 10 : U32)) && Bool.not(crenel)),
+    sel(top, 11579568, sel(mortar, 7368816, sel(U32.is_eq(d, 1) || U32.is_eq(d, 3), 9474192, 10132122))), TR())
+
+def Art.wall(+n: U32, +dx: U32, +dy: U32) -> U32:
+  +post = (sabs(dx) <= 2 : U32) && between(dy, (0 - 13 : U32), 1)
+  +cap = (sabs(dx) <= 2 : U32) && between(dy, (0 - 14 : U32), (0 - 13 : U32))
+  over(sel(cap, 11579568, sel(post, sel(neg(dx), 10132122, 8421512), TR())),
+    over(Art.wall.part(n, 1, dx, dy), over(Art.wall.part(n, 3, dx, dy),
+    over(Art.wall.part(n, 0, dx, dy), Art.wall.part(n, 2, dx, dy)))))
+
+def Art.fence.part(+n: U32, +d: U32, +dx: U32, +dy: U32) -> U32:
+  +gy = Art.run.gy(d, dx)
+  +r = (dy - gy : U32)
+  +on = Art.run.on(n, d, dx)
+  +rail = on && (U32.is_eq(r, (0 - 3 : U32)) || U32.is_eq(r, (0 - 6 : U32)))
+  +post = on && U32.is_eq(((dx + 64) .&. 3 : U32), 0) && between(r, (0 - 7 : U32), 0)
+  sel(post, 7031338, sel(rail, 9062442, TR()))
+
+def Art.fence(+n: U32, +dx: U32, +dy: U32) -> U32:
+  +post = (sabs(dx) <= 1 : U32) && between(dy, (0 - 8 : U32), 0)
+  over(sel(post, 5913120, TR()), over(Art.fence.part(n, 1, dx, dy), over(Art.fence.part(n, 3, dx, dy),
+    over(Art.fence.part(n, 0, dx, dy), Art.fence.part(n, 2, dx, dy)))))
+
+def Art.scenery(+v: U32, +dx: U32, +dy: U32, +n: U32, +t: U32) -> U32:
+  match v:
+    case 8:
+      Art.fountain(dx, dy, t)
+    case 9:
+      Art.flowers(0, dx, dy)
+    case 10:
+      Art.flowers(1, dx, dy)
+    case 11:
+      Art.flowers(2, dx, dy)
+    case 12:
+      Art.wall(n, dx, dy)
+    case 13:
+      Art.fence(n, dx, dy)
+    case _:
+      Art.statue((v - 4 : U32), dx, dy, t)
+
 def Art.tree(+v: U32, +dx: U32, +dy: U32, +n: U32, +t: U32) -> U32:
   match v:
     case 0:
@@ -531,8 +672,10 @@ def Art.tree(+v: U32, +dx: U32, +dy: U32, +n: U32, +t: U32) -> U32:
       Art.pine(dx, dy, n)
     case 2:
       Art.glowcap(dx, dy, n, t)
-    case _:
+    case 3:
       Art.crystal(dx, dy, n, t)
+    case _:
+      Art.scenery(v, dx, dy, n, t)
 
 
 def Art.cyl(+dx: U32, +dy: U32, +base: U32, +r: U32, +h: U32, +c: U32) -> U32:
@@ -1324,10 +1467,6 @@ def Art.ices(+dx: U32, +dy: U32, +t: U32) -> U32:
     over(awning, over(sel(post, 7031338, TR()), booth))))
 
 # signed shift right, for rotations
-def sar(+v: U32, +n: Nat) -> U32:
-  sel(neg(v), (0 - ((0 - v) >> n) : U32), (v >> n : U32))
-
-# a ride's phase and time into it (st: phase << 16 | ticks)
 def Art.running(+st: U32) -> Bool:
   U32.is_eq(((st >> 16n) .&. 3 : U32), 1)
 
@@ -1536,17 +1675,6 @@ def Art.eyrie(+dx: U32, +dy: U32, +t: U32, +ra: U32, +rb: U32, +st: U32) -> U32:
     over(backs, over(sel(far, ringc, TR()), base))))))
 
 # an iso box of any size on (0, base): top diamond half-width r, height h
-def Art.box2(+dx: U32, +dy: U32, +base: U32, +r: U32, +h: U32, +top: U32, +left: U32, +right: U32) -> U32:
-  +ax = sabs(dx)
-  +cy = (base - h : U32)
-  +ontop = ((ax + 2 * sabs((dy - cy : U32))) <= r : U32)
-  +lowtop = (cy + ((r - ax) >> 1n) : U32)
-  +lowbot = (base + ((r - ax) >> 1n) : U32)
-  +side = (ax <= r : U32) && sle(lowtop, dy) && sle(dy, lowbot)
-  sel(ontop, top, sel(side, sel(neg(dx), left, right), TR()))
-
-# The Lich's Crypt: a dark ride inside a mossy crypt, green light flickering
-# in its windows while the riders are inside; their carts wait at the door
 def Art.cart(+dx: U32, +dy: U32, +cx: U32, +cy: U32, +c0: U32, +c1: U32, +c2: U32, +c3: U32) -> U32:
   +ex = (dx - cx : U32)
   +ey = (dy - cy : U32)
@@ -1826,7 +1954,9 @@ def Art.ghost(+k: U32, +px: U32, +py: U32, +x: U32, +y: U32, +t: U32) -> U32:
   +dy = (size * 8 : U32)
   +shape = sel(Bool.not(U32.is_eq(rk, 0)), Art.ride(rk, (px - x : U32), (py - y - dy : U32), t, 0, 0, 0),
     sel(U32.is_eq(tool, 4), Art.tree(0, (px - x : U32), (py - y - 8 : U32), 1, t),
-    sel((tool >= 13 : U32) && (tool <= 15 : U32), Art.prop((tool - 12 : U32), False{}, False{}, x, y, px, py, t), TR())))
+    sel((tool >= 41 : U32) && (tool <= 45 : U32), Art.tree(sel(U32.is_eq(tool, 41), 4, sel(U32.is_eq(tool, 42), 8,
+      sel(U32.is_eq(tool, 43), 9, sel(U32.is_eq(tool, 44), 12, 13)))), (px - x : U32), (py - y - 8 : U32), 0, t),
+    sel((tool >= 13 : U32) && (tool <= 15 : U32), Art.prop((tool - 12 : U32), False{}, False{}, x, y, px, py, t), TR()))))
   +shown = sel(opaque(shape) && stip, Art.tint(shape, ok), TR())
   over(shown, foot)
 
@@ -2048,6 +2178,16 @@ def Art.icon_pic(+tool: U32, +cx: U32, +cy: U32, +t: U32) -> U32:
       Art.ride.go(17, (cx * 3 : U32), (cy * 3 - 8 : U32), t, 0, 0, 0)
     case 39:
       Art.ride.go(16, (cx * 3 : U32), (cy * 3 - 28 : U32), t, 0, 0, 0)
+    case 41:
+      Art.scenery(4, cx, (cy + 7 : U32), 0, t)
+    case 42:
+      Art.scenery(8, cx, (cy + 6 : U32), 0, t)
+    case 43:
+      Art.scenery(9, cx, (cy + 2 : U32), 0, t)
+    case 44:
+      Art.scenery(12, cx, (cy + 6 : U32), 15, t)
+    case 45:
+      Art.scenery(13, cx, (cy + 4 : U32), 15, t)
     case 30:
       Art.healer((cx * 2 : U32), (cy * 2 - 8 : U32), t)
     case 31:
