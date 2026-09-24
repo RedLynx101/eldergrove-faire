@@ -1004,6 +1004,8 @@ def tool_name(+t: U32) -> String:
       "FENCE  8*"
     case 46:
       "BUY LAND  60*  AT THE PARK'S EDGE"
+    case 47:
+      "TRACK DESIGNS: PICK ONE, THEN CLICK TO BUILD IT (R TURNS IT)"
     case _:
       "INSPECT (I): CLICK A RIDE OR A GUEST"
 
@@ -1105,6 +1107,14 @@ def msg_text(+m: U32) -> String:
       "COASTER DEMOLISHED"
     case 22:
       "TRACK REMOVED: IT STILL CHECKS OUT, TEST RUN STARTED"
+    case 23:
+      "DESIGN SAVED (DESIGNS.SAV)"
+    case 24:
+      "ONLY A FINISHED CIRCUIT CAN BE SAVED AS A DESIGN"
+    case 25:
+      "DESIGN BUILT: ITS TEST RUN HAS STARTED"
+    case 26:
+      "THE DESIGN DOESN'T FIT THERE"
     case _:
       Bool.pick(String, (m >= 131 : U32) && (m <= 135 : U32), Award.text((m - 131 : U32)),
       Bool.pick(String, (m >= 100 : U32) && (m < 110 : U32), "THE " ++ ride_name((m - 100 : U32)) ++ " BROKE DOWN!",
@@ -1162,6 +1172,8 @@ def Cat.tool.go(+code: U32) -> U32:
       40
     case 36:
       10
+    case 37:
+      47
     case 40:
       7
     case 41:
@@ -1191,7 +1203,7 @@ def Cat.len(+c: U32) -> U32:
     case 3:
       6
     case 4:
-      5
+      6
     case 5:
       6
     case _:
@@ -1558,6 +1570,8 @@ def Win.w(+k: U32) -> U32:
       232
     case 9:
       320
+    case 10:
+      260
     case 2:
       200
     case 3:
@@ -1583,6 +1597,8 @@ def Win.h(+k: U32) -> U32:
       138
     case 9:
       198
+    case 10:
+      124
     case _:
       144
 
@@ -2486,7 +2502,8 @@ def cons_win(+p: C.Park, +x: U32, +y: U32, +a: U32, +v: U32, +acc: +List<Dr>) ->
   T(why, (x + 6 : U32), (y + 114 : U32), sel(closed && C.Test.failed(tst), 16748688,
     sel(fits && near && Bool.not(closed), 16766282, sel(fits || closed, 15261888, 16748688))),
   T("HOVER A PIECE TO PREVIEW IT, CLICK OR PRESS ITS KEY", (x + 6 : U32), (y + 126 : U32), 9474192,
-    Cons.btns(14n, 0, x, y, pv, map, trk, cash, set))))))
+    button("SAVE AS A DESIGN", (x + 118 : U32), (y + 62 : U32), 108, sel(closed, 5913248, 5263440),
+      Cons.btns(14n, 0, x, y, pv, map, trk, cash, set)))))))
 
 def keys_line(label: String, what: String, +x: U32, +y: U32, +acc: +List<Dr>) -> +List<Dr>:
   T(label, x, y, 16766282, T(what, (x + 46 : U32), y, 15261888, acc))
@@ -2513,7 +2530,65 @@ def keys_win(+x: U32, +y: U32, +acc: +List<Dr>) -> +List<Dr>:
   keys_line("", "BY ITS TITLE BAR, THE X CLOSES IT", c, (y + 184 : U32),
     window_box("KEYS", x, y, 320, 198, acc))))))))))))))))))
 
-def win_dr.go(+k: U32, +x: U32, +y: U32, +a: U32, +p: C.Park, +o: U32, +v: U32, +acc: +List<Dr>) -> +List<Dr>:
+def Words.take(+ws: +List<U32>, +n: U32) -> +List<U32>:
+  match ws:
+    case []:
+      []
+    case w <> rest:
+      Bool.pick(+List<U32>, U32.is_eq(n, 0), [], w <> Words.take(rest, (n - 1 : U32)))
+
+def Words.drop(+ws: +List<U32>, +n: U32) -> +List<U32>:
+  match ws:
+    case []:
+      []
+    case w <> rest:
+      Bool.pick(+List<U32>, U32.is_eq(n, 0), w <> rest, Words.drop(rest, (n - 1 : U32)))
+
+def Lib.slot(+ds: +List<U32>, +i: U32) -> +List<U32>:
+  Words.take(Words.drop(ds, (i * 256 : U32)), 256)
+
+# a new design goes in the next slot; with all eight full, the oldest goes
+def Design.virt(+ks: +List<U32>, +n: U32, +e: C.Pose) -> +List<C.Piece>:
+  match ks:
+    case []:
+      []
+    case kd <> rest:
+      +pc = {C.Piece{C.Pose.x(e), C.Pose.y(e), C.Pose.z(e), kd, C.Pose.d(e)} : C.Piece}
+      Bool.pick(+List<C.Piece>, U32.is_eq(n, 0), [], pc <> Design.virt(rest, (n - 1 : U32), C.Piece.exit(pc)))
+
+def Design.rate(+w: +List<U32>) -> U32:
+  +n = C.Tab.at(w, 0)
+  +cfg = C.Tab.at(w, 1)
+  +st = {C.Piece{32, 32, 6, 5, 0} : C.Piece}
+  +ps = {st <> Design.virt(Words.drop(w, 2), n, C.Piece.exit(st)) : +List<C.Piece>}
+  C.Dry.rate(C.Dry.run(ps, cfg), cfg)
+
+# laying a design's pieces from pose e: the total price, or NONE if any
+# piece has no room (or a steep piece would face away)
+def designs_row(+ds: +List<U32>, +i: U32, +sel_i: U32, +x: U32, +y: U32, +acc: +List<Dr>) -> +List<Dr>:
+  +w = Lib.slot(ds, i)
+  +n = C.Tab.at(w, 0)
+  +r = Design.rate(w)
+  +yy = (y + 16 + i * 12 : U32)
+  +on = U32.is_eq(i, sel_i)
+  +line = U32.show((i + 1 : U32)) ++ "  " ++ Bool.pick(String, U32.is_eq(n, 0), "EMPTY",
+    Coaster.tname(C.Cfg.type(C.Tab.at(w, 1))) ++ "  " ++ U32.show((n + 1 : U32)) ++ " PIECES   EXC " ++ cents(C.Rate.e(r))
+      ++ "  INT " ++ cents(C.Rate.i(r)))
+  T(line, (x + 8 : U32), (yy + 2 : U32), sel(U32.is_eq(n, 0), 9474192, sel(on, 16766282, 15261888)),
+    Bool.pick(+List<Dr>, on, R((x + 4 : U32), yy, 252, 10, 4863024, acc), acc))
+
+def designs_rows(+n: Nat, +i: U32, +ds: +List<U32>, +sel_i: U32, +x: U32, +y: U32, +acc: +List<Dr>) -> +List<Dr>:
+  match n:
+    case 0n:
+      acc
+    case 1n+m:
+      designs_row(ds, i, sel_i, x, y, designs_rows(m, (i + 1 : U32), ds, sel_i, x, y, acc))
+
+def designs_win(+ds: +List<U32>, +v: U32, +x: U32, +y: U32, +acc: +List<Dr>) -> +List<Dr>:
+  T("SAVE FROM A BUILD WINDOW. PICK, CLICK TO BUILD, R TURNS", (x + 6 : U32), (y + 114 : U32), 9474192,
+    designs_rows(8n, 0, ds, ((v >> 28n) .&. 7 : U32), x, y, window_box("TRACK DESIGNS", x, y, 260, 124, acc)))
+
+def win_dr.go(+k: U32, +x: U32, +y: U32, +a: U32, +p: C.Park, +o: U32, +v: U32, +ds: +List<U32>, +acc: +List<Dr>) -> +List<Dr>:
   match k:
     case 1:
       ride_win(p, x, y, a, o, acc)
@@ -2533,16 +2608,18 @@ def win_dr.go(+k: U32, +x: U32, +y: U32, +a: U32, +p: C.Park, +o: U32, +v: U32, 
       cons_win(p, x, y, a, v, acc)
     case 9:
       keys_win(x, y, acc)
+    case 10:
+      designs_win(ds, v, x, y, acc)
     case _:
       acc
 
-def wins_dr(+ws: +List<Win>, +p: C.Park, +o: U32, +v: U32, +acc: +List<Dr>) -> +List<Dr>:
+def wins_dr(+ws: +List<Win>, +p: C.Park, +o: U32, +v: U32, +ds: +List<U32>, +acc: +List<Dr>) -> +List<Dr>:
   match ws:
     case []:
       acc
     case w <> rest:
       Win{+k, +x, +y, +a} = w
-      win_dr.go(k, x, y, a, p, o, v, wins_dr(rest, p, o, v, acc))
+      win_dr.go(k, x, y, a, p, o, v, ds, wins_dr(rest, p, o, v, ds, acc))
 
 # Clicking in windows: 0 nothing, 1 close, 2 drag, 100 + op: a ride setting
 
@@ -2692,17 +2769,17 @@ def hollow_acts() -> List<C.Act>:
 # a scenario's park: its land and rides, gold, loan and research (steady
 # funding; the Dragon's Debt starts with three shops researched)
 type Game is Data:
-  Game{park: C.Park, ui: UI, wm: WM, snd: Z.Snd}
+  Game{park: C.Park, ui: UI, wm: WM, snd: Z.Snd, ds: List<&2, U32>}
 
 def Game.park(g: Game) -> C.Park:
-  Game{p, ui, wm, snd} = g
+  Game{p, ui, wm, snd, ds} = g
   p
 
 # Placing things: a ghost of what the tool would build under the mouse, green
 # where it can go and red where it can't (k: tool | ok << 8 | size << 9 |
 # ride kind << 12), and its cost beside the mouse
 def UI.new() -> UI:
-  UI{930, 880, 0, 0, 0, 0, 12, 0, 2, 0, 0, 0, 99999, 0, 0, 0n, 0, 0}
+  UI{930, 880, 0, 0, 0, 0, 12, 0, 2, 0, 0, 0, 99999, 4, 0, 0n, 0, 0}
 
 def coaster_acts() -> List<C.Act>:
   [C.Build{10, 16, 38, 0}, C.TrackOp{5}, C.TrackOp{5}, C.TrackOp{6},
@@ -2777,10 +2854,13 @@ def start_acts() -> List<C.Act>:
    C.Build{9, 22, 35, 0}, C.Build{1, 22, 35, 0},
    C.ParkOp{21}, C.ParkOp{21}, C.ParkOp{22}, C.ParkOp{23}, C.ParkOp{24}]
 
+def Lib.empty() -> List<&2, U32>:
+  C.Tab.zero(2048, [])
+
 def Game.new() -> Game:
   +p0 = C.Park.run(start_acts(), C.Park.new())
   +p1 = C.Park.run(coaster_acts(), p0)
-  Game{p1, UI.new(), WM.new(), Z.Snd.new()}
+  Game{p1, UI.new(), WM.new(), Z.Snd.new(), Lib.empty()}
 
 # The app
 # -------
@@ -2873,15 +2953,20 @@ def cons_click(+lx: U32, +ly: U32) -> U32:
   sel(on && (op < 99 : U32), (300 + op : U32),
     sel(in_box(lx, ly, 62, 76, 52, 9), 316, sel(in_box(lx, ly, 118, 76, 52, 9), 317, sel(in_box(lx, ly, 174, 76, 52, 9), 318,
     sel(in_box(lx, ly, 62, 88, 11, 9), 320, sel(in_box(lx, ly, 76, 88, 11, 9), 321,
-    sel(in_box(lx, ly, 202, 88, 11, 9), 322, sel(in_box(lx, ly, 216, 88, 11, 9), 323, 0))))))))
+    sel(in_box(lx, ly, 202, 88, 11, 9), 322, sel(in_box(lx, ly, 216, 88, 11, 9), 323,
+    sel(in_box(lx, ly, 118, 62, 108, 9), 330, 0)))))))))
 
 # a piece code (not undo) becomes the previewed piece
+def designs_click(+lx: U32, +ly: U32) -> U32:
+  +r = ((ly - 16) / 12 : U32)
+  sel((ly >= 16 : U32) && (r < 8 : U32) && (lx >= 4 : U32) && (lx < 256 : U32), (600 + r : U32), 0)
+
 def win_code(+k: U32, +lx: U32, +ly: U32) -> U32:
   sel((ly < 10 : U32) && (lx + 10 >= Win.w(k) : U32), 1, sel((ly < 10 : U32), 2,
     sel(U32.is_eq(k, 1), ride_click(lx, ly), sel(U32.is_eq(k, 2), park_click(lx, ly),
       sel(U32.is_eq(k, 3), fin_click(lx, ly), sel(U32.is_eq(k, 5), staff_click(lx, ly),
       sel(U32.is_eq(k, 6), opts_click(lx, ly), sel(U32.is_eq(k, 8), cons_click(lx, ly),
-      sel(U32.is_eq(k, 4) && in_box(lx, ly, 166, 126, 38, 9), 500, 0)))))))))
+      sel(U32.is_eq(k, 4) && in_box(lx, ly, 166, 126, 38, 9), 500, sel(U32.is_eq(k, 10), designs_click(lx, ly), 0))))))))))
 
 # the act a window button asks for
 def ride_act(+p: C.Park, +idx: U32, +op: U32) -> C.Act:
@@ -2975,9 +3060,10 @@ def Speed.key(+sp: U32, +c: U32) -> U32:
 
 def win_act(+p: C.Park, +arg: U32, +code: U32) -> +List<C.Act>:
   Bool.pick(+List<C.Act>, (code >= 400 : U32), [],
+    Bool.pick(+List<C.Act>, (code >= 330 : U32), [],
     Bool.pick(+List<C.Act>, (code >= 300 : U32), [C.TrackOp{(arg * 32 + code - 300 : U32)}],
     Bool.pick(+List<C.Act>, (code >= 200 : U32), [C.ParkOp{(code - 200 : U32)}],
-    Bool.pick(+List<C.Act>, (code >= 100 : U32), [ride_act(p, arg, (code - 100 : U32))], []))))
+    Bool.pick(+List<C.Act>, (code >= 100 : U32), [ride_act(p, arg, (code - 100 : U32))], [])))))
 
 # a ride setting; opening the coaster goes through its track
 def Dyn.is_below(+d: Dyn, +k: U32) -> Bool:
@@ -3127,8 +3213,55 @@ def Pick.under(+p: C.Park, +ui: UI, +lx: U32, +ly: U32) -> U32:
   +time = C.Park.time(p)
   Pick.walk(world(p, ui), (B() + lx : U32), (B() + ly : U32), ((time .&. 536870911) .|. (View.z(UI.var(ui)) << 30n) : U32), time)
 
+def Design.start(+q: C.Q, +x: U32, +y: U32, +v: U32) -> C.Piece:
+  {C.Piece{x, y, C.Land.h(q, x, y), 5, (v .&. 3 : U32)} : C.Piece}
+
+# slot s built at (x, y) heading v: does all of it fit, and can the park pay?
+def Design.walk(+ks: +List<U32>, +n: U32, +q: C.Q, +e: C.Pose, +ok: Bool, +cost: U32) -> U32:
+  match ks:
+    case []:
+      sel(ok, cost, C.NONE())
+    case kd <> rest:
+      +pc = {C.Piece{C.Pose.x(e), C.Pose.y(e), C.Pose.z(e), kd, C.Pose.d(e)} : C.Piece}
+      +room = C.Track.room(q, e, kd) && C.Piece.faces(kd, C.Pose.d(e))
+      sel(U32.is_eq(n, 0), sel(ok, cost, C.NONE()), Design.walk(rest, (n - 1 : U32), q, C.Piece.exit(pc), ok && room, (cost + C.Piece.cost(kd) : U32)))
+
+def Design.fits(+p: C.Park, +w: +List<U32>, +x: U32, +y: U32, +v: U32) -> Bool:
+  +n = C.Tab.at(w, 0)
+  +q = C.Park.map(p)
+  +cost = Design.walk(Words.drop(w, 2), n, q, C.Piece.exit(Design.start(q, x, y, v)), True{}, 0)
+  (n > 0 : U32) && C.Build.ok(q, C.Park.track(p), C.Park.cash(p), 10, x, y) && Bool.not(U32.is_eq(cost, C.NONE()))
+    && (C.Park.cash(p) >= cost + C.Build.cost(10) : U32)
+
+def Design.ghosts(+ks: +List<U32>, +n: U32, +q: C.Q, +e: C.Pose, +code: U32, +vx: U32, +vy: U32, +acc: +List<Dr>) -> +List<Dr>:
+  match ks:
+    case []:
+      acc
+    case kd <> rest:
+      +pc = {C.Piece{C.Pose.x(e), C.Pose.y(e), C.Pose.z(e), kd, C.Pose.d(e)} : C.Piece}
+      +h = C.Land.h(q, C.Pose.x(e), C.Pose.y(e))
+      +dr = {DTrack{scr_x(C.Pose.x(e), C.Pose.y(e), vx), scr_y(C.Pose.x(e), C.Pose.y(e), h, vy), ((kd + C.Pose.d(e) * 16) .|. code : U32), (C.Pose.z(e) - h : U32)} : Dr}
+      Bool.pick(+List<Dr>, U32.is_eq(n, 0), acc, Design.ghosts(rest, (n - 1 : U32), q, C.Piece.exit(pc), code, vx, vy, dr <> acc))
+
+# with the design tool, the chosen design (UI var bits 28-30) as one ghost at
+# the tile under the mouse, green if all of it fits
+def Design.ghost(+p: C.Park, +ds: +List<U32>, +tool: U32, +var: U32, +hov: U32, +vx: U32, +vy: U32, +on: Bool, +acc: +List<Dr>) -> +List<Dr>:
+  +show = U32.is_eq(tool, 47) && on && (hov < 99999 : U32)
+  +w = Lib.slot(ds, ((var >> 28n) .&. 7 : U32))
+  +x = (hov >> 6n : U32)
+  +y = (hov .&. 63 : U32)
+  +v = (var .&. 3 : U32)
+  +q = C.Park.map(p)
+  +fits = Design.fits(p, w, x, y, v)
+  +code = ((C.Cfg.type(C.Tab.at(w, 1)) << 12n) .|. 131072 .|. sel(fits, 262144, 0) : U32)
+  +st = Design.start(q, x, y, v)
+  +h = C.Land.h(q, x, y)
+  Bool.pick(+List<Dr>, show && (C.Tab.at(w, 0) > 0 : U32),
+    Design.ghosts(Words.drop(w, 2), C.Tab.at(w, 0), q, C.Piece.exit(st), code, vx, vy,
+      DTrack{scr_x(x, y, vx), scr_y(x, y, h, vy), ((5 + v * 16) .|. code : U32), 0} <> acc), acc)
+
 def scene(+g: Game) -> +List<Dr>:
-  Game{+p, +ui, +wm, snd} = g
+  Game{+p, +ui, +wm, snd, +ds} = g
   C.Park{+map, +guests, +rides, +track, cash, +time, nid, fin, mess, staff} = p
   UI{+camx, +camy, keys, +mx, +my, md, +tool, +var, sp, msg, fr, inc, last, io, fps, tl, opt, fol} = ui
   +hov = pick(map, ui)
@@ -3138,18 +3271,18 @@ def scene(+g: Game) -> +List<Dr>:
   +vw = View.w(z)
   +vh = View.h(z)
   +overwin = Bool.not(U32.is_eq(Wins.at(WM.wins(wm), mx, my, 0), C.NONE())) || Bool.not(U32.is_eq((UI.opt(ui) .&. 262144 : U32), 0))
-  +ghost = Cut.ghosts(p, tool, hov, vx, vy, Bool.not(overwin), Cons.ghost(p, WM.wins(wm), var, vx, vy, ghost_dr(p, tool, hov, vx, vy, overwin)))
-  +front = ghost_cost(p, tool, hov, mx, my, overwin, wins_dr(WM.wins(wm), p, UI.opt(ui), var,
+  +ghost = Design.ghost(p, ds, tool, var, hov, vx, vy, Bool.not(overwin), Cut.ghosts(p, tool, hov, vx, vy, Bool.not(overwin), Cons.ghost(p, WM.wins(wm), var, vx, vy, ghost_dr(p, tool, hov, vx, vy, overwin))))
+  +front = ghost_cost(p, tool, hov, mx, my, overwin, wins_dr(WM.wins(wm), p, UI.opt(ui), var, ds,
     Bool.pick(+List<Dr>, Menu.on(ui), menu_dr(mx, my), hud(p, ui, hov))))
   List.append(&2, Dr, front, List.append(&2, Dr, ghost, world(p, ui)))
 
 def Game.zoom(g: Game) -> U32:
-  Game{p, ui, wm, snd} = g
+  Game{p, ui, wm, snd, ds} = g
   UI{cx, cy, keys, mx, my, md, tool, var, sp, msg, fr, inc, last, io, fps, tl, opt, fol} = ui
   View.z(var)
 
 def Game.lo(g: Game) -> Bool:
-  Game{p, ui, wm, snd} = g
+  Game{p, ui, wm, snd, ds} = g
   Bool.not(U32.is_eq((UI.opt(ui) .&. 256 : U32), 0))
 
 def frame(+g: Game) -> Image:
@@ -3360,6 +3493,14 @@ def inspect_if(on: Bool, +ws: +List<Win>, +p: C.Park, +hov: U32, +lx: U32, +ly: 
     case False{}:
       ws
 
+def UI.io(u: UI) -> U32:
+  UI{cx, cy, keys, mx, my, md, tool, var, sp, msg, fr, inc, last, io, fps, tl, opt, fol} = u
+  io
+
+def UI.with_io(u: UI, +o: U32) -> UI:
+  UI{cx, cy, keys, mx, my, md, tool, var, sp, msg, fr, inc, last, io, fps, tl, opt, fol} = u
+  UI{cx, cy, keys, mx, my, md, tool, var, sp, msg, fr, inc, last, o, fps, tl, opt, fol}
+
 def on_map(+lx: U32, +ly: U32, +button: U32, +down: Bool, +ui: UI, +wm: WM, +p: C.Park) -> EV:
   UI{+cx, +cy, keys, mx, my, md, +tool, +var, sp, msg, fr, inc, last, io, fps, tl, opt, fol} = ui
   +q = C.Park.map(p)
@@ -3373,7 +3514,9 @@ def on_map(+lx: U32, +ly: U32, +button: U32, +down: Bool, +ui: UI, +wm: WM, +p: 
   +click = down && Bool.not(bar)
   +wheel = U32.is_eq(button, 5) || U32.is_eq(button, 6)
   +inspect = click && Bool.not(wheel) && (U32.is_eq(tool, 12) || Bool.not(U32.is_eq(button, 0)))
-  +build = click && Bool.not(inspect) && Bool.not(wheel) && Res.open(C.Fin.res(C.Park.fin(p)), tool)
+  +build0 = click && Bool.not(inspect) && Bool.not(wheel) && Res.open(C.Fin.res(C.Park.fin(p)), tool)
+  +design = build0 && U32.is_eq(tool, 47)
+  +build = build0 && Bool.not(design)
   +hov = pick(q, ui2)
   +ui3 = UI.with_tool(UI.with_last(ui2, sel(build, hov, 99999)), sel(pickt, item, sel(pickc, Cat.tool((item - 20 : U32), 0), tool)))
   +ws = WM.wins(wm)
@@ -3384,8 +3527,9 @@ def on_map(+lx: U32, +ly: U32, +button: U32, +down: Bool, +ui: UI, +wm: WM, +p: 
   +ws2 = Bool.pick(+List<Win>, parkb, Wins.open(ws, 2, 0, 150, 40),
     Bool.pick(+List<Win>, finb, Wins.open(ws, 3, 0, 140, 30),
     Bool.pick(+List<Win>, staffb, Wins.open(ws, 5, 0, 160, 50),
-    Bool.pick(+List<Win>, optb, Wins.open(ws, 6, 0, 150, 60), ws))))
-  EV{ui3, WM{inspect_if(inspect, ws2, p, hov, lx, ly, ui2), 0, 0, 0},
+    Bool.pick(+List<Win>, optb, Wins.open(ws, 6, 0, 150, 60),
+    Bool.pick(+List<Win>, pickt && U32.is_eq(item, 47), Wins.open(ws, 10, 0, 120, 40), ws)))))
+  EV{UI.with_io(ui3, sel(design, (5 .|. (hov << 4n) : U32), UI.io(ui3))), WM{inspect_if(inspect, ws2, p, hov, lx, ly, ui2), 0, 0, 0},
     Bool.pick(+List<C.Act>, build, build_act(p, ui2), []), False{}}
 
 def UI.at(u: UI, +x: U32, +y: U32) -> UI:
@@ -3422,6 +3566,10 @@ def Staff.next.go(+ss: +List<C.Staff>, +k: U32, +after: U32, +first: U32) -> U32
 def Staff.next(+ss: +List<C.Staff>, +k: U32, +after: U32) -> U32:
   Staff.next.go(ss, k, after, C.NONE())
 
+def UI.tool(u: UI) -> U32:
+  UI{cx, cy, keys, mx, my, md, tool, var, sp, msg, fr, inc, last, io, fps, tl, opt, fol} = u
+  tool
+
 def on_win(+wi: U32, +lx: U32, +ly: U32, +ui: UI, +wm: WM, +p: C.Park) -> EV:
   +ws = Wins.front(WM.wins(wm), wi)
   +w = Wins.get(ws, 0)
@@ -3440,7 +3588,11 @@ def on_win(+wi: U32, +lx: U32, +ly: U32, +ui: UI, +wm: WM, +p: C.Park) -> EV:
   +demo = U32.is_eq(code, 109) && U32.is_eq(Win.kind(w), 1) && U32.is_eq(C.Ride.kind(rd), 5)
   +fire = demo && U32.is_eq((UI.opt(ui) >> 19n : U32), (Win.arg(w) + 1 : U32))
   +opt2 = ((Opt.click(UI.opt(ui), code) .&. 524287) .|. sel(demo && Bool.not(fire), ((Win.arg(w) + 1) << 19n : U32), 0) : U32)
-  EV{UI.with_fol(UI.with_var(UI.with_opt(UI.at(ui, lx, ly), opt2), Cons.preview(UI.var(ui), code)), fol2),
+  +pickd = (code >= 600 : U32) && (code < 608 : U32)
+  +var2 = sel(pickd, ((UI.var(ui) .&. 2415919103) .|. ((code - 600) << 28n) : U32), Cons.preview(UI.var(ui), code))
+  +u1 = UI.with_fol(UI.with_var(UI.with_opt(UI.at(ui, lx, ly), opt2), var2), fol2)
+  +u2 = UI.with_io(u1, sel(U32.is_eq(code, 330), (3 .|. (Win.arg(w) << 4n) : U32), UI.io(u1)))
+  EV{UI.with_tool(u2, sel(pickd, 47, UI.tool(u2))),
     WM{Bool.pick(+List<Win>, U32.is_eq(code, 1) || fire, Wins.drop(ws2, 0), ws2), sel(U32.is_eq(code, 2), 1, 0),
       (lx - wx : U32), (ly - wy : U32)},
     Bool.pick(+List<C.Act>, fire, [C.TrackOp{(27 .|. (C.Ride.ht(rd) << 5n) : U32)}], Bool.pick(+List<C.Act>, demo, [], win_act(p, Win.arg(w), code))),
@@ -3769,7 +3921,7 @@ def Follow.at(+p: C.Park, +fol: U32) -> U32:
   Follow.go((fol .&. 3 : U32), p, (fol >> 2n : U32))
 
 def step_game.go(+p: C.Park, +ui: UI, +wm: WM, +acts: +List<C.Act>, quit: Bool,
-  snd: Z.Snd, +clicked: Bool) -> Maybe<Game>:
+  snd: Z.Snd, +clicked: Bool, ds: List<&2, U32>) -> Maybe<Game>:
   UI{+cx, +cy, +keys, mx, my, md, tool, +var, +sp, +msg, +fr, +inc, last, io, fps, tl, +opt, +fol} = ui
   +req = ((opt >> 15n) .&. 7 : U32)
   +p0 = Scn.swap((req > 0 : U32), req, p)
@@ -3805,20 +3957,16 @@ def step_game.go(+p: C.Park, +ui: UI, +wm: WM, +acts: +List<C.Act>, quit: Bool,
   +tmsg = Tracks.tested(C.Park.track(p0), C.Park.track(Res.park(r2)))
   Bool.pick(Maybe<Game>, quit, None{}, Some{Game{Res.park(r2), UI.said(ui2, sel((award > 0 : U32), award, sel((tmsg > 0 : U32), tmsg, bk))), wm2,
     Z.Snd.cue(snd, (word .|. sel((gop > 0 : U32) || (award > 0 : U32) || U32.is_eq(tmsg, 17), 16, 0) : U32),
-      Snd.w2(Snd.tracks(C.Park.track(Res.park(r2)), 0)))}})
-
-def UI.tool(u: UI) -> U32:
-  UI{cx, cy, keys, mx, my, md, tool, var, sp, msg, fr, inc, last, io, fps, tl, opt, fol} = u
-  tool
+      Snd.w2(Snd.tracks(C.Park.track(Res.park(r2)), 0))), ds}})
 
 def step_game(+g: Game, events: List<Event>) -> Maybe<Game>:
-  Game{+p, +ui, +wm, snd} = g
+  Game{+p, +ui, +wm, snd, ds} = g
   +ev = on_events(events, ui, wm, p, [], False{})
   # a click: an act, a window opened or closed, or another tool
   +clicked = Bool.not(U32.is_eq(C.len32(C.Act, EV.acts(ev)), 0))
     || Bool.not(U32.is_eq(C.len32(Win, WM.wins(EV.wm(ev))), C.len32(Win, WM.wins(wm))))
     || Bool.not(U32.is_eq(UI.tool(EV.ui(ev)), UI.tool(ui)))
-  step_game.go(p, EV.ui(ev), EV.wm(ev), EV.acts(ev), EV.quit(ev), snd, clicked)
+  step_game.go(p, EV.ui(ev), EV.wm(ev), EV.acts(ev), EV.quit(ev), snd, clicked, ds)
 
 # The starting park
 # -----------------
@@ -3836,8 +3984,8 @@ def UI.clock(u: UI, +now: Nat) -> UI:
     sel(due, f, fps), Bool.pick(Nat, due, now, tl), sel(due, Opt.dyn(opt, f), opt), fol}
 
 def Game.clock(g: Game, +now: Nat) -> Game:
-  Game{p, ui, wm, snd} = g
-  Game{p, UI.clock(ui, now), wm, snd}
+  Game{p, ui, wm, snd, ds} = g
+  Game{p, UI.clock(ui, now), wm, snd, ds}
 
 def Game.clock_m(m: Maybe<Game>, +now: Nat) -> Maybe<Game>:
   match m:
@@ -3847,7 +3995,7 @@ def Game.clock_m(m: Maybe<Game>, +now: Nat) -> Maybe<Game>:
       Some{Game.clock(g, now)}
 
 def Game.fps(g: Game) -> U32:
-  Game{p, ui, wm, snd} = g
+  Game{p, ui, wm, snd, ds} = g
   UI{cx, cy, keys, mx, my, md, tool, var, sp, msg, fr, inc, last, io, fps, tl, opt, fol} = ui
   sel(U32.is_eq((fr .&. 127 : U32), 1), fps, 0)
 
@@ -3877,21 +4025,165 @@ def Game.report(m: Maybe<Game>) -> IO(Maybe<Game>):
 # Saving and loading (F5 / F9)
 # ----------------------------
 
-def UI.io(u: UI) -> U32:
-  UI{cx, cy, keys, mx, my, md, tool, var, sp, msg, fr, inc, last, io, fps, tl, opt, fol} = u
-  io
-
 def UI.done(u: UI, +m: U32) -> UI:
   UI{cx, cy, keys, mx, my, md, tool, var, sp, msg, fr, inc, last, io, fps, tl, opt, fol} = u
   UI{cx, cy, keys, mx, my, md, tool, var, sp, m, fr, inc, last, 0, fps, tl, opt, fol}
 
 def Game.done(g: Game, +m: U32) -> Game:
-  Game{p, ui, wm, snd} = g
-  Game{p, UI.done(ui, m), wm, snd}
+  Game{p, ui, wm, snd, ds} = g
+  Game{p, UI.done(ui, m), wm, snd, ds}
 
 def Game.io(g: Game) -> U32:
-  Game{p, ui, wm, snd} = g
+  Game{p, ui, wm, snd, ds} = g
   UI.io(ui)
+
+# Track designs
+# -------------
+# The library: eight slots of 256 values, filled in order. A slot: the
+# number of pieces after the station (0 empty), the coaster's settings,
+# then each piece's kind. Every value fits a byte, so the file is the list.
+def DESIGN_PATH() -> String:
+  "designs.sav"
+
+def Words.pad(+ws: +List<U32>, +n: U32) -> +List<U32>:
+  Words.take(List.append(&2, U32, ws, C.Tab.zero(n, [])), n)
+
+# filled slots (they fill in order)
+def Lib.count(+n: Nat, +ds: +List<U32>, +i: U32) -> U32:
+  match n:
+    case 0n:
+      i
+    case 1n+m:
+      sel(U32.is_eq(C.Tab.at(ds, (i * 256 : U32)), 0), i, Lib.count(m, ds, (i + 1 : U32)))
+
+def Lib.add(+ds: +List<U32>, +d: +List<U32>) -> +List<U32>:
+  +n = Lib.count(8n, ds, 0)
+  +pd = Words.pad(d, 256)
+  Bool.pick(+List<U32>, (n < 8 : U32),
+    List.append(&2, U32, Words.take(ds, (n * 256 : U32)), List.append(&2, U32, pd, Words.drop(ds, ((n + 1) * 256 : U32)))),
+    List.append(&2, U32, Words.drop(ds, 256), pd))
+
+def Pieces.kinds(+ps: +List<C.Piece>) -> +List<U32>:
+  match ps:
+    case []:
+      []
+    case p <> rest:
+      +p2 = p
+      C.Piece.kind(p2) <> Pieces.kinds(rest)
+
+def Words.tail(+ws: +List<U32>) -> +List<U32>:
+  match ws:
+    case []:
+      []
+    case w <> rest:
+      rest
+
+# a finished coaster as a design: pieces after the station, settings, kinds
+def Design.of(+t: C.Track) -> +List<U32>:
+  +ks = Words.tail(Pieces.kinds(C.Track.pieces(t)))
+  C.len32(U32, ks) <> C.Track.cfg(t) <> ks
+
+# a design's kinds laid from a pose: the pieces they make (for ratings)
+def Design.reps(+n: Nat, +op: U32) -> List<C.Act>:
+  match n:
+    case 0n:
+      []
+    case 1n+m:
+      C.TrackOp{op} <> Design.reps(m, op)
+
+def Design.pieces(+ks: +List<U32>, +n: U32, +k: U32) -> List<C.Act>:
+  match ks:
+    case []:
+      []
+    case kd <> rest:
+      Bool.pick(List<C.Act>, U32.is_eq(n, 0), [], C.TrackOp{(kd .|. (k << 5n) : U32)} <> Design.pieces(rest, (n - 1 : U32), k))
+
+# building a design is plain acts: the station, its type and lift speed,
+# then each piece (the last one closes the circuit, and the re-check starts
+# its test run)
+def Design.acts(+w: +List<U32>, +x: U32, +y: U32, +v: U32, +k: U32) -> List<C.Act>:
+  +n = C.Tab.at(w, 0)
+  +cfg = C.Tab.at(w, 1)
+  +ty = C.Cfg.type(cfg)
+  +ls = ((cfg >> 5n) .&. 7 : U32)
+  +k5 = (k << 5n : U32)
+  C.Build{10, x, y, v} <> List.append(&1, C.Act, Bool.pick(List<C.Act>, (ty > 0 : U32), [C.TrackOp{(16 + ty + k5 : U32)}], []),
+    List.append(&1, C.Act, Design.reps(U32.to_nat(C.sub0(ls, 2)), (23 + k5 : U32)),
+    List.append(&1, C.Act, Design.reps(U32.to_nat(C.sub0(2, ls)), (22 + k5 : U32)), Design.pieces(Words.drop(w, 2), n, k))))
+
+def Game.ds(g: Game) -> +List<U32>:
+  Game{p, ui, wm, snd, ds} = g
+  ds
+
+def Game.with_ds(g: Game, +d: +List<U32>, +m: U32) -> Game:
+  Game{p, ui, wm, snd, ds} = g
+  Game{p, UI.done(ui, m), wm, snd, d}
+
+def design.saved(r: File & Result<&1, &1, U32 & String, Unit>, +lib: +List<U32>, g: Game) -> IO(Maybe<Game>):
+  (f, res) = r
+  do IO<Maybe<Game>>:
+    File.close(f)
+    return Some{Game.with_ds(g, lib, 23)}
+
+def design.write(r: Result<&1, &1, U32 & String, File>, +lib: +List<U32>, g: Game) -> IO(Maybe<Game>):
+  match r:
+    case Fail{e}:
+      IO.pure(Maybe<Game>, Some{Game.done(g, 24)})
+    case Done{f}:
+      do IO<Maybe<Game>>:
+        w : File & Result<&1, &1, U32 & String, Unit> <- File.write_bytes(f, lib)
+        design.saved(w, lib, g)
+
+def design.save.go(ok: Bool, +k: U32, g: Game) -> IO(Maybe<Game>):
+  match ok:
+    case True{}:
+      +g2 = g
+      +lib = Lib.add(Game.ds(g2), Design.of(C.Tracks.get(C.Park.track(Game.park(g2)), k)))
+      do IO<Maybe<Game>>:
+        r : Result<&1, &1, U32 & String, File> <- File.open(DESIGN_PATH(), "w")
+        design.write(r, lib, g2)
+    case False{}:
+      IO.pure(Maybe<Game>, Some{Game.done(g, 24)})
+
+def design.save(+k: U32, g: Game) -> IO(Maybe<Game>):
+  +g2 = g
+  design.save.go(C.Track.closed(C.Tracks.get(C.Park.track(Game.park(g2)), k)), k, g2)
+
+def design.got(res: Result<&1, &1, U32 & String, List<&2, U32>>, g: Game) -> Maybe<Game>:
+  match res:
+    case Fail{e}:
+      Some{Game.done(g, 0)}
+    case Done{bs}:
+      +bs2 = bs
+      +g2 = g
+      Some{Bool.pick(Game, U32.is_eq(C.len32(U32, bs2), 2048), Game.with_ds(g2, bs2, 0), Game.done(g2, 0))}
+
+def design.read(r: File & Result<&1, &1, U32 & String, List<&2, U32>>, g: Game) -> IO(Maybe<Game>):
+  (f, res) = r
+  do IO<Maybe<Game>>:
+    File.close(f)
+    return design.got(res, g)
+
+def design.load(r: Result<&1, &1, U32 & String, File>, g: Game) -> IO(Maybe<Game>):
+  match r:
+    case Fail{e}:
+      IO.pure(Maybe<Game>, Some{Game.done(g, 0)})
+    case Done{f}:
+      do IO<Maybe<Game>>:
+        rd : File & Result<&1, &1, U32 & String, List<&2, U32>> <- File.read_bytes(f, 2048)
+        design.read(rd, g)
+
+# building the chosen design at tile hov (if it all fits)
+def design.build(+hov: U32, g: Game) -> Game:
+  Game{+p, +ui, wm, snd, +ds} = g
+  +var = UI.var(ui)
+  +w = Lib.slot(ds, ((var >> 28n) .&. 7 : U32))
+  +x = (hov >> 6n : U32)
+  +y = (hov .&. 63 : U32)
+  +v = (var .&. 3 : U32)
+  +fits = Design.fits(p, w, x, y, v)
+  Game{Bool.pick(C.Park, fits, C.Park.run(Design.acts(w, x, y, v, C.len32(C.Track, C.Park.track(p))), p), p),
+    UI.done(ui, sel(fits, 25, 26)), wm, snd, ds}
 
 def SAVE_PATH() -> String:
   "eldergrove.sav"
@@ -3916,8 +4208,8 @@ def load.got(m: Maybe<&2, C.Park>, g: Game) -> Maybe<Game>:
     case None{}:
       Some{Game.done(g, 5)}
     case Some{p}:
-      Game{old, ui, wm, snd} = g
-      Some{Game{p, UI.done(ui, 4), WM.new(), snd}}
+      Game{old, ui, wm, snd, ds} = g
+      Some{Game{p, UI.done(ui, 4), WM.new(), snd, ds}}
 
 def load.bytes(res: Result<&1, &1, U32 & String, List<&2, U32>>, g: Game)
   -> Maybe<Game>:
@@ -3959,7 +4251,7 @@ def load.with(r: Result<&1, &1, U32 & String, File>, g: Game) -> IO(Maybe<Game>)
         z : File & Result<&1, &1, U32 & String, U32> <- File.size(f)
         load.sized(z, g)
 
-def Game.do_io(+w: U32, g: Game) -> IO(Maybe<Game>):
+def Game.do_io(+w: U32, +arg: U32, g: Game) -> IO(Maybe<Game>):
   match w:
     case 1:
       do IO<Maybe<Game>>:
@@ -3969,6 +4261,14 @@ def Game.do_io(+w: U32, g: Game) -> IO(Maybe<Game>):
       do IO<Maybe<Game>>:
         r : Result<&1, &1, U32 & String, File> <- File.open(SAVE_PATH(), "r")
         load.with(r, g)
+    case 3:
+      design.save(arg, g)
+    case 4:
+      do IO<Maybe<Game>>:
+        r : Result<&1, &1, U32 & String, File> <- File.open(DESIGN_PATH(), "r")
+        design.load(r, g)
+    case 5:
+      IO.pure(Maybe<Game>, Some{design.build(arg, g)})
     case _:
       IO.pure(Maybe<Game>, Some{g})
 
@@ -3977,7 +4277,7 @@ def Game.io_m(m: Maybe<Game>) -> IO(Maybe<Game>):
     case None{}:
       IO.pure(Maybe<Game>, None{})
     case Some{+g}:
-      Game.do_io(Game.io(g), g)
+      Game.do_io((Game.io(g) .&. 15 : U32), (Game.io(g) >> 4n : U32), g)
 
 def tick(events: List<Event>, g: Game) -> IO(Maybe<Game>):
   +g2 = g
@@ -4044,10 +4344,10 @@ def UI.zoomed(u: UI, +z: U32) -> UI:
 
 # win: a window to show (kind * 256 + arg; 0 for none); z: the zoom
 def shot.go(g: Game, path: String, n: Nat, +tool: U32, +cx: U32, +cy: U32, +win: U32, +z: U32) -> IO(Unit):
-  Game{+p, ui, wm, snd} = g
+  Game{+p, ui, wm, snd, ds} = g
   +p2 = Res.park(ticks(n, p, 0))
   +wk = ((win >> 8n) .&. 15 : U32)
-  +ws = Bool.pick(+List<Win>, U32.is_eq(win, 0), [], [Win{wk, sel(U32.is_eq(wk, 8), 16, sel(U32.is_eq(wk, 9), 96, 300)), 40, (win .&. 255 : U32)}])
+  +ws = Bool.pick(+List<Win>, U32.is_eq(win, 0), [], [Win{wk, sel(U32.is_eq(wk, 8), 16, sel(U32.is_eq(wk, 9) || U32.is_eq(wk, 10), 96, 300)), 40, (win .&. 255 : U32)}])
   +u0 = ui
   +u1 = UI.with_var(u0, Cons.preview(UI.var(u0), sel(U32.is_eq(wk, 8), (300 + (win >> 12n) : U32), 0)))
   # tool 99: follow the starter coaster (ride 14) instead
@@ -4055,12 +4355,12 @@ def shot.go(g: Game, path: String, n: Nat, +tool: U32, +cx: U32, +cy: U32, +win:
   +tg = Follow.at(p2, fol)
   +on = Bool.not(U32.is_eq(fol, 0)) && Bool.not(U32.is_eq(tg, C.NONE()))
   +g2 = {Game{p2, UI.with_fol(UI.zoomed(UI.cam(UI.with_tool(UI.at(u1, 256, 150), sel(on, 12, tool)),
-    sel(on, (tg >> 16n : U32), cx), sel(on, (tg .&. 65535 : U32), cy)), z), fol), WM{ws, 0, 0, 0}, snd} : Game}
+    sel(on, (tg >> 16n : U32), cx), sel(on, (tg .&. 65535 : U32), cy)), z), fol), WM{ws, 0, 0, 0}, snd, ds} : Game}
   shot.write(path, bytes(163840n, frame(g2), 163839, []))
 
 def Game.with(g: Game, acts: List<C.Act>) -> Game:
-  Game{+p, +ui, wm, snd} = g
-  Game{C.Park.run(acts, p), ui, wm, snd}
+  Game{+p, +ui, wm, snd, ds} = g
+  Game{C.Park.run(acts, p), ui, wm, snd, ds}
 
 def ctest.bad() -> List<C.Act>:
   List.append(&1, C.Act, clear2_acts(), [C.Build{10, 40, 56, 0}, C.TrackOp{37}, C.TrackOp{33}, C.TrackOp{34}, C.TrackOp{43},
@@ -4075,11 +4375,19 @@ def shot.acts(b: Bool) -> List<C.Act>:
     case False{}:
       demo_acts()
 
+def shot.lib(g: Game) -> Game:
+  +g2 = Game.with(g, loop2_acts())
+  +lib = Lib.add(Lib.add(Lib.empty(), Design.of(C.Tracks.get(C.Park.track(Game.park(g2)), 1))),
+    Design.of(C.Tracks.get(C.Park.track(Game.park(g2)), 0)))
+  Game.with_ds(g2, lib, 0)
+
 def shot(path: String, n: Nat, +tool: U32, +cx: U32, +cy: U32, +win: U32, +z: U32) -> IO(Unit):
   +g = Game.new()
-  shot.go(Bool.pick(Game, U32.is_eq(((win >> 8n) .&. 15 : U32), 8), Game.with(g, shot.acts(U32.is_eq((win >> 12n : U32), 15))), g),
-    path, n, tool, cx, cy, win, z)
+  +wk = ((win >> 8n) .&. 15 : U32)
+  shot.go(Bool.pick(Game, U32.is_eq(wk, 8), Game.with(g, shot.acts(U32.is_eq((win >> 12n : U32), 15))),
+    Bool.pick(Game, U32.is_eq(wk, 10) || U32.is_eq(tool, 47), shot.lib(Game.new()), g)), path, n, tool, cx, cy, win, z)
 
+# the designs window pictured with the save test's second loop as a design
 def is_shot(+args: +List<String>) -> Bool:
   match args:
     case []:
@@ -4114,9 +4422,9 @@ def bench.loop(+n: Nat, +mode: U32, +g: Game) -> U32:
 
 # benches run at normal speed (one tick a frame)
 def Game.with_sp(g: Game, +l: U32) -> Game:
-  Game{p, ui, wm, snd} = g
+  Game{p, ui, wm, snd, ds} = g
   UI{cx, cy, keys, mx, my, md, tool, var, sp, msg, fr, inc, last, io, fps, tl, opt, fol} = ui
-  Game{p, UI{cx, cy, keys, mx, my, md, tool, var, l, msg, fr, inc, last, io, fps, tl, opt, fol}, wm, snd}
+  Game{p, UI{cx, cy, keys, mx, my, md, tool, var, l, msg, fr, inc, last, io, fps, tl, opt, fol}, wm, snd, ds}
 
 def bench.go(g: Game, +n: Nat, +mode: U32) -> IO(Unit):
   +g2 = Game.with_sp(g, 3)
@@ -4135,10 +4443,10 @@ def crowd.go(+n: Nat, +id: U32, +t: U32, +acc: +List<C.Guest>) -> +List<C.Guest>
       crowd.go(k, (id + 1 : U32), t, C.Guest.new(id, (t + id * 7 : U32), 0) <> acc)
 
 def crowd(g: Game, +n: U32) -> Game:
-  Game{p, ui, wm, snd} = g
+  Game{p, ui, wm, snd, ds} = g
   C.Park{map, guests, rides, track, cash, +time, +nid, fin, mess, staff} = p
   Game{C.Park{map, crowd.go(U32.to_nat(n), nid, time, guests), rides, track, cash, time,
-    (nid + n : U32), fin, mess, staff}, ui, wm, snd}
+    (nid + n : U32), fin, mess, staff}, ui, wm, snd, ds}
 
 # --scen K MONTHS: play scenario K a month at a time, reporting its state
 def scen.line(+p: C.Park) -> String:
@@ -4184,12 +4492,22 @@ def ctest.closing() -> List<C.Act>:
 def ctest.many() -> List<C.Act>:
   List.append(&1, C.Act, clear2_acts(), [C.Build{10, 38, 54, 0}, C.Build{10, 39, 54, 0}, C.Build{10, 40, 54, 0}, C.Build{10, 41, 54, 0}, C.Build{10, 42, 54, 0}, C.Build{10, 43, 54, 0}, C.Build{10, 44, 54, 0}, C.Build{10, 45, 54, 0}, C.Build{10, 38, 55, 0}, C.Build{10, 39, 55, 0}, C.Build{10, 40, 55, 0}, C.Build{10, 41, 55, 0}, C.Build{10, 42, 55, 0}, C.Build{10, 43, 55, 0}, C.Build{10, 44, 55, 0}, C.Build{10, 45, 55, 0}])
 
+# a design saved from the loop, built back where the loop stood (after
+# demolishing it)
+def ctest.design(+p: C.Park, +w: +List<U32>) -> String:
+  +fits = Design.fits(p, w, 40, 56, 0)
+  +p2 = C.Park.run(Design.acts(w, 40, 56, 0, C.len32(C.Track, C.Park.track(p))), p)
+  "fits " ++ Bool.show(fits) ++ ", " ++ U32.show(C.Tab.at(w, 0)) ++ " pieces after the station, rating "
+    ++ U32.show(Design.rate(w)) ++ "; built: " ++ ctest.state(p2, 2)
+
 def ctest.go() -> IO(Unit):
   do IO<Unit>:
     IO.print("closing the circuit: " ++ ctest.state(C.Park.run(ctest.closing(), Game.park(Game.new())), 1))
     IO.print("tested loop: " ++ ctest.state(Res.park(ticks(1500n, C.Park.run(ctest.good(), Game.park(Game.new())), 0)), 1))
     IO.print("cut at piece 5: " ++ ctest.state(C.Park.run([C.TrackOp{(26 .|. 32 .|. (5 << 16n) : U32)}], Res.park(ticks(1500n, C.Park.run(ctest.good(), Game.park(Game.new())), 0))), 1))
     IO.print("demolished: " ++ ctest.state(C.Park.run([C.TrackOp{59}], Res.park(ticks(1500n, C.Park.run(ctest.good(), Game.park(Game.new())), 0))), 1))
+    IO.print("design: " ++ ctest.design(C.Park.run([C.TrackOp{59}], Res.park(ticks(1500n, C.Park.run(ctest.good(), Game.park(Game.new())), 0))),
+      Lib.slot(Lib.add(Lib.empty(), Design.of(C.Tracks.get(C.Park.track(Res.park(ticks(1500n, C.Park.run(ctest.good(), Game.park(Game.new())), 0))), 1))), 0)))
     IO.print("coasters after sixteen more stations: " ++ U32.show(C.len32(C.Track, C.Park.track(C.Park.run(ctest.many(), Game.park(Game.new()))))))
     IO.print("with a lift hill: " ++ ctest.run(80n, C.Park.run(ctest.good(), Game.park(Game.new())), 0))
     IO.print("no lift hill: " ++ ctest.run(80n, C.Park.run(ctest.bad(), Game.park(Game.new())), 0))
@@ -4209,8 +4527,8 @@ def scen.run(+n: Nat, +p: C.Park) -> IO(Unit):
         scen.run(m, p2)
 
 def warm(g: Game, +n: Nat) -> Game:
-  Game{+p, +ui, wm, snd} = g
-  Game{Res.park(ticks(n, p, 0)), ui, wm, snd}
+  Game{+p, +ui, wm, snd, ds} = g
+  Game{Res.park(ticks(n, p, 0)), ui, wm, snd, ds}
 
 def is_bench(+args: +List<String>) -> Bool:
   match args:
@@ -4252,17 +4570,17 @@ def Loop.compute(old: Image, g: Game, evs: List<Event>) -> IO(Nx):
   IO.bind(Unit, Nx, IO.pure(Unit, Unit{}), u => IO.pure(Nx, Loop.pure(old, g, evs)))
 
 # the next samples, and the game with the synthesizer's state after them
-def Game.sound.go(pr: Z.Snd & List<&2, F32>, p: C.Park, ui: UI, wm: WM) -> Game & List<&2, F32>:
+def Game.sound.go(pr: Z.Snd & List<&2, F32>, p: C.Park, ui: UI, wm: WM, ds: List<&2, U32>) -> Game & List<&2, F32>:
   (s2, xs) = pr
-  (Game{p, ui, wm, s2}, xs)
+  (Game{p, ui, wm, s2, ds}, xs)
 
 def Game.sound(g: Game) -> Game & List<&2, F32>:
-  Game{p, ui, wm, snd} = g
-  Game.sound.go(Z.Snd.render(snd), p, ui, wm)
+  Game{p, ui, wm, snd, ds} = g
+  Game.sound.go(Z.Snd.render(snd), p, ui, wm, ds)
 
 def Game.heard(g: Game, +q: U32) -> Game:
-  Game{p, ui, wm, snd} = g
-  Game{p, ui, wm, Z.Snd.heard(snd, q)}
+  Game{p, ui, wm, snd, ds} = g
+  Game{p, ui, wm, Z.Snd.heard(snd, q), ds}
 
 def Loop.heard(r: Audio & U32, window: Window, g: Game, img: Image, events: List<Event>,
   shown: Image, rest: Window -> Audio -> Game -> Image -> List<Event> -> Image -> IO(Unit))
@@ -4293,12 +4611,12 @@ def Win.config(window: Window, w: U32, h: U32, mode: U32) -> IO(Window):
   import "./win_config.js"
 
 def Game.opt(g: Game) -> U32:
-  Game{p, ui, wm, snd} = g
+  Game{p, ui, wm, snd, ds} = g
   UI.opt(ui)
 
 def Game.configured(g: Game) -> Game:
-  Game{p, +ui, wm, snd} = g
-  Game{p, UI.with_opt(ui, (UI.opt(ui) .&. 4294950911 : U32)), wm, snd}
+  Game{p, +ui, wm, snd, ds} = g
+  Game{p, UI.with_opt(ui, (UI.opt(ui) .&. 4294950911 : U32)), wm, snd, ds}
 
 def Loop.config.go(dirty: Bool, g: Game, window: Window, au: Audio, shown: Image, events: List<Event>,
   img: Image, rest: Window -> Audio -> Game -> Image -> List<Event> -> Image -> IO(Unit))
@@ -4362,8 +4680,8 @@ def env_opt(r: Result<&1, &1, U32 & String, String>) -> U32:
       (arg_u32(s) .|. 16384 : U32)
 
 def Game.with_opt(g: Game, +o: U32) -> Game:
-  Game{p, ui, wm, snd} = g
-  Game{p, UI.with_opt(ui, o), wm, snd}
+  Game{p, ui, wm, snd, ds} = g
+  Game{p, UI.with_opt(ui, o), wm, snd, ds}
 
 def Loop.start(g: Game) -> IO(Unit):
   +g2 = g
@@ -4566,7 +4884,7 @@ def ui.click(+x: U32, +y: U32, +b: U32) -> List<Event>:
   [Mouse{(x * 2 : U32), (y * 2 : U32), b, True{}}, Mouse{(x * 2 : U32), (y * 2 : U32), b, False{}}]
 
 def ui.report(g: Game) -> String:
-  Game{+p, +ui, +wm, snd} = g
+  Game{+p, +ui, +wm, snd, ds} = g
   +r0 = C.Rides.get(C.Park.rides(p), 0)
   "windows " ++ U32.show(C.len32(Win, WM.wins(wm))) ++ " (front kind " ++ U32.show(Win.kind(Wins.get(WM.wins(wm), 0))) ++ "), carousel price " ++ U32.show(C.Ride.price(r0))
     ++ ", open " ++ U32.show(C.Ride.open_flag(r0)) ++ ", max wait " ++ U32.show(C.Ride.wmax(r0))
@@ -4628,8 +4946,8 @@ def ui.s9(g: Game) -> Game:
   ui.step(g, [Key{49, True{}}, Key{49, False{}}, Key{49, True{}}, Key{49, False{}}])
 
 def Game.look(g: Game, +tool: U32, +cx: U32, +cy: U32) -> Game:
-  Game{p, ui, wm, snd} = g
-  Game{p, UI.with_tool(UI.cam(ui, cx, cy), tool), wm, snd}
+  Game{p, ui, wm, snd, ds} = g
+  Game{p, UI.with_tool(UI.cam(ui, cx, cy), tool), wm, snd, ds}
 
 # a new coaster on the cleared patch: its station tile (40, 56) sits at
 # (256, 150) on screen with this camera; its construction window opens

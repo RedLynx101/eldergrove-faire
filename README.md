@@ -192,6 +192,12 @@ shows which, half their price back); a coaster's ride window has DEMOLISH (click
 whole coaster. Any change to a track closes the ride and checks it again at once: a closed circuit that
 still passes the dry run goes straight onto a test run, anything else stays off.
 
+Track designs: SAVE AS A DESIGN in a finished coaster's construction window keeps its layout, type and lift
+speed in one of eight slots (`designs.sav`, oldest replaced when full). The thrill tab's design tool opens
+the list (with each design's excitement and intensity); pick one and the whole coaster follows the mouse as
+a ghost, green where all of it fits and the park can pay. `R` turns it; a click builds it, and its test run
+starts as the last piece goes down.
+
 Follow cam: the FOLLOW button in a ride's window rides along with a coaster's lead car (or centres on
 any other ride); in a guest's window it trails that guest; in the staff window it trails a staff member
 of that row (press again for the next one). Any camera key lets go.

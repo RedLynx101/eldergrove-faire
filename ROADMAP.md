@@ -255,6 +255,12 @@ Small design decisions made while working, listed here so they can be revisited.
   picks the rumble (Wyrm timber clatter, Minecart iron rattle and buzz, Flyer deep whoosh). Riders
   scream when a train of an open, tested coaster goes down a drop at speed 45 or more, louder the faster
   it goes (a stand-in for the plan's "scaled by the biggest drop": speed on the drop tracks the drop).
+- **Designs are plain acts.** A design is its piece count, settings and piece kinds (the shape follows from
+  the kinds, so it turns with the station); building one is a station build, its type and lift speed, then
+  each piece, applied through `Park.run`. No new core code, so every law holds as it did. Train count isn't
+  kept (a new coaster runs as many as fit). The library is eight 256-value slots; every value fits a byte,
+  so `designs.sav` is the list itself. Saving and building go through the loop's IO step (codes 3 and 5),
+  which is where the library lives, so the input handlers didn't need it.
 
 ## Done: M1, the vertical slice
 Isometric fantasy map, paths, terrain editing, 4 enchanted tree kinds, Dragon Carousel, Arcane Spire, Potion
@@ -444,7 +450,7 @@ Spikes, in order:
 - Frame time and simulation cost measured against M7: within noise (about 1.4 ms a tick at 200 guests;
   16 ms a frame).
 
-## M9: Fixes, polish and the deferred items (in progress: spikes 1-4 done)
+## M9: Fixes, polish and the deferred items (in progress: spikes 1-5 done)
 Decisions from the owner (2026-09-24): bridges are my call (walkways for guests over paths and track);
 1 to 20 cars per train, never more than the track allows; steep pieces only in the two headings that face
 the camera; a coaster can be demolished, and removing track re-runs the check and closes the ride if it no

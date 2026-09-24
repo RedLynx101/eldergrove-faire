@@ -2398,6 +2398,13 @@ def Art.icon_pic(+tool: U32, +cx: U32, +cy: U32, +t: U32) -> U32:
       +foot = U32.is_eq(cy, 5) && (sabs(cx) <= 1 : U32)
       +flick = U32.is_eq((hash((t >> 3n : U32), 5) .&. 3 : U32), 0)
       sel(hook || cap || bar || foot, 2631720, sel(box, sel(flick, 16771216, sel(U32.is_eq(cy, (0 - 3 : U32)) && U32.is_eq(sabs(cx), 2), 16777184, 16767072)), TR()))
+    case 47:
+      # a blueprint: a blue sheet, its grid, a white coaster curve
+      +sheet = (sabs(cx) <= 7 : U32) && between(cy, (0 - 7 : U32), 6)
+      +grid = sheet && (U32.is_eq((cx .&. 3 : U32), 0) || U32.is_eq((cy .&. 3 : U32), 0))
+      +cv = (cy + 3 - ((cx * cx) >> 3n) : U32)
+      +curve = sheet && U32.is_eq(cv, 0)
+      sel(curve, 16777215, sel(grid, 7442412, sel(sheet, 3368601, TR())))
     case _:
       TR()
 
