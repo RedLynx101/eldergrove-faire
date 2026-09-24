@@ -1,6 +1,6 @@
 # Eldergrove Faire: Roadmap
 
-Last updated: 2026-09-23 · M1, M2 and M3 done. M4 (ride cycles, economy, UI, sound) in progress.
+Last updated: 2026-09-24 · M1-M4 done. Next: M5 (problems and staff).
 
 ## Decisions
 
@@ -76,34 +76,58 @@ all); the live window holds 60 fps with 700 guests (8-9 ms frames uncapped, fast
 Known limits: guests who give up while queuing step off the line sideways; queues longer than the path
 search's 12 steps are walked by feel (still in order, since a line offers only forward or back).
 
-## M4: Ride cycles, economy, UI and sound (in progress)
-Spikes, in order:
+## Done: M4, ride cycles, economy, UI and sound
+**Result:** rides run whole cycles through real entrances and exits; the park has windows for rides, guests,
+the park and its finances; guests judge prices and say what they think; the park has its own synthesized
+music and sounds; thirteen laws are proven. Commits `424e0d0` .. `44237a5`.
 
-1. **Ride cycles and exits.** The carousel and spire run a loop: loading (riders board from the queue's front),
-   running (no one boards or leaves; the ride moves only now), unloading (everyone steps off toward the exit),
-   then loading again. Loading ends when the ride is full, or once the first rider has waited the maximum,
-   and never before the minimum. The coaster station unloads first, then loads, then dispatches. Shops keep
-   serving one customer at a time. Exit and entrance arches; rides without both show a warning and don't run.
-   Queue quitters walk back out the free end; guests skip rides whose line is too long.
-   Laws: **board_only_when_loading** and **ride_until_unloading**.
-2. **seats_unique:** no two guests are planned into the same seat (the plan checks its own boards by list,
-   not bit mask, so the proof can follow it).
-3. **Windows.** A small window system (drag, close, buttons). The **ride window** (click a ride): open/close,
-   price +/−, minimum and maximum wait, riders now, queue length, customers and income so far, age, and
-   excitement/intensity/nausea ratings.
-4. **Ratings:** each ride's excitement, intensity and nausea, with the coaster's worked out from its track
-   (speed, drops, turns, length).
-5. **Park and finances:** a park window (entry fee, park rating, guest count graph) and a finances window
-   (this month and last by category: tickets, food, drinks, entry fees, upkeep, construction; loans with
-   interest).
-6. **Guests who judge prices:** guests weigh value against price, refuse overpriced rides and think "too
-   expensive"; a thirsty guest pays more for a potion. The entry fee changes how many guests come. A **guest
-   window** (click a guest): name ("Sir Aldric of Thornwall"), thoughts, needs, gold, items.
-7. Laws **purchase_is_transfer** (a purchase moves exactly the price from guest to park) and
-   **prices_bounded**.
-8. **Sound:** our own synthesized effects (coins, ride bells, the coaster's clatter and roar, crowd murmur,
-   UI clicks) and old-style fairground music: a band-organ style tune played by a small synthesizer in code,
-   in the spirit of RCT's fairground organ. Playback through PulseAudio (WSLg).
+1. **Ride cycles and exits.** The carousel and spire load (from the queue's front), run start to finish,
+   unload everyone toward the exit, and load again; loading ends when full, or when the first rider has
+   waited the maximum, never before the minimum. The coaster's station unloads a returning train before
+   loading it. A ride runs only with an entrance (a queue beside it, green arch) and an exit (a path beside
+   it, red arch), else a warning blinks over it; shops need neither. Guests leave a queue only at its free
+   end, quitters walk back out, and guests skip lines that are too long.
+2. **Windows.** Up to four at once, dragged by the title bar, closed with X or Esc. Inspect tool (the
+   default, key I; or right-click with any tool).
+   - **Ride window:** open/close, price, riders and queue, minimum and maximum waits, customers, income,
+     age, and ratings.
+   - **Guest window:** a name from their id and class ("Sir Halvard of Wyvern Hill"), what they are doing,
+     thoughts, needs, gold, and what they carry.
+   - **Park window** (P): the park rating, guests, entry fee, and a guest graph.
+   - **Finances window** (F): this month and last by category, profit, and loans.
+3. **Ratings.** Excitement, intensity and nausea: fixed for the carousel and spire, worked out from the
+   track for the coaster (turns, drops, height, length). Guests prefer exciting rides, skip ones wilder than
+   their own taste, enjoy a ride by its excitement and come off queasy by its nausea.
+4. **Economy.** Ledger kinds for tickets, food, drinks, entry fees, upkeep, construction, refunds, loans and
+   interest, booked by month. Entry fee 0-40 (fewer guests come when it is steep, more when the park is
+   well rated); park rating 0-999 from happiness, open rides and nausea; loans of 1000 at 1/80 a month.
+5. **Guests who judge prices.** A ride is worth its excitement to a guest, a potion more the thirstier they
+   are, a meal more the hungrier. Too dear: they skip it, think "not paying that for the X", and remember.
+   They also think a ride was great, or too intense, and get fed up with long queues; fresh thoughts show in
+   their bubble.
+6. **Laws.** board_only_when_loading, ride_until_unloading, seats_unique, purchase_is_transfer and
+   prices_bounded, all proven, thirteen in all.
+7. **Sound.** An original organ waltz (32 bars of 3/4, oom-pah accompaniment) and synthesized effects:
+   coins, a ride bell, the spire's wind, lift clacks, the coaster's roar, the crowd's murmur, a month chime,
+   and UI clicks, thumps and buzzes. It is all made in `sound.bend`, sample by sample, and played through
+   PulseAudio (`pacat`). M toggles the music, N the effects.
+8. **Found and fixed on the way:**
+   - A queue deadlock seen over a long run: shop-bound guests could enter queues and lock the line. With
+     the fix, riders over 20000 ticks rose several times over (coaster 35 to 291).
+   - Most of M4's frame cost, which was reference counting on the shared map root from the new queue
+     rules. Free-end flags now live in the tiles, sales come from the boarding plan, and queue lengths are
+     counted every 16 ticks.
+   - The spire's orb now draws behind its riders.
+
+**Performance:** on the same machine at the same moment, a full frame (sim, scene and raster) with 700 guests
+costs about what M3's did. The machine was far slower late on 2026-09-23 than earlier that day (M3's own
+build went from 8-9 ms to 25-29 ms uncapped), so the absolute frame rate needs re-measuring on a quiet
+machine: `PARK_PROF=1 ./park --live 700 1500`.
+
+**Known limits:**
+- A crowd can still bunch at a short queue's free end.
+- Guests may pick a ride whose queue is on the far side of the park.
+- There is no music volume control besides on/off.
 
 ## M5: Problems and staff
 - Litter, plus vomit from nauseous guests after intense rides. Cleanliness affects happiness and park rating.
@@ -138,6 +162,8 @@ Proven: money_conserved, headcount_conserved, needs_bounded, coaster_on_circuit,
 save_load_roundtrip, capacity_respected, riders_conserved.
 Proven in M4: board_only_when_loading, ride_until_unloading, seats_unique, purchase_is_transfer,
 prices_bounded (thirteen in all).
+Planned (M5): litter_conserved (litter is only made by guests and only removed by staff or bins),
+wages_booked (every wage goes through the ledger; covered by money_conserved once staff exist).
 Proof maintenance rule: keep the code field-wise (each park field updated by its own function) so
 existing proofs survive new features.
 
