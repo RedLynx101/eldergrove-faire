@@ -591,10 +591,18 @@ def Deck.joins(+q: C.Q, +i: U32, +j: U32, +l: U32) -> Bool:
   +t = C.Land.get(q, i, j)
   U32.is_eq(C.Deck.of(t), l) || U32.is_eq(C.Tile.obj(t), 1) && U32.is_eq(C.Tile.h(t), l)
 
+# (a match: the neighbours are only looked at on a tile that has a deck)
+def Deck.dr.go(on: Bool, +l: U32, +q: C.Q, +i: U32, +j: U32, +h: U32, +sx: U32, +sy: U32, +acc: +List<Dr>) -> +List<Dr>:
+  match on:
+    case True{}:
+      +nb = (sel(Deck.joins(q, (i - 1 : U32), j, l), 1, 0) .|. sel(Deck.joins(q, (i + 1 : U32), j, l), 2, 0)
+        .|. sel(Deck.joins(q, i, (j - 1 : U32), l), 4, 0) .|. sel(Deck.joins(q, i, (j + 1 : U32), l), 8, 0) : U32)
+      DDeck{sx, sy, (l - h : U32), nb} <> acc
+    case False{}:
+      acc
+
 def Deck.dr(+l: U32, +q: C.Q, +i: U32, +j: U32, +h: U32, +sx: U32, +sy: U32, +acc: +List<Dr>) -> +List<Dr>:
-  +nb = (sel(Deck.joins(q, (i - 1 : U32), j, l), 1, 0) .|. sel(Deck.joins(q, (i + 1 : U32), j, l), 2, 0)
-    .|. sel(Deck.joins(q, i, (j - 1 : U32), l), 4, 0) .|. sel(Deck.joins(q, i, (j + 1 : U32), l), 8, 0) : U32)
-  Bool.pick(+List<Dr>, U32.is_eq(l, 0), acc, DDeck{sx, sy, (l - h : U32), nb} <> acc)
+  Deck.dr.go(Bool.not(U32.is_eq(l, 0)), l, q, i, j, h, sx, sy, acc)
 
 def obj_dr(+t: C.Tile, +i: U32, +j: U32, +sx: U32, +sy: U32,
   +rs: +List<C.Ride>, +rt: RT, +q: C.Q) -> +List<Dr>:
@@ -813,8 +821,11 @@ def Stair.dz(+q: C.Q, +x: U32, +y: U32, +h: U32) -> U32:
   +fx = (x .&. 15 : U32)
   +fy = (y .&. 15 : U32)
   +on = U32.is_eq(C.Land.obj(q, i, j), 1)
-  +ox = sel((fx >= 8 : U32), Stair.side(q, (i + 1 : U32), j, h, (fx - 8 : U32)), Stair.side(q, (i - 1 : U32), j, h, (8 - fx : U32)))
-  +oy = sel((fy >= 8 : U32), Stair.side(q, i, (j + 1 : U32), h, (fy - 8 : U32)), Stair.side(q, i, (j - 1 : U32), h, (8 - fy : U32)))
+  +hx = (fx >= 8 : U32)
+  +hy = (fy >= 8 : U32)
+  # one look toward the nearer edge on each axis
+  +ox = Stair.side(q, sel(hx, (i + 1 : U32), (i - 1 : U32)), j, h, sel(hx, (fx - 8 : U32), (8 - fx : U32)))
+  +oy = Stair.side(q, i, sel(hy, (j + 1 : U32), (j - 1 : U32)), h, sel(hy, (fy - 8 : U32), (8 - fy : U32)))
   sel(on, (ox + oy : U32), 0)
 
 def guest_dyn(+g: C.Guest, +q: C.Q, +rs: +List<C.Ride>, +camx: U32, +camy: U32,

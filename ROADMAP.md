@@ -283,6 +283,11 @@ Small design decisions made while working, listed here so they can be revisited.
   test runs could have several trains. Renamed; the coaster test checks a one-train setting.
 - **A compiler limit:** nesting strict picks that each build a whole game (the shot's pictured parks) failed
   with "an arity over 255"; a match dispatch builds only the one needed.
+- **Measured against M8 (interleaved runs, 200 guests):** at first the simulation was 14% slower and frames
+  about 6%. Three strict evaluations were the cause: a second tile lookup in every pathfinding step (the
+  deck check), a layer lookup for every walking guest every tick, and every drawn tile looking at its
+  neighbours for a deck it didn't have. With those made lazy the simulation is within about 3% of M8, and
+  frames within noise.
 
 ## Done: M1, the vertical slice
 Isometric fantasy map, paths, terrain editing, 4 enchanted tree kinds, Dragon Carousel, Arcane Spire, Potion

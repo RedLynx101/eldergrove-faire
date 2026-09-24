@@ -282,8 +282,7 @@ def Deck.level(+q: Q, +x: U32, +y: U32) -> U32:
     U32.max(Deck.near(q, x, (y + 1 : U32), base), Deck.near(q, x, (y - 1 : U32), base)))
   sel((n > 0 : U32), n, base)
 
-def Land.step.ground(+q: Q, +x: U32, +y: U32, +h: U32, +qok: Bool, +fq: Bool, +fe: Bool) -> U32:
-  +t = Land.get(q, x, y)
+def Land.step.ground(+q: Q, +x: U32, +y: U32, +h: U32, +qok: Bool, +fq: Bool, +fe: Bool, +t: Tile) -> U32:
   +o = Tile.obj(t)
   +th = Tile.h(t)
   +isq = U32.is_eq(o, 7)
@@ -302,7 +301,7 @@ def Land.step(+q: Q, +x: U32, +y: U32, +h: U32, +qok: Bool, +fq: Bool, +fe: Bool
   +t0 = Land.get(q, x, y)
   +dk = Deck.of(t0)
   +ondk = inmap(x, y) && Bool.not(U32.is_eq(dk, 0)) && U32.is_eq(dk, h) && (Bool.not(fq) || fe)
-  sel(ondk, (9 .|. (dk << 4n) : U32), Land.step.ground(q, x, y, h, qok, fq, fe))
+  sel(ondk, (9 .|. (dk << 4n) : U32), Land.step.ground(q, x, y, h, qok, fq, fe, t0))
 
 # on the ground layer (code 9: 1 | 8 up on a deck)
 def in_rect(+x: U32, +y: U32, +x0: U32, +y0: U32, +x1: U32, +y1: U32) -> Bool:
@@ -1904,6 +1903,14 @@ def Scen.near_if(now: Bool, +q: Q, +i: U32, +j: U32) -> Bool:
     case False{}:
       False{}
 
+# up on a deck after this step: only a step into another tile can change it
+def Guest.layer(cross: Bool, +ondeck: Bool, +q: Q, +x: U32, +y: U32, +h: U32, +qok: Bool, +fq: Bool, +fe: Bool) -> Bool:
+  match cross:
+    case True{}:
+      Bool.not(U32.is_eq((Land.step(q, x, y, h, qok, fq, fe) .&. 8 : U32), 0))
+    case False{}:
+      ondeck
+
 def Guest.walk(g: Guest, +q: Q, +rs: +List<Ride>, +t: U32, +qs: +List<U32>) -> Guest:
   Guest{+id, +x, +y, +dir, +st, +tgt, +tmr, +cash, +hu, +th, +en, +na, +ha,
     +lk, +mind, +bl} = g
@@ -1983,8 +1990,7 @@ def Guest.walk(g: Guest, +q: Q, +rs: +List<Ride>, +t: U32, +qs: +List<U32>) -> G
     + sel(cheer, 3, 0) + sel(pretty, 2, 0) : U32)
   +en2 = sel(sitting && U32.is_eq(((t + id) .&. 1 : U32), 0), (en + 1 : U32), en)
   +cross = Bool.not(U32.is_eq((x2 >> 4n : U32), i)) || Bool.not(U32.is_eq((y2 >> 4n : U32), j))
-  +nc = Land.step(q, (x2 >> 4n : U32), (y2 >> 4n : U32), h, qok, onq, fe)
-  +up = cross && Bool.not(U32.is_eq((nc .&. 8 : U32), 0)) || Bool.not(cross) && ondeck
+  +up = Guest.layer(cross, ondeck, q, (x2 >> 4n : U32), (y2 >> 4n : U32), h, qok, onq, fe)
   Guest{id, x2, y2, (dir2 .|. sel(up, 65536, 0) : U32), st3, tgt2, tmr2, cash, hu, th, en2, sel(sick, 60, na), ha2, lk2, mind2, bl}
 
 def Guest.st(g: Guest) -> U32:
