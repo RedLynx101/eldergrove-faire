@@ -1,6 +1,6 @@
 # Eldergrove Faire: Roadmap
 
-Last updated: 2026-09-24 · M1-M8 done: the planned roadmap is complete.
+Last updated: 2026-09-24 · M1-M8 done. M9 (fixes, polish and the deferred items) planned below.
 
 ## Decisions
 
@@ -407,6 +407,50 @@ Spikes, in order:
   new open_only_tested is proven (sixteen laws).
 - Frame time and simulation cost measured against M7: within noise (about 1.4 ms a tick at 200 guests;
   16 ms a frame).
+
+## M9: Fixes, polish and the deferred items (planned)
+Decisions from the owner (2026-09-24): bridges are my call (walkways for guests over paths and track);
+1 to 20 cars per train, never more than the track allows; steep pieces only in the two headings that face
+the camera; a coaster can be demolished, and removing track re-runs the check and closes the ride if it no
+longer passes; saved track designs; coaster sounds by type; no coaster limit.
+
+- **Spike 1, quick fixes.** Toolbar clicks (tool codes 30+ were read as tab clicks). The hover line (its box
+  was drawn over its text), extended to coasters, shops and staff. Rain falling down, with a slight slant.
+  Dynamic resolution drops only below about 22 fps for 2 s and returns when half resolution holds 45+ fps
+  for 5 s. Speeds: pause, 1/4, 1/2 (default), 1x (the old normal), 2x, 3x. A KEYS window from Options
+  listing every control. needs_bounded extended to the bladder (LAWS.bend, at the owner's request).
+- **Spike 2, picking, following, stairs.** Inspect picks what is drawn under the cursor, front-most first
+  (guest, staff, ride or track, scenery), computed only on a click. The follow cam follows one train by
+  its id instead of "the first train in the rotating block list". Guests on stairs are drawn at a height
+  blended across the tile, so they walk up; picking and the follow cam use the same height.
+- **Spike 3, coasters without limits, steep headings, demolition.** No cap on coasters: types looked up
+  per coaster instead of packed two bits each, draw flags moved above bit 16, rider tables sized per park
+  (64 slots a coaster). Steep up only heading toward the camera (-u, -v), steep down only heading away
+  from it (+u, +v), so every steep piece faces the camera; the window says why a steep button is brown.
+  The demolish tool on a coaster tile removes that piece and every piece after it (a red ghost shows
+  which, half the price back); DEMOLISH COASTER in the ride window removes the whole coaster and its
+  station. Any track change closes the ride and re-runs the check at once: if the circuit is closed and
+  the dry run passes, a test lap starts by itself; if not, the ride stays off and the windows say why.
+  open_only_tested and coaster_on_circuit keep holding (a cut closes the track, like an edit).
+- **Spike 4, cars and sounds.** More detailed cars: the Wyrm's lead car a carved dragon head, scales and a
+  spine ridge, seat backs, wheeled bogies; the Minecart's planks, iron bands, rivets and a lead-car lantern
+  that glows at night; the Flyer's bogie on the rail, wing fins and shoulder restraints. Checked on the
+  --cars sheet in four headings. Sounds by type, synthesized like the rest: timber clatter for the Wyrm,
+  an iron rattle for the Minecart, a rushing whoosh for the Flyer, and screams on drops scaled by the
+  test's biggest drop.
+- **Spike 5, saved track designs.** SAVE DESIGN in the construction window writes the track and its
+  settings to a numbered slot (designs/1..8, shown with their type, length and ratings); the thrill tab's
+  design tool places one as a whole ghost, green where every tile fits, then it needs its own test.
+- **Spike 6, bridges.** A tile may carry a raised walkway deck (height, path or queue) over the path or
+  track below it: at least 2 levels over paths, 3 over track so trains pass under. Guests treat deck and
+  ground as separate layers joined only by stairs at a bridge's ends; decks stand on corner posts. The
+  save format changes (old saves won't load); the save proof gains the field.
+- **Spike 7, 1 to 20 cars per train.** Set in the construction window; two seats a car, so up to 40 a
+  train. The limit: the station must hold the whole train, and blocks grow to at least a train's length
+  so a train's tail never reaches into the block behind. Boarding: seat numbers become train * 64 + seat
+  and a train's seats span two mask words; capacity_respected and seats_unique take each coaster's seat
+  count as a parameter (a mechanical law update, stated in LAWS.bend). The riskiest step, so it goes last.
+- **Close:** docs, roadmap page, memory, a report.
 
 ## Laws
 Proven: money_conserved, headcount_conserved, needs_bounded, coaster_on_circuit, no_collisions,
