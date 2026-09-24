@@ -757,6 +757,20 @@ def Art.trow(+k: U32) -> U32:
       2696840
     case 78:
       21603473
+    case 80:
+      4096
+    case 81:
+      41472
+    case 82:
+      336960
+    case 83:
+      2696328
+    case 84:
+      3037896
+    case 85:
+      3070664
+    case 86:
+      3070664
     case _:
       0
 
@@ -805,6 +819,14 @@ def Art.tpal(+k: U32) -> U32:
       15261888
     case 77:
       5939244
+    case 82:
+      4094532
+    case 83:
+      12618320
+    case 84:
+      15781952
+    case 85:
+      4860948
     case _:
       3158080
 
@@ -1139,6 +1161,31 @@ def Art.tavern(+dx: U32, +dy: U32, +t: U32) -> U32:
     over(sel(smoke, 13421772, TR()), over(sel(chim, 8016192, TR()),
     sel(roof, roofc, sel(door, 5913120, wallc)))))
 
+# The Privy: a narrow plank outhouse under a steep mossy shingle roof, a
+# crescent moon cut in its door (lamplit from inside), a rain barrel beside
+def Art.privy(+dx: U32, +dy: U32, +t: U32) -> U32:
+  +ax = sabs(dx)
+  +walls = Art.box(dx, dy, 0, 6, 16, 9474192, 11565120, 9067056)
+  +plank = U32.is_eq(((dx + 258) .&. 3 : U32), 0)
+  +wallc = sel(opaque(walls) && plank && Bool.not(U32.is_eq(dx, 0)), shade(walls, 170), walls)
+  +ry = (dy + (ax >> 1n) : U32)
+  +door = between(dx, (0 - 5 : U32), (0 - 2 : U32)) && between(ry, (0 - 9 : U32), 2)
+  +moon = U32.is_eq(dx, (0 - 4 : U32)) && between(ry, (0 - 8 : U32), (0 - 6 : U32))
+    || U32.is_eq(dx, (0 - 3 : U32)) && (U32.is_eq(ry, (0 - 8 : U32)) || U32.is_eq(ry, (0 - 6 : U32)))
+  +knob = U32.is_eq(dx, (0 - 2 : U32)) && U32.is_eq(ry, (0 - 3 : U32))
+  +upper = (0 - 27 + ((ax * 3) >> 1n) : U32)
+  +lower = (0 - 13 + ((8 - ax) >> 1n) : U32)
+  +roof = (ax <= 8 : U32) && sle(upper, dy) && sle(dy, lower)
+  +row = U32.is_eq(((dy + 256) % 3 : U32), 0)
+  +moss = U32.is_eq((hash((dx + 64 : U32), (dy + 64 : U32)) .&. 7 : U32), 0)
+  +roofc = sel(moss, 7248464, sel(neg(dx), sel(row, 8275496, 10115636), sel(row, 6436382, 8012838)))
+  +finial = U32.is_eq(dx, 0) && between(dy, (0 - 30 : U32), (0 - 27 : U32))
+  +barrel = Art.cyl((dx - 9 : U32), dy, 2, 3, 6, 6965802)
+  +hoop = opaque(barrel) && (U32.is_eq(dy, (0 - 1 : U32)) || U32.is_eq(dy, (0 - 3 : U32)))
+  over(sel(finial, 14725184, sel(roof, roofc, TR())),
+    over(sel(moon, 16767056, sel(knob, 14725184, sel(door, 4860948, TR()))),
+    over(wallc, sel(hoop, 3158064, barrel))))
+
 def Art.ride.go(+k: U32, +dx: U32, +dy: U32, +t: U32, +ra: U32, +rb: U32, +st: U32) -> U32:
   match k:
     case 1:
@@ -1149,6 +1196,8 @@ def Art.ride.go(+k: U32, +dx: U32, +dy: U32, +t: U32, +ra: U32, +rb: U32, +st: U
       Art.potion(dx, dy, t)
     case 4:
       Art.tavern(dx, dy, t)
+    case 6:
+      Art.privy(dx, dy, t)
     case _:
       TR()
 
@@ -1402,6 +1451,9 @@ def Art.icon_pic(+tool: U32, +cx: U32, +cy: U32, +t: U32) -> U32:
       Art.bin(cx, (cy - 4 : U32), U32.is_eq(((t >> 5n) .&. 1 : U32), 1), t)
     case 14:
       Art.bench((cx + 1 : U32), (cy + 4 : U32))
+    case 16:
+      # the privy at half size
+      Art.privy((cx * 2 : U32), (cy * 2 - 12 : U32), t)
     case 15:
       # a lantern hung from its hook
       +hook = U32.is_eq(cx, 0) && between(cy, (0 - 9 : U32), (0 - 8 : U32))

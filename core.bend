@@ -384,6 +384,8 @@ def Ride.cost(+k: U32) -> U32:
       300
     case 4:
       400
+    case 6:
+      150
     case _:
       0
 
@@ -414,6 +416,8 @@ def Ride.upkeep(+k: U32) -> U32:
       12
     case 5:
       60
+    case 6:
+      5
     case _:
       0
 
@@ -430,6 +434,8 @@ def Ride.duration(+k: U32) -> U32:
       40
     case 5:
       360
+    case 6:
+      40
     case _:
       10
 
@@ -458,7 +464,24 @@ def Ride.rate0(+k: U32) -> U32:
       0
 
 def Ride.shop(+k: U32) -> Bool:
-  U32.is_eq(k, 3) || U32.is_eq(k, 4)
+  U32.is_eq(k, 3) || U32.is_eq(k, 4) || U32.is_eq(k, 6)
+
+# which ride a building tool puts down (0: none): 5-8 the first four kinds,
+# 16 the Privy (kind 6)
+def Tool.kind(+tool: U32) -> U32:
+  match tool:
+    case 5:
+      1
+    case 6:
+      2
+    case 7:
+      3
+    case 8:
+      4
+    case 16:
+      6
+    case _:
+      0
 
 # the rides that run in cycles
 def Ride.cycles(+k: U32) -> Bool:
@@ -596,7 +619,7 @@ def Rides.get(+rs: +List<Ride>, +i: U32) -> Ride:
 type Guest is Data:
   Guest{id: U32, x: U32, y: U32, dir: U32, st: U32, tgt: U32, tmr: U32,
     cash: U32, hunger: U32, thirst: U32, energy: U32, nausea: U32, happy: U32,
-    look: U32, mind: U32}
+    look: U32, mind: U32, bladder: U32}
 
 # a guest's latest thought: code | ride << 8 | (tick / 16) << 16. Codes: 1
 # "not paying that much for" the ride, 2 "waited too long for", 3 "was
@@ -614,17 +637,17 @@ def Mind.when(+m: U32) -> U32:
   (m >> 16n : U32)
 
 def Guest.clamp(g: Guest) -> Guest:
-  Guest{id, x, y, dir, st, tgt, tmr, cash, hu, th, en, na, ha, lk, mind} = g
+  Guest{id, x, y, dir, st, tgt, tmr, cash, hu, th, en, na, ha, lk, mind, bl} = g
   Guest{id, x, y, dir, st, tgt, tmr, cash, cl255(hu), cl255(th), cl255(en),
-    cl255(na), cl255(ha), lk, mind}
+    cl255(na), cl255(ha), lk, mind, cl255(bl)}
 
 def Guest.ok(g: Guest) -> Bool:
-  Guest{id, x, y, dir, st, tgt, tmr, cash, hu, th, en, na, ha, lk, mind} = g
+  Guest{id, x, y, dir, st, tgt, tmr, cash, hu, th, en, na, ha, lk, mind, bl} = g
   U32.is_le(hu, 255) && U32.is_le(th, 255) && U32.is_le(en, 255)
     && U32.is_le(na, 255) && U32.is_le(ha, 255)
 
 def Guest.gone(g: Guest) -> Bool:
-  Guest{id, x, y, dir, st, tgt, tmr, cash, hu, th, en, na, ha, lk, mind} = g
+  Guest{id, x, y, dir, st, tgt, tmr, cash, hu, th, en, na, ha, lk, mind, bl} = g
   U32.is_eq(st, 3)
 
 # a new adventurer, their gold already less the entry fee (at most 40, and
@@ -633,7 +656,7 @@ def Guest.raw(+id: U32, +t: U32, +fee: U32) -> Guest:
   +r = hash(id, t)
   Guest{id, (GATE_X() * 16 + 8 : U32), (GATE_Y() * 16 + 8 : U32),
     3, 0, NONE(), 0, (40 + (r .&. 127) - U32.min(fee, 40) : U32), (r >> 7n .&. 63 : U32),
-    (r >> 13n .&. 63 : U32), (190 + (r >> 19n .&. 63) : U32), 0, 200, (r .&. 1023 : U32), 0}
+    (r >> 13n .&. 63 : U32), (190 + (r >> 19n .&. 63) : U32), 0, 200, (r .&. 1023 : U32), 0, (r >> 26n : U32)}
 
 def Guest.new(+id: U32, +t: U32, +fee: U32) -> Guest:
   Guest.clamp(Guest.raw(id, t, fee))
@@ -768,6 +791,8 @@ def Guest.worth(+k: U32, +rate: U32, +hu: U32, +th: U32) -> U32:
       (2 + th / 64 : U32)
     case 4:
       (3 + hu / 64 : U32)
+    case 6:
+      2
     case _:
       (1 + Rate.e(rate) * 2 / 100 : U32)
 
@@ -922,19 +947,19 @@ def Track.stn(t: Track) -> Stn:
   Stn.find(blocks, Stn{sel(open, 1, 0), NONE(), 0})
 
 def Guest.id(g: Guest) -> U32:
-  Guest{id, x, y, dir, st, tgt, tmr, cash, hu, th, en, na, ha, lk, mind} = g
+  Guest{id, x, y, dir, st, tgt, tmr, cash, hu, th, en, na, ha, lk, mind, bl} = g
   id
 
 def Guest.tgt(g: Guest) -> U32:
-  Guest{id, x, y, dir, st, tgt, tmr, cash, hu, th, en, na, ha, lk, mind} = g
+  Guest{id, x, y, dir, st, tgt, tmr, cash, hu, th, en, na, ha, lk, mind, bl} = g
   tgt
 
 def Guest.dir(g: Guest) -> U32:
-  Guest{id, x, y, dir, st, tgt, tmr, cash, hu, th, en, na, ha, lk, mind} = g
+  Guest{id, x, y, dir, st, tgt, tmr, cash, hu, th, en, na, ha, lk, mind, bl} = g
   dir
 
 def Guest.tmr(g: Guest) -> U32:
-  Guest{id, x, y, dir, st, tgt, tmr, cash, hu, th, en, na, ha, lk, mind} = g
+  Guest{id, x, y, dir, st, tgt, tmr, cash, hu, th, en, na, ha, lk, mind, bl} = g
   tmr
 
 def Tab.zero.go(+n: Nat, +acc: +List<U32>) -> +List<U32>:
@@ -980,7 +1005,7 @@ def Occ.add.go(riding: Bool, +dir: U32, +tgt: U32, +rs: +List<Ride>, +sid: U32,
       tab
 
 def Occ.add(g: Guest, +rs: +List<Ride>, +sid: U32, +tab: +List<U32>) -> +List<U32>:
-  Guest{id, x, y, +dir, +st, +tgt, tmr, cash, hu, th, en, na, ha, lk, mind} = g
+  Guest{id, x, y, +dir, +st, +tgt, tmr, cash, hu, th, en, na, ha, lk, mind, bl} = g
   Occ.add.go(U32.is_eq(st, 1), dir, tgt, rs, sid, tab)
 
 def Occ.fill(+gs: +List<Guest>, +rs: +List<Ride>, +sid: U32, +tab: +List<U32>)
@@ -1120,7 +1145,7 @@ def Queue.put(on: Bool, +x: U32, +y: U32, +d: U32, +acc: +List<U32>) -> +List<U3
       acc
 
 def Queue.add(g: Guest, +q: Q, +acc: +List<U32>) -> +List<U32>:
-  Guest{id, +x, +y, +dir, +st, tgt, tmr, cash, hu, th, en, na, ha, lk, mind} = g
+  Guest{id, +x, +y, +dir, +st, tgt, tmr, cash, hu, th, en, na, ha, lk, mind, bl} = g
   Queue.put(U32.is_eq(st, 0) && U32.is_eq(Land.obj(q, (x >> 4n : U32), (y >> 4n : U32)), 7), x, y, dir, acc)
 
 def Queue.list(+gs: +List<Guest>, +q: Q, +acc: +List<U32>) -> +List<U32>:
@@ -1222,7 +1247,7 @@ def Guest.ready(+rd: Ride, +st: U32, +tgt: U32, +x: U32, +y: U32, +cash: U32) ->
 # whether a walking guest boards (or buys at) their target ride now: it is
 # loading, and they stand at its door, open, with the fare
 def Guest.wants(g: Guest, +q: Q, +rs: +List<Ride>, +stn: Stn) -> Bool:
-  Guest{id, +x, +y, dir, +st, +tgt, tmr, +cash, hu, th, en, na, ha, lk, mind} = g
+  Guest{id, +x, +y, dir, +st, +tgt, tmr, +cash, hu, th, en, na, ha, lk, mind, bl} = g
   +rd = Rides.get(rs, tgt)
   Ride.loading(rd, stn) && Guest.ready(rd, st, tgt, x, y, cash)
 
@@ -1250,7 +1275,7 @@ def Boards.plan(+gs: +List<Guest>, +occ: +List<U32>, +q: Q, +rs: +List<Ride>,
 
 
 def Guest.fee(g: Guest, +rs: +List<Ride>) -> U32:
-  Guest{id, x, y, dir, st, tgt, tmr, cash, hu, th, en, na, ha, lk, mind} = g
+  Guest{id, x, y, dir, st, tgt, tmr, cash, hu, th, en, na, ha, lk, mind, bl} = g
   Ride.price(Rides.get(rs, tgt))
 
 # boarding: take the seat, pay, then the ride's effects
@@ -1265,7 +1290,7 @@ def Ride.joy(+rate: U32, +lk: U32) -> U32:
   sub0((Rate.e(rate) / 10 : U32), (over / 6 : U32))
 
 def Guest.board(g: Guest, +rs: +List<Ride>, +seat: U32, +stn: Stn) -> Guest:
-  Guest{id, x, y, dir, st, +tgt, tmr, +cash, +hu, +th, en, +na, +ha, +lk, mind} = g
+  Guest{id, x, y, dir, st, +tgt, tmr, +cash, +hu, +th, en, +na, +ha, +lk, mind, +bl} = g
   +rd = Rides.get(rs, tgt)
   +k = Ride.kind(rd)
   +rate = Ride.rate(rd)
@@ -1275,7 +1300,8 @@ def Guest.board(g: Guest, +rs: +List<Ride>, +seat: U32, +stn: Stn) -> Guest:
     sel(coaster, 3000, Ride.duration(k)), Guest.pay(cash, Ride.price(rd)),
     sel(U32.is_eq(k, 4), sub0(hu, 160), hu),
     sel(U32.is_eq(k, 3), sub0(th, 160), th), en,
-    (na + Rate.n(rate) / 4 : U32), (ha + Ride.joy(rate, lk) : U32), ((lk .&. 4294770687) .|. item : U32), mind}
+    na, (ha + Ride.joy(rate, lk) : U32), ((lk .&. 4294770687) .|. item : U32), mind,
+    sel(U32.is_eq(k, 6), 0, (bl + sel(U32.is_eq(k, 3), 40, sel(U32.is_eq(k, 4), 15, 0)) : U32))}
 
 # a ride is over for this rider (see Ride.unloading)
 def Guest.done(+tmr: U32, +dir: U32, +tgt: U32, +rs: +List<Ride>, +stn: Stn) -> Bool:
@@ -1304,7 +1330,7 @@ def Guest.verdict(+rd: Ride, +tgt: U32, +lk: U32, +mind: U32, +t: U32) -> U32:
 
 # getting off: at the ride's exit (a shop's buyers stay where they stand)
 def Guest.off(done: Bool, +id: U32, +x: U32, +y: U32, +dir: U32, +tgt: U32, +tmr: U32,
-  +cash: U32, +hu: U32, +th: U32, +en: U32, +na: U32, +ha: U32, +lk: U32, +mind: U32, +q: Q,
+  +cash: U32, +hu: U32, +th: U32, +en: U32, +na: U32, +ha: U32, +lk: U32, +mind: U32, +bl: U32, +q: Q,
   +rs: +List<Ride>, +t: U32) -> Guest:
   match done:
     case True{}:
@@ -1313,37 +1339,37 @@ def Guest.off(done: Bool, +id: U32, +x: U32, +y: U32, +dir: U32, +tgt: U32, +tmr
       +out = Bool.not(U32.is_eq(e, NONE()))
       +a = Guest.alight(e, Ride.cx(rd), Ride.cy(rd), Ride.wd(rd))
       Guest{id, sel(out, (a >> 16n : U32), x), sel(out, ((a >> 4n) .&. 4095 : U32), y),
-        sel(out, (a .&. 3 : U32), 0), 0, NONE(), 0, cash, hu, th, en, na, ha, lk,
-        Guest.verdict(rd, tgt, lk, mind, t)}
+        sel(out, (a .&. 3 : U32), 0), 0, NONE(), 0, cash, hu, th, en, (na + (Rate.n(Ride.rate(rd)) * 3) / 4 : U32), ha, lk,
+        Guest.verdict(rd, tgt, lk, mind, t), bl}
     case False{}:
-      Guest{id, x, y, dir, 1, tgt, (tmr - 1 : U32), cash, hu, th, en, na, ha, lk, mind}
+      Guest{id, x, y, dir, 1, tgt, (tmr - 1 : U32), cash, hu, th, en, na, ha, lk, mind, bl}
 
 def Guest.riding(g: Guest, +q: Q, +rs: +List<Ride>, +t: U32, +stn: Stn) -> Guest:
-  Guest{+id, +x, +y, +dir, st, +tgt, +tmr, +cash, +hu, +th, +en, +na, +ha, +lk, +mind} = g
+  Guest{+id, +x, +y, +dir, st, +tgt, +tmr, +cash, +hu, +th, +en, +na, +ha, +lk, +mind, bl} = g
   Guest.off(Guest.done(tmr, dir, tgt, rs, stn), id, x, y, dir, tgt, tmr, cash, hu, th,
-    en, na, ha, lk, mind, q, rs, t)
+    en, na, ha, lk, mind, bl, q, rs, t)
 
 # needs drift a little every 16 ticks
 def Guest.needs(g: Guest, +t: U32) -> Guest:
-  Guest{+id, x, y, dir, st, tgt, tmr, cash, +hu, +th, +en, +na, +ha, lk, mind} = g
+  Guest{+id, x, y, dir, st, tgt, tmr, cash, +hu, +th, +en, +na, +ha, lk, mind, +bl} = g
   +due = U32.is_eq(((t + id) .&. 15 : U32), 0)
-  +bad = ((hu > 200) || (th > 200) || (na > 170) || (en < 40) : U32)
-  +good = ((hu < 120) && (th < 120) && (na < 90) : U32)
+  +bad = ((hu > 200) || (th > 200) || (na > 170) || (en < 40) || (bl > 220) : U32)
+  +good = ((hu < 120) && (th < 120) && (na < 90) && (bl < 160) : U32)
   +ha2 = sel(bad, sub0(ha, 2), sel(good, (ha + 1 : U32), ha))
   Guest{id, x, y, dir, st, tgt, tmr, cash,
     sel(due, (hu + 1 : U32), hu), sel(due, (th + 2 : U32), th),
-    sel(due, sub0(en, 1), en), sel(due, sub0(na, 3), na),
-    sel(due, ha2, ha), lk, mind}
+    sel(due, sub0(en, 1), en), sel(due, sub0(na, 1), na),
+    sel(due, ha2, ha), lk, mind, sel(due, (bl + 1 : U32), bl)}
 
 # walking: at a tile centre pick a target and a direction; move every
 # other tick
 def Guest.sick(+st: U32, +na: U32, +id: U32, +t: U32) -> Bool:
-  (U32.is_eq(st, 0) || U32.is_eq(st, 2)) && (na > 200 : U32) && U32.is_eq((hash(id, t) .&. 63 : U32), 0)
+  (U32.is_eq(st, 0) || U32.is_eq(st, 2)) && (na > 95 : U32) && U32.is_eq((hash(id, t) .&. 511 : U32), 0)
 
 # a guest finishing what they carry this tick (the same test Guest.walk uses)
 def Guest.walk(g: Guest, +q: Q, +rs: +List<Ride>, +t: U32, +qs: +List<U32>) -> Guest:
   Guest{+id, +x, +y, +dir, +st, +tgt, +tmr, +cash, +hu, +th, +en, +na, +ha,
-    +lk, +mind} = g
+    +lk, +mind, +bl} = g
   +i = (x >> 4n : U32)
   +j = (y >> 4n : U32)
   +here = Land.get(q, i, j)
@@ -1369,7 +1395,7 @@ def Guest.walk(g: Guest, +q: Q, +rs: +List<Ride>, +t: U32, +qs: +List<U32>) -> G
   +athome = ctr && home && U32.is_eq(i, GATE_X()) && U32.is_eq(j, GATE_Y())
   +st3 = sel(athome, 3, st2)
   # targets: food, drink, or any attraction; patience runs out
-  +want = sel((hu > 150 : U32), 4, sel((th > 150 : U32), 3, 0))
+  +want = sel((bl > 170 : U32), 6, sel((hu > 150 : U32), 4, sel((th > 150 : U32), 3, 0)))
   +needt = ctr && U32.is_eq(st2, 0) && U32.is_eq(tgt, NONE())
     && U32.is_eq((r .&. 3 : U32), 0)
   +avoid = sel(U32.is_eq(Mind.code(mind), 1), Mind.ride(mind), NONE())
@@ -1412,10 +1438,10 @@ def Guest.walk(g: Guest, +q: Q, +rs: +List<Ride>, +t: U32, +qs: +List<U32>) -> G
   +lk2 = (sel(finish, (lk .&. 4277993471 : U32), (lk .&. 4278190079 : U32)) .|. sel(go, 16777216, 0) : U32)
   +ha2 = sub0(sub0(ha, sel(dear || fed_up, 6, 0)), sel(sick, 10, sel(grim, sel((dirt >= 6 : U32), 2, 1), 0)))
   +en2 = sel(sitting && U32.is_eq(((t + id) .&. 1 : U32), 0), (en + 1 : U32), en)
-  Guest{id, x2, y2, dir2, st3, tgt2, tmr2, cash, hu, th, en2, sel(sick, 60, na), ha2, lk2, mind2}
+  Guest{id, x2, y2, dir2, st3, tgt2, tmr2, cash, hu, th, en2, sel(sick, 60, na), ha2, lk2, mind2, bl}
 
 def Guest.st(g: Guest) -> U32:
-  Guest{id, x, y, dir, st, tgt, tmr, cash, hu, th, en, na, ha, lk, mind} = g
+  Guest{id, x, y, dir, st, tgt, tmr, cash, hu, th, en, na, ha, lk, mind, bl} = g
   st
 
 def Guest.move.go(riding: Bool, boards: Bool, +g: Guest, +q: Q,
@@ -1525,7 +1551,7 @@ def Qlen.put(on: Bool, +tab: +List<U32>, +i: U32) -> +List<U32>:
       tab
 
 def Qlen.add(g: Guest, +q: Q, +tab: +List<U32>) -> +List<U32>:
-  Guest{id, +x, +y, dir, +st, +tgt, tmr, cash, hu, th, en, na, ha, lk, mind} = g
+  Guest{id, +x, +y, dir, +st, +tgt, tmr, cash, hu, th, en, na, ha, lk, mind, bl} = g
   Qlen.put(U32.is_eq(st, 0) && Bool.not(U32.is_eq(tgt, NONE()))
     && U32.is_eq(Land.obj(q, (x >> 4n : U32), (y >> 4n : U32)), 7), tab, tgt)
 
@@ -1650,7 +1676,7 @@ def Bin.near.go(on: Bool, +q: Q, +i: U32, +j: U32) -> U32:
 # a guest's mess event this tick: a drop (kind 0 or 1), something into a
 # bin (kind 2, the bin's tile), or NONE
 def Mess.event(g: Guest, +plan: +List<Board>, +q: Q, +t: U32) -> U32:
-  Guest{+id, +x, +y, dir, +st, tgt, tmr, cash, hu, th, en, +na, ha, +lk, mind} = g
+  Guest{+id, +x, +y, dir, +st, tgt, tmr, cash, hu, th, en, +na, ha, +lk, mind, bl} = g
   +walking = Bool.not(U32.is_eq(st, 1)) && Bool.not(Boards.has(plan, id))
   +finish = walking && Guest.finish(id, t, x, lk)
   +bin = Bin.near.go(finish, q, (x >> 4n : U32), (y >> 4n : U32))
@@ -1894,7 +1920,7 @@ def Guests.happy_sum(+gs: +List<Guest>, +acc: U32) -> U32:
     case []:
       acc
     case g <> rest:
-      Guest{id, x, y, dir, st, tgt, tmr, cash, hu, th, en, na, +ha, lk, mind} = g
+      Guest{id, x, y, dir, st, tgt, tmr, cash, hu, th, en, na, +ha, lk, mind, bl} = g
       Guests.happy_sum(rest, (acc + ha : U32))
 
 def Guests.sick_sum(+gs: +List<Guest>, +acc: U32) -> U32:
@@ -1902,7 +1928,7 @@ def Guests.sick_sum(+gs: +List<Guest>, +acc: U32) -> U32:
     case []:
       acc
     case g <> rest:
-      Guest{id, x, y, dir, st, tgt, tmr, cash, hu, th, en, +na, ha, lk, mind} = g
+      Guest{id, x, y, dir, st, tgt, tmr, cash, hu, th, en, +na, ha, lk, mind, bl} = g
       Guests.sick_sum(rest, (acc + na : U32))
 
 # the park's rating: happy guests and attractions raise it; sick guests
@@ -2238,7 +2264,7 @@ def Build.cost(+tool: U32) -> U32:
     case 15:
       25
     case _:
-      Ride.cost((tool - 4 : U32))
+      Ride.cost(Tool.kind(tool))
 
 def Build.can_pay(+cash: U32, +cost: U32) -> Bool:
   Bool.not(neg(cash)) && (cash >= cost : U32)
@@ -2268,7 +2294,7 @@ def Build.legal.go(+tool: U32, +q: Q, +trk: Track, +x: U32, +y: U32, +o: U32,
     case 10:
       empty && dry && U32.is_eq(len32(Piece, Track.pieces(trk)), 0)
     case _:
-      (tool >= 5 : U32) && (tool <= 8 : U32) && Build.fits(q, (tool - 4 : U32), x, y)
+      Bool.not(U32.is_eq(Tool.kind(tool), 0)) && Build.fits(q, Tool.kind(tool), x, y)
 
 def Build.legal(+q: Q, +trk: Track, +tool: U32, +x: U32, +y: U32) -> Bool:
   +t = Land.get(q, x, y)
@@ -2351,7 +2377,7 @@ def Build.land.go(+tool: U32, +q: Q, +rs: +List<Ride>, +x: U32, +y: U32,
     case 15:
       Land.set(q, x, y, Tile{h, ter, 1, 3, b})
     case _:
-      Land.ride(q, (tool - 4 : U32), x, y, len32(Ride, rs))
+      Land.ride(q, Tool.kind(tool), x, y, len32(Ride, rs))
 
 def Build.land(+q: Q, +rs: +List<Ride>, +tool: U32, +x: U32, +y: U32,
   +v: U32) -> Q:
@@ -2383,11 +2409,11 @@ def Build.rides(ok: Bool, +q: Q, +rs: +List<Ride>, +tool: U32, +x: U32,
   match ok:
     case True{}:
       +t = Land.get(q, x, y)
-      +k = (tool - 4 : U32)
+      +k = Tool.kind(tool)
       +s = Ride.size(k)
       Bool.pick(+List<Ride>, U32.is_eq(tool, 9) && U32.is_eq(Tile.obj(t), 3),
         Rides.kill(rs, Tile.a(t)),
-        Bool.pick(+List<Ride>, (tool >= 5 : U32) && (tool <= 8 : U32),
+        Bool.pick(+List<Ride>, Bool.not(U32.is_eq(k, 0)),
           List.append(&2, Ride, rs, [Ride.new(k, x, y, s, 1, time)]),
           Bool.pick(+List<Ride>, U32.is_eq(tool, 10),
             List.append(&2, Ride, rs, [Ride.new(5, x, y, 1, 0, time)]),

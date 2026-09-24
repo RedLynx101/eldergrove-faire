@@ -432,7 +432,7 @@ def RT.add.go(on: Bool, coaster: Bool, +dir: U32, +tgt: U32, +lk: U32, t: RT) ->
       t
 
 def RT.add(g: C.Guest, +rs: +List<C.Ride>, t: RT) -> RT:
-  C.Guest{id, x, y, +dir, +st, +tgt, tmr, cash, hu, th, en, na, ha, +lk, mind} = g
+  C.Guest{id, x, y, +dir, +st, +tgt, tmr, cash, hu, th, en, na, ha, +lk, mind, bl} = g
   RT.add.go(U32.is_eq(st, 1), U32.is_eq(C.Ride.kind(C.Rides.get(rs, tgt)), 5), dir, tgt, lk, t)
 
 def RT.fill(+gs: +List<C.Guest>, +rs: +List<C.Ride>, t: RT) -> RT:
@@ -671,7 +671,7 @@ def shopping(+st: U32, +tgt: U32, +rs: +List<C.Ride>) -> Bool:
 
 def guest_dyn(+g: C.Guest, +q: C.Q, +rs: +List<C.Ride>, +camx: U32, +camy: U32,
   +vw: U32, +vh: U32, +t: U32, +acc: +List<Dyn>) -> +List<Dyn>:
-  C.Guest{+id, +x, +y, +dir, +st, +tgt, tmr, cash, +hu, +th, +en, +na, +ha, +lk, +mind} = g
+  C.Guest{+id, +x, +y, +dir, +st, +tgt, tmr, cash, +hu, +th, +en, +na, +ha, +lk, +mind, bl} = g
   +i = (x >> 4n : U32)
   +j = (y >> 4n : U32)
   +h = C.Land.h(q, i, j)
@@ -684,8 +684,8 @@ def guest_dyn(+g: C.Guest, +q: C.Q, +rs: +List<C.Ride>, +camx: U32, +camy: U32,
     && (sy < B() + vh + 28 : U32) && walker
   # the drawn look: outfit, carried item, stepping (bits 0-9, 16-17, 24),
   # facing (12-13), and now and then a thought (20-22)
-  +mood = sel((na > 120 : U32), 3, sel((hu > 170 : U32), 1, sel((th > 170 : U32), 2,
-    sel((en < 50 : U32), 4, sel((ha < 70 : U32), 5, sel((ha > 215 : U32), 6, 0))))))
+  +mood = sel((na > 120 : U32), 3, sel((bl > 180 : U32), 10, sel((hu > 170 : U32), 1, sel((th > 170 : U32), 2,
+    sel((en < 50 : U32), 4, sel((ha < 70 : U32), 5, sel((ha > 215 : U32), 6, 0)))))))
   +think = U32.is_eq((((t + id * 37) >> 6n) .&. 15 : U32), 0)
   # a fresh thought (the last three seconds) shows in the bubble first
   +code = C.Mind.code(mind)
@@ -825,6 +825,8 @@ def tool_name(+t: U32) -> String:
       "BENCH  30*  TIRED GUESTS REST"
     case 15:
       "LANTERN  25*"
+    case 16:
+      "PRIVY  150*  GUESTS NEED ONE"
     case 20:
       Cat.name(0)
     case 21:
@@ -899,6 +901,8 @@ def Cat.tool.go(+code: U32) -> U32:
       7
     case 33:
       8
+    case 34:
+      16
     case _:
       0
 
@@ -916,7 +920,7 @@ def Cat.len(+c: U32) -> U32:
     case 3:
       3
     case 4:
-      2
+      3
     case _:
       0
 
@@ -949,6 +953,8 @@ def Cat.of(+t: U32) -> U32:
       4
     case 8:
       4
+    case 16:
+      4
     case _:
       99
 
@@ -970,6 +976,8 @@ def Cat.pos(+t: U32) -> U32:
       2
     case 8:
       1
+    case 16:
+      2
     case _:
       0
 
@@ -1026,7 +1034,7 @@ def happy_avg(+gs: +List<C.Guest>, +sum: U32, +n: U32) -> U32:
     case []:
       sel(U32.is_eq(n, 0), 0, (sum * 100 / (n * 255) : U32))
     case g <> rest:
-      C.Guest{id, x, y, dir, st, tgt, tmr, cash, hu, th, en, na, ha, lk, mind} = g
+      C.Guest{id, x, y, dir, st, tgt, tmr, cash, hu, th, en, na, ha, lk, mind, bl} = g
       happy_avg(rest, (sum + ha : U32), (n + 1 : U32))
 
 def ride_name(+k: U32) -> String:
@@ -1041,6 +1049,8 @@ def ride_name(+k: U32) -> String:
       "TROLL TAVERN"
     case 5:
       "WYRM COASTER"
+    case 6:
+      "PRIVY"
     case _:
       "RUINS"
 
@@ -1049,7 +1059,7 @@ def riders(+gs: +List<C.Guest>, +idx: U32) -> U32:
     case []:
       0
     case g <> rest:
-      C.Guest{id, x, y, dir, +st, +tgt, tmr, cash, hu, th, en, na, ha, lk, mind} = g
+      C.Guest{id, x, y, dir, +st, +tgt, tmr, cash, hu, th, en, na, ha, lk, mind, bl} = g
       (sel(U32.is_eq(st, 1) && U32.is_eq(tgt, idx), 1, 0) + riders(rest, idx) : U32)
 
 def ride_state(r: C.Ride) -> String:
@@ -1160,7 +1170,7 @@ def Win.h(+k: U32) -> U32:
     case 3:
       148
     case _:
-      134
+      144
 
 def Win.hit(w: Win, +mx: U32, +my: U32) -> Bool:
   Win{+k, +x, +y, a} = w
@@ -1443,7 +1453,7 @@ def guest_name(+id: U32, +lk: U32) -> String:
 def Guests.find(+gs: +List<C.Guest>, +id: U32) -> C.Guest:
   match gs:
     case []:
-      C.Guest{C.NONE(), 0, 0, 0, 3, C.NONE(), 0, 0, 0, 0, 0, 0, 0, 0, 0}
+      C.Guest{C.NONE(), 0, 0, 0, 3, C.NONE(), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
     case g <> rest:
       Bool.pick(C.Guest, U32.is_eq(C.Guest.id(g), id), g, Guests.find(rest, id))
 
@@ -1453,7 +1463,8 @@ def the_ride(+rs: +List<C.Ride>, +i: U32) -> String:
 # what a guest is doing
 def activity(+st: U32, +tgt: U32, +onq: Bool, +rs: +List<C.Ride>) -> String:
   +shop = C.Ride.shop(C.Ride.kind(C.Rides.get(rs, tgt)))
-  Bool.pick(String, U32.is_eq(st, 1), Bool.pick(String, shop, "BUYING AT ", "RIDING ") ++ the_ride(rs, tgt),
+  +privy = U32.is_eq(C.Ride.kind(C.Rides.get(rs, tgt)), 6)
+  Bool.pick(String, U32.is_eq(st, 1), Bool.pick(String, privy, "VISITING ", Bool.pick(String, shop, "BUYING AT ", "RIDING ")) ++ the_ride(rs, tgt),
     Bool.pick(String, U32.is_eq(st, 2), "HEADING HOME", Bool.pick(String, U32.is_eq(st, 4), "RESTING ON A BENCH",
       Bool.pick(String, U32.is_eq(tgt, C.NONE()), "WANDERING",
         Bool.pick(String, onq, "QUEUING FOR ", "HEADING FOR ") ++ the_ride(rs, tgt)))))
@@ -1476,13 +1487,13 @@ def opt(on: Bool, s: String, +rest: +List<String>) -> +List<String>:
 
 # thoughts: the latest (for a month), then how they feel
 def thoughts(+mind: U32, +t: U32, +hu: U32, +th: U32, +na: U32, +en: U32, +ha: U32,
-  +rs: +List<C.Ride>) -> +List<String>:
+  +bl: U32, +rs: +List<C.Ride>) -> +List<String>:
   +code = C.Mind.code(mind)
   +recent = Bool.not(U32.is_eq(code, 0)) && ((((t >> 4n) - C.Mind.when(mind)) .&. 65535) < 225 : U32)
   opt(recent, event_text(code, the_ride(rs, C.Mind.ride(mind))),
-  opt((hu > 170 : U32), "I'M HUNGRY", opt((th > 170 : U32), "I'M THIRSTY",
+  opt((bl > 180 : U32), "I NEED THE PRIVY", opt((hu > 170 : U32), "I'M HUNGRY", opt((th > 170 : U32), "I'M THIRSTY",
   opt((na > 120 : U32), "I FEEL SICK", opt((en < 50 : U32), "I'M TIRED",
-  opt((ha < 70 : U32), "I'M NOT HAVING FUN", opt((ha > 215 : U32), "WHAT A WONDERFUL PARK!", [])))))))
+  opt((ha < 70 : U32), "I'M NOT HAVING FUN", opt((ha > 215 : U32), "WHAT A WONDERFUL PARK!", []))))))))
 
 def lines(+n: Nat, +xs: +List<String>, +x: U32, +y: U32, +acc: +List<Dr>) -> +List<Dr>:
   match n xs:
@@ -1503,21 +1514,22 @@ def carrying(+lk: U32) -> String:
   Bool.pick(String, U32.is_eq(it, 1), "A POTION", Bool.pick(String, U32.is_eq(it, 2), "A TANKARD OF ALE", "NOTHING"))
 
 def guest_win.go(g: C.Guest, +p: C.Park, +x: U32, +y: U32, +acc: +List<Dr>) -> +List<Dr>:
-  C.Guest{+id, +gx, +gy, dir, +st, +tgt, tmr, +cash, +hu, +th, +en, +na, +ha, +lk, +mind} = g
+  C.Guest{+id, +gx, +gy, dir, +st, +tgt, tmr, +cash, +hu, +th, +en, +na, +ha, +lk, +mind, +bl} = g
   C.Park{map, guests, +rides, track, cash0, +time, nid, fin, mess, staff} = p
   +gone = U32.is_eq(id, C.NONE())
   +onq = U32.is_eq(C.Land.obj(map, (gx >> 4n : U32), (gy >> 4n : U32)), 7)
-  +frame = window_box(Bool.pick(String, gone, "AN ADVENTURER", guest_name(id, lk)), x, y, 210, 134, acc)
+  +frame = window_box(Bool.pick(String, gone, "AN ADVENTURER", guest_name(id, lk)), x, y, 210, 144, acc)
   Bool.pick(+List<Dr>, gone, T("HAS LEFT THE PARK", (x + 6 : U32), (y + 16 : U32), 12648447, frame),
     T(activity(st, tgt, onq, rides), (x + 6 : U32), (y + 15 : U32), 12648447,
-    lines(3n, thoughts(mind, time, hu, th, na, en, ha, rides), (x + 6 : U32), (y + 28 : U32),
+    lines(3n, thoughts(mind, time, hu, th, na, en, ha, bl, rides), (x + 6 : U32), (y + 28 : U32),
     need_bar("HAPPINESS", ha, 7324480, x, (y + 62 : U32),
     need_bar("ENERGY", en, 16766282, x, (y + 72 : U32),
     need_bar("HUNGER", hu, 14168128, x, (y + 82 : U32),
     need_bar("THIRST", th, 4227327, x, (y + 92 : U32),
     need_bar("NAUSEA", na, 9498256, x, (y + 102 : U32),
-    T("GOLD *" ++ U32.show(cash) ++ "   CARRYING " ++ carrying(lk), (x + 6 : U32), (y + 118 : U32), 16766282,
-      frame)))))))))
+    need_bar("PRIVY", bl, 12620880, x, (y + 112 : U32),
+    T("GOLD *" ++ U32.show(cash) ++ "   CARRYING " ++ carrying(lk), (x + 6 : U32), (y + 128 : U32), 16766282,
+      frame))))))))))
 
 def guest_win(+p: C.Park, +x: U32, +y: U32, +gid: U32, +acc: +List<Dr>) -> +List<Dr>:
   guest_win.go(Guests.find(C.Park.guests(p), gid), p, x, y, acc)
@@ -1674,14 +1686,14 @@ def dyn_from(+ds: +List<Dyn>, +k: U32) -> +List<Dyn>:
 
 def ghost_k(+tool: U32, +ok: Bool, +q: C.Q, +rs: +List<C.Ride>, +i: U32, +j: U32) -> U32:
   +t = C.Land.get(q, i, j)
-  +rk = sel((tool >= 5 : U32) && (tool <= 8 : U32), (tool - 4 : U32), 0)
+  +rk = C.Tool.kind(tool)
   # demolishing a ride shows its whole footprint
   +dk = sel(U32.is_eq(tool, 9) && U32.is_eq(C.Tile.obj(t), 3), C.Ride.kind(C.Rides.get(rs, C.Tile.a(t))), 0)
   +size = sel(Bool.not(U32.is_eq(rk, 0)), C.Ride.size(rk), 1)
   (tool .|. (sel(ok, 1, 0) << 8n) .|. (size << 9n) .|. (rk << 12n) .|. (dk << 16n) : U32)
 
 def ghost_on(+tool: U32, +hov: U32, +overwin: Bool) -> Bool:
-  (tool >= 1 : U32) && (tool <= 15 : U32) && Bool.not(U32.is_eq(tool, 12)) && (hov < 99999 : U32) && Bool.not(overwin)
+  (tool >= 1 : U32) && (tool <= 16 : U32) && Bool.not(U32.is_eq(tool, 12)) && (hov < 99999 : U32) && Bool.not(overwin)
 
 def ghost_dr(+p: C.Park, +tool: U32, +hov: U32, +vx: U32, +vy: U32, +overwin: Bool) -> +List<Dr>:
   C.Park{+map, guests, +rides, +track, +cash, time, nid, fin, mess, staff} = p
@@ -1898,7 +1910,7 @@ def Guests.near(+gs: +List<C.Guest>, +q: C.Q, +camx: U32, +camy: U32, +lx: U32, 
     case []:
       best
     case g <> rest:
-      C.Guest{+id, +x, +y, dir, +st, tgt, tmr, cash, hu, th, en, na, ha, lk, mind} = g
+      C.Guest{+id, +x, +y, dir, +st, tgt, tmr, cash, hu, th, en, na, ha, lk, mind, bl} = g
       +h = C.Land.h(q, (x >> 4n : U32), (y >> 4n : U32))
       +sx = ((1280 + x) - (y + camx) : U32)
       +sy = ((512 + ((x + y) >> 1n)) - (8 * h + camy + 6) : U32)
@@ -2181,7 +2193,8 @@ def start_acts() -> List<C.Act>:
    C.Build{8, 51, 30, 0}, C.Build{5, 47, 37, 0},
    C.Build{14, 32, 53, 0}, C.Build{13, 32, 52, 0}, C.Build{15, 32, 50, 0},
    C.Build{15, 32, 34, 0}, C.Build{14, 24, 36, 0}, C.Build{13, 26, 36, 0},
-   C.Build{15, 28, 36, 0}, C.Build{14, 30, 46, 0}, C.Build{13, 34, 46, 0}]
+   C.Build{15, 28, 36, 0}, C.Build{14, 30, 46, 0}, C.Build{13, 34, 46, 0},
+   C.Build{16, 33, 50, 0}, C.Build{16, 13, 31, 0}]
 
 def Game.new() -> Game:
   +p0 = C.Park.run(start_acts(), C.Park.new())
@@ -2641,7 +2654,7 @@ def heading(+gs: +List<C.Guest>, +idx: U32) -> U32:
     case []:
       0
     case g <> rest:
-      C.Guest{id, x, y, dir, +st, +tgt, tmr, cash, hu, th, en, na, ha, lk, mind} = g
+      C.Guest{id, x, y, dir, +st, +tgt, tmr, cash, hu, th, en, na, ha, lk, mind, bl} = g
       (sel(U32.is_eq(st, 0) && U32.is_eq(tgt, idx), 1, 0) + heading(rest, idx) : U32)
 
 def ride_report(+rs: +List<C.Ride>, +gs: +List<C.Guest>, +i: U32) -> String:
@@ -2686,12 +2699,28 @@ def mess_sum(+n: Nat, +k: U32, +q: C.Q, +acc: U32) -> U32:
       +paved = U32.is_eq(o, 1) || U32.is_eq(o, 5) || U32.is_eq(o, 7)
       mess_sum(m, (k + 1 : U32), q, (acc + sel(paved, ((b .&. 255) + (((b >> 8n) .&. 255) << 16n) : U32), 0) : U32))
 
+def max_na(+gs: +List<C.Guest>) -> U32:
+  match gs:
+    case []:
+      0
+    case g <> rest:
+      C.Guest{id, x, y, dir, st, tgt, tmr, cash, hu, th, en, +na, ha, lk, mind, bl} = g
+      U32.max(na, max_na(rest))
+
+def max_bl(+gs: +List<C.Guest>) -> U32:
+  match gs:
+    case []:
+      0
+    case g <> rest:
+      C.Guest{id, x, y, dir, st, tgt, tmr, cash, hu, th, en, na, ha, lk, mind, +bl} = g
+      U32.max(bl, max_bl(rest))
+
 def minds9(+gs: +List<C.Guest>) -> U32:
   match gs:
     case []:
       0
     case g <> rest:
-      C.Guest{id, x, y, dir, st, tgt, tmr, cash, hu, th, en, na, ha, lk, +mind} = g
+      C.Guest{id, x, y, dir, st, tgt, tmr, cash, hu, th, en, na, ha, lk, +mind, bl} = g
       (sel(U32.is_eq(C.Mind.code(mind), 9), 1, 0) + minds9(rest) : U32)
 
 # guests by state: walking | riding << 8 | leaving << 16 | resting << 24 (each to 255)
@@ -2700,7 +2729,7 @@ def states(+gs: +List<C.Guest>) -> U32:
     case []:
       0
     case g <> rest:
-      C.Guest{id, x, y, dir, +st, tgt, tmr, cash, hu, th, en, na, ha, lk, mind} = g
+      C.Guest{id, x, y, dir, +st, tgt, tmr, cash, hu, th, en, na, ha, lk, mind, bl} = g
       (sel(U32.is_eq(st, 4), 16777216, sel(U32.is_eq(st, 2), 65536, sel(U32.is_eq(st, 1), 256, sel(U32.is_eq(st, 0), 1, 0)))) + states(rest) : U32)
 
 def savetest.read(r: File & Result<&1, &1, U32 & String, List<&2, U32>>, +p: C.Park)
@@ -2714,7 +2743,8 @@ def savetest.read(r: File & Result<&1, &1, U32 & String, List<&2, U32>>, +p: C.P
       ++ ", sick " ++ U32.show((ms >> 16n : U32)) ++ ", filthy minds " ++ U32.show(minds9(C.Park.guests(p))))
     IO.print("states (walk ride leave rest) " ++ U32.show((states(C.Park.guests(p)) .&. 255 : U32)) ++ " "
       ++ U32.show(((states(C.Park.guests(p)) >> 8n) .&. 255 : U32)) ++ " " ++ U32.show(((states(C.Park.guests(p)) >> 16n) .&. 255 : U32))
-      ++ " " ++ U32.show((states(C.Park.guests(p)) >> 24n : U32)) ++ ", happy " ++ U32.show(happy_avg(C.Park.guests(p), 0, 0)))
+      ++ " " ++ U32.show((states(C.Park.guests(p)) >> 24n : U32)) ++ ", happy " ++ U32.show(happy_avg(C.Park.guests(p), 0, 0))
+      ++ ", peak nausea " ++ U32.show(max_na(C.Park.guests(p))) ++ ", peak bladder " ++ U32.show(max_bl(C.Park.guests(p))))
 
 def savetest.go(+p: C.Park) -> IO(Unit):
   do IO<Unit>:
@@ -2781,7 +2811,7 @@ def ui.guest_at(+gs: +List<C.Guest>, +q: C.Q, +cx: U32, +cy: U32) -> U32:
     case []:
       0
     case g <> rest:
-      C.Guest{id, +x, +y, dir, +st, tgt, tmr, cash, hu, th, en, na, ha, lk, mind} = g
+      C.Guest{id, +x, +y, dir, +st, tgt, tmr, cash, hu, th, en, na, ha, lk, mind, bl} = g
       +h = C.Land.h(q, (x >> 4n : U32), (y >> 4n : U32))
       +sx = ((1280 + x) - (y + cx) : U32)
       +sy = ((512 + ((x + y) >> 1n)) - (8 * h + cy + 6) : U32)

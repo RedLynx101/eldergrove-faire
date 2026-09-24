@@ -47,6 +47,17 @@ Small design decisions made while working, listed here so they can be revisited.
   its tools; I inspects, X demolishes, U picks the queue line. Hovering any button names it on the strip
   above the bar. Spike 8 keeps the rest (window style, options, a staff tab).
 - **The starter park has furniture**: three bins, three benches and three lanterns along its paths.
+- **The Privy** (shops tab, 150 gold, 5 upkeep a month) serves four at a time, 40 ticks each, free by default;
+  guests will pay up to 2 gold. The bladder need rises one point every 16 ticks, 40 more after a potion and
+  15 after a meal; above 170 a guest heads for a privy before anything else, above 180 they think "I need
+  the privy", above 220 their happiness drains. The starter park gets two privies.
+- **needs_bounded does not cover the bladder yet.** The field is clamped to 0..255 like the other needs,
+  but the law in LAWS.bend lists hunger, thirst, energy, nausea and happiness; I only added the new field to
+  its pattern. Extending the law is the owner's call.
+- **Nausea now builds up.** Before, a ride's nausea was added on boarding and wore off during the ride, so
+  peak nausea across the park was about 50 and nobody ever felt queasy. Now a rider gains three quarters of
+  the ride's nausea rating on getting off, it wears off at 1 point per 16 ticks (was 3), and a guest above 95
+  is sick with a 1-in-512 chance each tick: 32 sick puddles in 8000 ticks on the starter park.
 
 ## Done: M1, the vertical slice
 Isometric fantasy map, paths, terrain editing, 4 enchanted tree kinds, Dragon Carousel, Arcane Spire, Potion
@@ -159,7 +170,7 @@ machine: `PARK_PROF=1 ./park --live 700 1500`.
 - Guests may pick a ride whose queue is on the far side of the park.
 - There is no music volume control besides on/off.
 
-## M5: Controls, problems, staff and people (in progress: spikes 1-3 done)
+## M5: Controls, problems, staff and people (in progress: spikes 1-4 done)
 Spikes, in order:
 
 1. (Done) **Controls and camera.** WASD (and the arrows) move the camera. Zoom in and out, in three steps (close,
@@ -173,7 +184,7 @@ Spikes, in order:
 3. (Done) **Mess.** Guests drop litter; nauseous guests are sick after intense rides. Dirty paths lower
    happiness and the park rating. Path furniture: bins, benches (they restore energy) and lamps. Also done
    here: the toolbar tabs (see the calls above) and the law litter_accounted.
-4. **The Privy.** Toilets, and a bathroom need.
+4. (Done) **The Privy.** Toilets, and a bathroom need.
 5. **Breakdowns.** Rides lose reliability with age and break down; riders get stuck and unhappy until a
    repair.
 6. **Staff**, hired from a staff window, with wages (through the ledger) and patrol areas:

@@ -45,9 +45,9 @@ def Enc.q(q: C.Q, rest: List<&2, U32>) -> List<&2, U32>:
       Enc.q(a, Enc.q(b, Enc.q(c, Enc.q(d, 2 <> rest))))
 
 def Enc.guest(g: C.Guest, rest: List<&2, U32>) -> List<&2, U32>:
-  C.Guest{id, x, y, dir, st, tgt, tmr, cash, hu, th, en, na, ha, lk, mind} = g
+  C.Guest{id, x, y, dir, st, tgt, tmr, cash, hu, th, en, na, ha, lk, mind, bl} = g
   4 <> id <> x <> y <> dir <> st <> tgt <> tmr <> cash <> hu <> th <> en <> na
-    <> ha <> lk <> mind <> rest
+    <> ha <> lk <> mind <> bl <> rest
 
 def Enc.gs(gs: List<&2, C.Guest>, rest: List<&2, U32>) -> List<&2, U32>:
   match gs:
@@ -216,9 +216,9 @@ def dec(ws: List<&2, U32>, st: List<&2, Item>) -> List<&2, Item>:
     case 3 <> rest:
       dec(rest, IG{[]} <> st)
     case 4 <> id <> x <> y <> dir <> s <> tgt <> tmr <> cash <> hu <> th <> en
-      <> na <> ha <> lk <> mind <> rest:
+      <> na <> ha <> lk <> mind <> bl <> rest:
       dec(rest, Pop.g(C.Guest{id, x, y, dir, s, tgt, tmr, cash, hu, th, en, na,
-        ha, lk, mind}, st))
+        ha, lk, mind, bl}, st))
     case 5 <> rest:
       dec(rest, IR{[]} <> st)
     case 6 <> kind <> x <> y <> w <> h <> price <> open <> ph <> tm <> ent <> ex <> qlen <> wmin <> wmax <> total <> earned <> born <> rate <> rest:
@@ -265,7 +265,7 @@ def load(ws: List<&2, U32>) -> Maybe<&2, C.Park>:
 # ---------------------------------------------------------
 
 def MAGIC() -> U32:
-  910313285
+  910313286
 
 def to_bytes(ws: List<&2, U32>) -> List<&2, U32>:
   match ws:

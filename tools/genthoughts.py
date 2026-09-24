@@ -78,6 +78,15 @@ ICONS = {
        ".1222321.",
        "122322221"],
       {2: 0x8A6A3A, 3: 0xE8E0C0, 5: 0x5AA02C}),
+  # 10 needs the privy: a little outhouse with a moon on its door
+  10: (["....1....",
+        "...121...",
+        "..12221..",
+        ".1222221.",
+        ".1345531.",
+        ".1355531.",
+        ".1355531."],
+       {2: 0x3E7A44, 3: 0xC08A50, 4: 0xF0D040, 5: 0x4A2C14}),
   # 8 waited too long: an hourglass, the sand nearly run through
   8: (["111111111",
        ".1333331.",

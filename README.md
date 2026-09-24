@@ -59,7 +59,8 @@ in the station and stay aboard for the whole circuit.
 
 Guests face the way they walk, carry what they buy (potions, tankards of
 ale), and now and then show what they think in a bubble: hungry, thirsty,
-queasy, tired, cross or delighted.
+queasy, tired, cross, delighted, in need of the privy, or disgusted by a
+filthy path.
 
 Rides need a door in and a door out. The entrance is a queue tile (U) beside
 the ride, marked by a green arch; guests walk the line single file, join it
@@ -111,7 +112,7 @@ green where it can go, red where it can't, with its cost beside the mouse.
 The toolbar: inspect and demolish on the left, then five tabs, then the open
 tab's tools. Paths and furniture: path, queue line, litter bin, bench,
 lantern. Land: raise, lower. Scenery: enchanted trees. Rides: Dragon
-Carousel, Arcane Spire, Wyrm Coaster. Shops: Potion Stall, Troll Tavern.
+Carousel, Arcane Spire, Wyrm Coaster. Shops: Potion Stall, Troll Tavern, Privy.
 Hover a button to see its name on the strip above the bar.
 
 Mess: guests drop wrappers when they finish what they carry, and very queasy
@@ -120,6 +121,12 @@ staff spike), dirty paths wear guests' happiness down and lower the park
 rating, and guests say so ("this path is filthy"). A litter bin beside the
 path catches what guests finish near it, 15 pieces until full. Tired guests
 sit on benches to get their energy back. Lanterns light the way.
+
+Guests need the privy now and then, sooner after a potion. A guest who
+needs it heads for the nearest Privy first, thinks "I need the privy" in a
+bubble, and grows miserable if there is none. Rides leave riders queasy by
+their nausea rating; the feeling builds up over several rides and wears off
+slowly, and a very queasy guest may be sick on the path.
 
 Coaster tool (key 4, third tool): `Enter` opens or closes the coaster; while closed, `T`
 ahead, `G`/`H` turn, `Y` up, `B` down, `L` lift hill, `Backspace` removes the

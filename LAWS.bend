@@ -36,7 +36,7 @@ law headcount_conserved:
 # within 0..255 -- if they did before the step, they do after it.
 def needs_ok(g: C.Guest) -> Bool:
   C.Guest{id, x, y, dir, st, tgt, tmr, cash, hunger, thirst, energy, nausea,
-    happy, look, mind} = g
+    happy, look, mind, bl} = g
   U32.is_le(hunger, 255) && U32.is_le(thirst, 255) && U32.is_le(energy, 255)
     && U32.is_le(nausea, 255) && U32.is_le(happy, 255)
 
@@ -184,7 +184,7 @@ law seats_unique:
 # price -- the price the ledger adds to the park's takings (Ledger.sales).
 def gold(g: C.Guest) -> U32:
   C.Guest{id, x, y, dir, st, tgt, tmr, cash, hunger, thirst, energy, nausea,
-    happy, look, mind} = g
+    happy, look, mind, bl} = g
   cash
 
 law purchase_is_transfer:
