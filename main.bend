@@ -231,7 +231,8 @@ def R.px4(same: Bool, +c0: U32, +c1: U32, +c2: U32, +c3: U32) -> Image:
     case False{}:
       Qua{Pix{c0}, Pix{c1}, Pix{c2}, Pix{c3}}
 
-def R.b2(+xs: +List<Dr>, +x: U32, +y: U32, +t: U32) -> Image:
+# at half resolution (t bit 29) one sample stands for the 2 x 2 block
+def R.b2.full(+xs: +List<Dr>, +x: U32, +y: U32, +t: U32) -> Image:
   +x1 = (x + 1 : U32)
   +y1 = (y + 1 : U32)
   +c0 = first(xs, False{}, 0, x, y, t)
@@ -239,6 +240,16 @@ def R.b2(+xs: +List<Dr>, +x: U32, +y: U32, +t: U32) -> Image:
   +c2 = first(xs, False{}, 0, x, y1, t)
   +c3 = first(xs, False{}, 0, x1, y1, t)
   R.px4(U32.is_eq(c0, c1) && U32.is_eq(c0, c2) && U32.is_eq(c0, c3), c0, c1, c2, c3)
+
+def R.b2.go(lo: Bool, +xs: +List<Dr>, +x: U32, +y: U32, +t: U32) -> Image:
+  match lo:
+    case True{}:
+      Pix{first(xs, False{}, 0, x, y, t)}
+    case False{}:
+      R.b2.full(xs, x, y, t)
+
+def R.b2(+xs: +List<Dr>, +x: U32, +y: U32, +t: U32) -> Image:
+  R.b2.go(Bool.not(U32.is_eq((t .&. 536870912 : U32), 0)), xs, x, y, t)
 
 def R.b4(+xs: +List<Dr>, +x: U32, +y: U32, +t: U32) -> Image:
   Qua{R.b2(xs, x, y, t), R.b2(xs, (x + 2 : U32), y, t), R.b2(xs, x, (y + 2 : U32), t),
@@ -261,10 +272,30 @@ def R.tile.go(skip: Bool, +fc: U32, +xs: +List<Dr>, +x: U32, +y: U32, +t: U32)
     case False{}:
       R.fin(R.b16(xs, x, y, t), xs)
 
+# the interface (text, panels, icons) is always drawn at full resolution
+def Dr.ui(d: Dr) -> Bool:
+  match d:
+    case DGlyph{x, y, bits, col}:
+      True{}
+    case DRect{x, y, w, h, col}:
+      True{}
+    case DIcon{x, y, tool, on}:
+      True{}
+    case _:
+      False{}
+
+def Tile.ui(+xs: +List<Dr>) -> Bool:
+  match xs:
+    case []:
+      False{}
+    case d <> rest:
+      Dr.ui(Dr.cp(d)) || Tile.ui(rest)
+
 def R.tile(+cl: +List<Dr>, +x: U32, +y: U32, +t: U32) -> Image:
   +xs = cut(cl, x, y, 16, t)
   +fc = solid(xs, x, y, 16)
-  R.tile.go(A.opaque(fc), fc, xs, x, y, t)
+  +t2 = sel(Tile.ui(xs), (t .&. 3758096383 : U32), t)
+  R.tile.go(A.opaque(fc), fc, xs, x, y, t2)
 
 def R.quad(+cl: +List<Dr>, +x: U32, +y: U32, +t: U32) -> Image:
   +x1 = (x + 16 : U32)
@@ -333,7 +364,7 @@ def pick.go(+n: Nat, +q: C.Q, +mx: U32, +my: U32, +camx: U32, +camy: U32,
 type UI is Data:
   UI{camx: U32, camy: U32, keys: U32, mx: U32, my: U32, mdown: U32,
     tool: U32, var: U32, speed: U32, msg: U32, frame: U32, income: U32,
-    last: U32, io: U32, fps: U32, tl: Nat}
+    last: U32, io: U32, fps: U32, tl: Nat, opt: U32}
 
 # The view at a zoom: the world-screen rectangle it shows (it stays centred on
 # the normal view's centre)
@@ -363,7 +394,7 @@ def View.zoom(+var: U32, +inw: Bool) -> U32:
   ((var .&. 4294180863) .|. (z2 << 18n) : U32)
 
 def pick(+q: C.Q, +ui: UI) -> U32:
-  UI{camx, camy, keys, mx, my, md, tool, +var, sp, msg, fr, inc, last, io, fps, tl} = ui
+  UI{camx, camy, keys, mx, my, md, tool, +var, sp, msg, fr, inc, last, io, fps, tl, opt} = ui
   +z = View.z(var)
   sel((my < 290 : U32) && (my > 12 : U32),
     pick.go(8n, q, View.m(mx, z), View.m(my, z), View.x(camx, z), View.y(camy, z), 7, 99999), 99999)
@@ -1128,7 +1159,7 @@ def str_bytes(s: String) -> +List<U32>:
 
 def hud(+p: C.Park, +ui: UI, +hov: U32) -> +List<Dr>:
   C.Park{map, +guests, rides, track, +cash, +time, nid, fin, mess, staff} = p
-  UI{camx, camy, keys, +mx, +my, md, +tool, +var, +sp, +msg, fr, +inc, last, io, +fps, tl} = ui
+  UI{camx, camy, keys, +mx, +my, md, +tool, +var, +sp, +msg, fr, +inc, last, io, +fps, tl, opt} = ui
   +day = ((time / 120) % 30 + 1 : U32)
   +month = (time / 3600 + 1 : U32)
   +spd = sel(U32.is_eq(sp, 0), 0, sp)
@@ -1142,7 +1173,7 @@ def hud(+p: C.Park, +ui: UI, +hov: U32) -> +List<Dr>:
     text(msg_text(msg), (B() + 324 : U32), (B() + 301 : U32), 16766282,
     text("INCOME " ++ money(inc), (B() + 410 : U32), (B() + 3 : U32), 11468718,
     text(U32.show(fps) ++ " FPS", (B() + 4 : U32), (B() + 14 : U32), 8421504,
-    button("STAFF", 414, 294, 46, 5913248, button("PARK", 462, 294, 46, 5913248, button("FINANCES", 462, 305, 46, 5913248, []))))))))))))
+    button("OPTIONS", 414, 305, 46, 5913248, button("STAFF", 414, 294, 46, 5913248, button("PARK", 462, 294, 46, 5913248, button("FINANCES", 462, 305, 46, 5913248, [])))))))))))))
   +bars = {DRect{B(), B(), 512, 11, 1973802} <> DRect{B(), (B() + 11 : U32), 512, 1, 13148232}
     <> DRect{B(), (B() + 291 : U32), 512, 1, 13148232}
     <> DRect{B(), (B() + 292 : U32), 512, 28, 1973802} <> [] : +List<Dr>}
@@ -1189,6 +1220,8 @@ def Win.h(+k: U32) -> U32:
       157
     case 5:
       114
+    case 6:
+      112
     case _:
       144
 
@@ -1265,7 +1298,7 @@ def window_box(title: String, +x: U32, +y: U32, +w: U32, +h: U32, +acc: +List<Dr
   R((x + w - 10 : U32), (y + 1 : U32), 9, 8, 10498096,
   R((x + 1 : U32), (y + 1 : U32), (w - 2 : U32), 8, 4863024,
   R((x + 1 : U32), (y + 10 : U32), (w - 2 : U32), (h - 11 : U32), 2763330,
-  R(x, y, w, h, 13148232, acc))))))
+  R(x, y, w, h, 13148232, R((x + 3 : U32), (y + 3 : U32), w, h, 1052688, acc)))))))
 
 def pm(+x: U32, +y: U32, +acc: +List<Dr>) -> +List<Dr>:
   button("-", x, y, 11, 5913248, button("+", (x + 14 : U32), y, 11, 5913248, acc))
@@ -1728,7 +1761,40 @@ def staff_win(+p: C.Park, +x: U32, +y: U32, +acc: +List<Dr>) -> +List<Dr>:
   T("WAGES *" ++ U32.show(C.Staff.wages(ss)) ++ " A MONTH   STAFF " ++ U32.show(C.len32(C.Staff, ss)) ++ "/40",
     (x + 6 : U32), (y + 102 : U32), 12648447, frame)))))
 
-def win_dr.go(+k: U32, +x: U32, +y: U32, +a: U32, +p: C.Park, +acc: +List<Dr>) -> +List<Dr>:
+def Opt.vol(+o: U32, +sh: Nat) -> U32:
+  (3 - ((o >> sh) .&. 3) : U32)
+
+# a click in the options window (codes 1000 + ...)
+def opt_button(label: String, on: Bool, +x: U32, +y: U32, +w: U32, +acc: +List<Dr>) -> +List<Dr>:
+  button(label, x, y, w, sel(on, 3831360, 5913248), acc)
+
+def vol_bar(+v: U32, +x: U32, +y: U32, +acc: +List<Dr>) -> +List<Dr>:
+  DRect{x, y, U32.max((v * 14 : U32), 1), 5, 7324480} <> DRect{x, y, 42, 5, 4210752} <> acc
+
+def opts_win(+o: U32, +x: U32, +y: U32, +acc: +List<Dr>) -> +List<Dr>:
+  +s = (o .&. 3 : U32)
+  +whole = Bool.not(U32.is_eq((o .&. 4 : U32), 0))
+  +dyn = U32.is_eq((o .&. 8 : U32), 0)
+  +lo = Bool.not(U32.is_eq((o .&. 256 : U32), 0))
+  +frame = window_box("OPTIONS", x, y, 210, 112, acc)
+  T("WINDOW SIZE", (x + 6 : U32), (y + 16 : U32), 16766282,
+  opt_button("1024X640", U32.is_eq(s, 0), (x + 6 : U32), (y + 26 : U32), 60,
+  opt_button("1280X800", U32.is_eq(s, 1), (x + 70 : U32), (y + 26 : U32), 60,
+  opt_button("1600X1000", U32.is_eq(s, 2), (x + 134 : U32), (y + 26 : U32), 70,
+  T("PIXELS", (x + 6 : U32), (y + 40 : U32), 16766282,
+  opt_button("STRETCH TO FIT", Bool.not(whole), (x + 6 : U32), (y + 50 : U32), 96,
+  opt_button("WHOLE PIXELS", whole, (x + 106 : U32), (y + 50 : U32), 98,
+  T("DYNAMIC RESOLUTION", (x + 6 : U32), (y + 65 : U32), 16766282,
+  opt_button(Bool.pick(String, dyn, "ON", "OFF"), dyn, (x + 164 : U32), (y + 63 : U32), 40,
+  T(Bool.pick(String, lo, "DRAWING AT HALF SIZE: FRAMES RAN SLOW", "DRAWING AT FULL SIZE"), (x + 6 : U32), (y + 75 : U32), 11579568,
+  T("MUSIC VOLUME", (x + 6 : U32), (y + 88 : U32), 16766282, pm((x + 130 : U32), (y + 86 : U32),
+  vol_bar(Opt.vol(o, 4n), (B() + x + 160 : U32), (B() + y + 88 : U32),
+  T("EFFECTS VOLUME", (x + 6 : U32), (y + 100 : U32), 16766282, pm((x + 130 : U32), (y + 98 : U32),
+  vol_bar(Opt.vol(o, 6n), (B() + x + 160 : U32), (B() + y + 100 : U32), frame))))))))))))))))
+
+# dynamic resolution: when a second of frames runs under 52 a second, draw
+# at half resolution for about ten seconds, then try full again
+def win_dr.go(+k: U32, +x: U32, +y: U32, +a: U32, +p: C.Park, +o: U32, +acc: +List<Dr>) -> +List<Dr>:
   match k:
     case 1:
       ride_win(p, x, y, a, acc)
@@ -1740,16 +1806,18 @@ def win_dr.go(+k: U32, +x: U32, +y: U32, +a: U32, +p: C.Park, +acc: +List<Dr>) -
       guest_win(p, x, y, a, acc)
     case 5:
       staff_win(p, x, y, acc)
+    case 6:
+      opts_win(o, x, y, acc)
     case _:
       acc
 
-def wins_dr(+ws: +List<Win>, +p: C.Park, +acc: +List<Dr>) -> +List<Dr>:
+def wins_dr(+ws: +List<Win>, +p: C.Park, +o: U32, +acc: +List<Dr>) -> +List<Dr>:
   match ws:
     case []:
       acc
     case w <> rest:
       Win{+k, +x, +y, +a} = w
-      win_dr.go(k, x, y, a, p, wins_dr(rest, p, acc))
+      win_dr.go(k, x, y, a, p, o, wins_dr(rest, p, o, acc))
 
 # Clicking in windows: 0 nothing, 1 close, 2 drag, 100 + op: a ride setting
 
@@ -1808,10 +1876,60 @@ def staff_click(+lx: U32, +ly: U32) -> U32:
   sel((r < 4 : U32) && in_box(lx, ly, 178, y0, 11, 9), (231 + r : U32),
     sel((r < 4 : U32) && in_box(lx, ly, 192, y0, 11, 9), (221 + r : U32), 0))
 
+# Options (UI opt): bits 0-1 window size (1024 x 640, 1280 x 800,
+# 1600 x 1000), 2 whole pixels (else stretched to fit), 3 dynamic
+# resolution off, 4-5 and 6-7 how much quieter the music and the effects
+# are (0 loudest .. 3 silent), 8 drawing at half resolution now, 9-13 how
+# long it has, 14 the window wants resizing
+def UI.opt(u: UI) -> U32:
+  UI{cx, cy, keys, mx, my, md, tool, var, sp, msg, fr, inc, last, io, fps, tl, opt} = u
+  opt
+
+def UI.with_opt(u: UI, +o: U32) -> UI:
+  UI{cx, cy, keys, mx, my, md, tool, var, sp, msg, fr, inc, last, io, fps, tl, opt} = u
+  UI{cx, cy, keys, mx, my, md, tool, var, sp, msg, fr, inc, last, io, fps, tl, o}
+
+def Opt.w(+o: U32) -> U32:
+  +s = (o .&. 3 : U32)
+  sel(U32.is_eq(s, 1), 1280, sel(U32.is_eq(s, 2), 1600, 1024))
+
+def Opt.h(+o: U32) -> U32:
+  +s = (o .&. 3 : U32)
+  sel(U32.is_eq(s, 1), 800, sel(U32.is_eq(s, 2), 1000, 640))
+
+def Opt.click(+o: U32, +code: U32) -> U32:
+  +size = (code >= 1000 : U32) && (code <= 1002 : U32)
+  +mode = (code >= 1010 : U32) && (code <= 1011 : U32)
+  +mq = ((o >> 4n) .&. 3 : U32)
+  +fq = ((o >> 6n) .&. 3 : U32)
+  +mq2 = sel(U32.is_eq(code, 1030), U32.min((mq + 1 : U32), 3), sel(U32.is_eq(code, 1031), C.sub0(mq, 1), mq))
+  +fq2 = sel(U32.is_eq(code, 1032), U32.min((fq + 1 : U32), 3), sel(U32.is_eq(code, 1033), C.sub0(fq, 1), fq))
+  +o1 = sel(size, ((o .&. 4294967292) .|. (code - 1000) .|. 16384 : U32),
+    sel(mode, ((o .&. 4294967291) .|. ((code - 1010) << 2n) .|. 16384 : U32),
+    sel(U32.is_eq(code, 1020), (o .^. 8 : U32), o)))
+  ((o1 .&. 4294967055) .|. (mq2 << 4n) .|. (fq2 << 6n) : U32)
+
+def opts_click(+lx: U32, +ly: U32) -> U32:
+  sel(in_box(lx, ly, 6, 26, 60, 9), 1000, sel(in_box(lx, ly, 70, 26, 60, 9), 1001,
+  sel(in_box(lx, ly, 134, 26, 70, 9), 1002,
+  sel(in_box(lx, ly, 6, 50, 96, 9), 1010, sel(in_box(lx, ly, 106, 50, 98, 9), 1011,
+  sel(in_box(lx, ly, 164, 63, 40, 9), 1020,
+  sel(in_box(lx, ly, 130, 86, 11, 9), 1030, sel(in_box(lx, ly, 144, 86, 11, 9), 1031,
+  sel(in_box(lx, ly, 130, 98, 11, 9), 1032, sel(in_box(lx, ly, 144, 98, 11, 9), 1033, 0))))))))))
+
+def Opt.dyn(+o: U32, +f: U32) -> U32:
+  +dyn = U32.is_eq((o .&. 8 : U32), 0)
+  +lo = Bool.not(U32.is_eq((o .&. 256 : U32), 0))
+  +cnt = ((o >> 9n) .&. 31 : U32)
+  +lo2 = dyn && (lo && (cnt < 20 : U32) || Bool.not(lo) && (f < 52 : U32) && (f > 0 : U32))
+  +cnt2 = sel(lo2 && lo, (cnt + 1 : U32), 0)
+  ((o .&. 4294951167) .|. sel(lo2, 256, 0) .|. (cnt2 << 9n) : U32)
+
 def win_code(+k: U32, +lx: U32, +ly: U32) -> U32:
   sel((ly < 10 : U32) && (lx + 10 >= Win.w(k) : U32), 1, sel((ly < 10 : U32), 2,
     sel(U32.is_eq(k, 1), ride_click(lx, ly), sel(U32.is_eq(k, 2), park_click(lx, ly),
-      sel(U32.is_eq(k, 3), fin_click(lx, ly), sel(U32.is_eq(k, 5), staff_click(lx, ly), 0))))))
+      sel(U32.is_eq(k, 3), fin_click(lx, ly), sel(U32.is_eq(k, 5), staff_click(lx, ly),
+      sel(U32.is_eq(k, 6), opts_click(lx, ly), 0)))))))
 
 # the act a window button asks for
 def ride_act(+p: C.Park, +idx: U32, +op: U32) -> C.Act:
@@ -1819,8 +1937,8 @@ def ride_act(+p: C.Park, +idx: U32, +op: U32) -> C.Act:
   Bool.pick(C.Act, U32.is_eq(op, 0) && U32.is_eq(k, 5), C.TrackOp{8}, C.RideOp{idx, op})
 
 def win_act(+p: C.Park, +arg: U32, +code: U32) -> +List<C.Act>:
-  Bool.pick(+List<C.Act>, (code >= 200 : U32), [C.ParkOp{(code - 200 : U32)}],
-    Bool.pick(+List<C.Act>, (code >= 100 : U32), [ride_act(p, arg, (code - 100 : U32))], []))
+  Bool.pick(+List<C.Act>, (code >= 1000 : U32), [], Bool.pick(+List<C.Act>, (code >= 200 : U32), [C.ParkOp{(code - 200 : U32)}],
+    Bool.pick(+List<C.Act>, (code >= 100 : U32), [ride_act(p, arg, (code - 100 : U32))], [])))
 
 # a ride setting; opening the coaster goes through its track
 type Game is Data:
@@ -1885,7 +2003,7 @@ def scene(+g: Game) -> +List<Dr>:
   Game{+p, +ui, +wm, snd} = g
   C.Park{+map, +guests, +rides, +track, cash, +time, nid, fin, mess, staff} = p
   C.Track{+ps, open, +bs, st, en} = track
-  UI{+camx, +camy, keys, +mx, +my, md, +tool, +var, sp, msg, fr, inc, last, io, fps, tl} = ui
+  UI{+camx, +camy, keys, +mx, +my, md, +tool, +var, sp, msg, fr, inc, last, io, fps, tl, opt} = ui
   +hov = pick(map, ui)
   +z = View.z(var)
   +vx = View.x(camx, z)
@@ -1903,7 +2021,7 @@ def scene(+g: Game) -> +List<Dr>:
     diags(64n, 0, map, rides, rt, ar, vx, vy, vw, vh, hov, dyn_below(sorted, 64), [])
   +overwin = Bool.not(U32.is_eq(Wins.at(WM.wins(wm), mx, my, 0), C.NONE()))
   +ghost = ghost_dr(p, tool, hov, vx, vy, overwin)
-  +front = ghost_cost(p, tool, hov, mx, my, overwin, wins_dr(WM.wins(wm), p, hud(p, ui, hov)))
+  +front = ghost_cost(p, tool, hov, mx, my, overwin, wins_dr(WM.wins(wm), p, UI.opt(ui), hud(p, ui, hov)))
   List.append(&2, Dr, front, List.append(&2, Dr, ghost, List.append(&2, Dr, hi, lo)))
 
 def Game.park(g: Game) -> C.Park:
@@ -1915,14 +2033,19 @@ def Game.park(g: Game) -> C.Park:
 # ride kind << 12), and its cost beside the mouse
 def Game.zoom(g: Game) -> U32:
   Game{p, ui, wm, snd} = g
-  UI{cx, cy, keys, mx, my, md, tool, var, sp, msg, fr, inc, last, io, fps, tl} = ui
+  UI{cx, cy, keys, mx, my, md, tool, var, sp, msg, fr, inc, last, io, fps, tl, opt} = ui
   View.z(var)
 
+def Game.lo(g: Game) -> Bool:
+  Game{p, ui, wm, snd} = g
+  Bool.not(U32.is_eq((UI.opt(ui) .&. 256 : U32), 0))
+
 def frame(+g: Game) -> Image:
-  R.frame(scene(g), ((C.Park.time(Game.park(g)) .&. 1073741823) .|. (Game.zoom(g) << 30n) : U32))
+  R.frame(scene(g), ((C.Park.time(Game.park(g)) .&. 536870911) .|. (Game.zoom(g) << 30n)
+    .|. sel(Game.lo(g), 536870912, 0) : U32))
 
 def UI.new() -> UI:
-  UI{930, 880, 0, 0, 0, 0, 12, 0, 1, 0, 0, 0, 99999, 0, 0, 0n}
+  UI{930, 880, 0, 0, 0, 0, 12, 0, 1, 0, 0, 0, 99999, 0, 0, 0n, 0}
 
 def u32s(+n: U32) -> String:
   U32.show(n)
@@ -1981,13 +2104,13 @@ def paint_tool(+t: U32) -> Bool:
   (t < 5 : U32) || U32.is_eq(t, 9)
 
 def build_act(+q: C.Q, +ui: UI) -> +List<C.Act>:
-  UI{camx, camy, keys, mx, my, md, +tool, +var, sp, msg, fr, inc, last, io, fps, tl} = ui
+  UI{camx, camy, keys, mx, my, md, +tool, +var, sp, msg, fr, inc, last, io, fps, tl, opt} = ui
   +hov = pick(q, ui)
   Bool.pick(+List<C.Act>, (hov < 99999 : U32),
     [C.Build{tool, (hov >> 6n : U32), (hov .&. 63 : U32), var}], [])
 
 def on_key(+c: U32, +down: Bool, +ui: UI, +wm: WM, +q: C.Q) -> EV:
-  UI{cx, cy, +keys, mx, my, md, +tool, +var, +sp, +msg, fr, inc, last, +io, fps, tl} = ui
+  UI{cx, cy, +keys, mx, my, md, +tool, +var, +sp, +msg, fr, inc, last, +io, fps, tl, opt} = ui
   WM{+ws, +dg, +gx, +gy} = wm
   # Esc closes the front window; with none open, it quits
   +esc = down && U32.is_eq(c, 27)
@@ -2013,17 +2136,18 @@ def on_key(+c: U32, +down: Bool, +ui: UI, +wm: WM, +q: C.Q) -> EV:
   +io2 = sel(down && U32.is_eq(c, 63240), 1, sel(down && U32.is_eq(c, 63244), 2, io))
   +msg2 = sel(down && U32.is_eq(c, 109), sel(U32.is_eq((var2 .&. 65536 : U32), 0), 11, 12),
     sel(down && U32.is_eq(c, 110), sel(U32.is_eq((var2 .&. 131072 : U32), 0), 13, 14), msg))
-  EV{UI{cx, cy, keys2, mx, my, md, tool2, var2, sp2, msg2, fr, inc, last, io2, fps, tl},
+  EV{UI{cx, cy, keys2, mx, my, md, tool2, var2, sp2, msg2, fr, inc, last, io2, fps, tl, opt},
     WM{Bool.pick(+List<Win>, esc && haswin, Wins.drop(ws, 0),
       Bool.pick(+List<Win>, down && U32.is_eq(c, 112), Wins.open(ws, 2, 0, 150, 40),
       Bool.pick(+List<Win>, down && U32.is_eq(c, 102), Wins.open(ws, 3, 0, 140, 30),
-      Bool.pick(+List<Win>, down && U32.is_eq(c, 107), Wins.open(ws, 5, 0, 160, 50), ws)))), dg, gx, gy},
+      Bool.pick(+List<Win>, down && U32.is_eq(c, 107), Wins.open(ws, 5, 0, 160, 50),
+      Bool.pick(+List<Win>, down && U32.is_eq(c, 111), Wins.open(ws, 6, 0, 150, 60), ws))))), dg, gx, gy},
     Bool.pick(+List<C.Act>, tact, [C.TrackOp{op}], []),
     esc && Bool.not(haswin)}
 
 def UI.with_last(u: UI, +l: U32) -> UI:
-  UI{cx, cy, keys, mx, my, md, tool, var, sp, msg, fr, inc, last, io, fps, tl} = u
-  UI{cx, cy, keys, mx, my, md, tool, var, sp, msg, fr, inc, l, io, fps, tl}
+  UI{cx, cy, keys, mx, my, md, tool, var, sp, msg, fr, inc, last, io, fps, tl, opt} = u
+  UI{cx, cy, keys, mx, my, md, tool, var, sp, msg, fr, inc, l, io, fps, tl, opt}
 
 # the front window, moved to (x, y), kept on the screen
 def Win.kind(w: Win) -> U32:
@@ -2039,12 +2163,12 @@ def Wins.drag(+ws: +List<Win>, +x: U32, +y: U32) -> +List<Win>:
       Win.moved(w, U32.min(x, (510 - Win.w(k) : U32)), U32.min(U32.max(y, 12), (290 - Win.h(k) : U32))) <> rest
 
 def on_move(+x: U32, +y: U32, +ui: UI, +wm: WM, +q: C.Q) -> EV:
-  UI{cx, cy, keys, mx, my, +md, +tool, var, sp, msg, fr, inc, +last, io, fps, tl} = ui
+  UI{cx, cy, keys, mx, my, +md, +tool, var, sp, msg, fr, inc, +last, io, fps, tl, opt} = ui
   WM{+ws, +dg, +gx, +gy} = wm
   +lx = (x >> 1n : U32)
   +ly = (y >> 1n : U32)
   +dragging = U32.is_eq(dg, 1)
-  +ui2 = {UI{cx, cy, keys, lx, ly, md, tool, var, sp, msg, fr, inc, last, io, fps, tl} : UI}
+  +ui2 = {UI{cx, cy, keys, lx, ly, md, tool, var, sp, msg, fr, inc, last, io, fps, tl, opt} : UI}
   +hov = pick(q, ui2)
   +paint = U32.is_eq(md, 1) && paint_tool(tool) && Bool.not(U32.is_eq(hov, last))
     && (hov < 99999 : U32) && Bool.not(dragging)
@@ -2053,8 +2177,8 @@ def on_move(+x: U32, +y: U32, +ui: UI, +wm: WM, +q: C.Q) -> EV:
     Bool.pick(+List<C.Act>, paint, build_act(q, ui2), []), False{}}
 
 def UI.with_tool(u: UI, +t: U32) -> UI:
-  UI{cx, cy, keys, mx, my, md, tool, var, sp, msg, fr, inc, last, io, fps, tl} = u
-  UI{cx, cy, keys, mx, my, md, t, var, sp, msg, fr, inc, last, io, fps, tl}
+  UI{cx, cy, keys, mx, my, md, tool, var, sp, msg, fr, inc, last, io, fps, tl, opt} = u
+  UI{cx, cy, keys, mx, my, md, t, var, sp, msg, fr, inc, last, io, fps, tl, opt}
 
 # the ride on a tile (a ride's tile, or any coaster track), or NONE
 def ride_at(+p: C.Park, +hov: U32) -> U32:
@@ -2094,7 +2218,7 @@ def inspect_at(+ws: +List<Win>, +p: C.Park, +hov: U32, +lx: U32, +ly: U32, +cx: 
     Wins.open(ws, 4, gid, U32.min((lx + 12 : U32), 300), U32.min(U32.max(C.sub0(ly, 30), 14), 156)))
 
 def on_map(+lx: U32, +ly: U32, +button: U32, +down: Bool, +ui: UI, +wm: WM, +p: C.Park) -> EV:
-  UI{+cx, +cy, keys, mx, my, md, +tool, +var, sp, msg, fr, inc, last, io, fps, tl} = ui
+  UI{+cx, +cy, keys, mx, my, md, +tool, +var, sp, msg, fr, inc, last, io, fps, tl, opt} = ui
   +q = C.Park.map(p)
   +bar = (ly >= 292 : U32)
   +item = bar_item(lx, ly, UI.cat(var))
@@ -2102,7 +2226,7 @@ def on_map(+lx: U32, +ly: U32, +button: U32, +down: Bool, +ui: UI, +wm: WM, +p: 
   +pickc = down && bar && (item >= 20 : U32)
   +var1 = sel(pickc, set_cat(var, (item - 20 : U32)), var)
   +var2 = sel(down && U32.is_eq(button, 5), View.zoom(var1, True{}), sel(down && U32.is_eq(button, 6), View.zoom(var1, False{}), var1))
-  +ui2 = {UI{cx, cy, keys, lx, ly, sel(down && U32.is_eq(button, 0), 1, 0), tool, var2, sp, msg, fr, inc, 99999, io, fps, tl} : UI}
+  +ui2 = {UI{cx, cy, keys, lx, ly, sel(down && U32.is_eq(button, 0), 1, 0), tool, var2, sp, msg, fr, inc, 99999, io, fps, tl, opt} : UI}
   +click = down && Bool.not(bar)
   +wheel = U32.is_eq(button, 5) || U32.is_eq(button, 6)
   +inspect = click && Bool.not(wheel) && (U32.is_eq(tool, 12) || Bool.not(U32.is_eq(button, 0)))
@@ -2113,9 +2237,11 @@ def on_map(+lx: U32, +ly: U32, +button: U32, +down: Bool, +ui: UI, +wm: WM, +p: 
   +parkb = down && in_box(lx, ly, 462, 294, 46, 9)
   +finb = down && in_box(lx, ly, 462, 305, 46, 9)
   +staffb = down && in_box(lx, ly, 414, 294, 46, 9)
+  +optb = down && in_box(lx, ly, 414, 305, 46, 9)
   +ws2 = Bool.pick(+List<Win>, parkb, Wins.open(ws, 2, 0, 150, 40),
     Bool.pick(+List<Win>, finb, Wins.open(ws, 3, 0, 140, 30),
-    Bool.pick(+List<Win>, staffb, Wins.open(ws, 5, 0, 160, 50), ws)))
+    Bool.pick(+List<Win>, staffb, Wins.open(ws, 5, 0, 160, 50),
+    Bool.pick(+List<Win>, optb, Wins.open(ws, 6, 0, 150, 60), ws))))
   EV{ui3, WM{Bool.pick(+List<Win>, inspect, inspect_at(ws2, p, hov, lx, ly, cx, cy, View.z(var)), ws2), 0, 0, 0},
     Bool.pick(+List<C.Act>, build, build_act(q, ui2), []), False{}}
 
@@ -2134,8 +2260,8 @@ def Win.arg(w: Win) -> U32:
 # a click in window i: it comes to the front, then its close box, title bar
 # (drag) or buttons act
 def UI.at(u: UI, +x: U32, +y: U32) -> UI:
-  UI{cx, cy, keys, mx, my, md, tool, var, sp, msg, fr, inc, last, io, fps, tl} = u
-  UI{cx, cy, keys, x, y, md, tool, var, sp, msg, fr, inc, last, io, fps, tl}
+  UI{cx, cy, keys, mx, my, md, tool, var, sp, msg, fr, inc, last, io, fps, tl, opt} = u
+  UI{cx, cy, keys, x, y, md, tool, var, sp, msg, fr, inc, last, io, fps, tl, opt}
 
 def on_win(+wi: U32, +lx: U32, +ly: U32, +ui: UI, +wm: WM, +p: C.Park) -> EV:
   +ws = Wins.front(WM.wins(wm), wi)
@@ -2143,7 +2269,7 @@ def on_win(+wi: U32, +lx: U32, +ly: U32, +ui: UI, +wm: WM, +p: C.Park) -> EV:
   +wx = Win.x(w)
   +wy = Win.y(w)
   +code = win_code(Win.kind(w), (lx - wx : U32), (ly - wy : U32))
-  EV{UI.at(ui, lx, ly),
+  EV{UI.with_opt(UI.at(ui, lx, ly), Opt.click(UI.opt(ui), code)),
     WM{Bool.pick(+List<Win>, U32.is_eq(code, 1), Wins.drop(ws, 0), ws), sel(U32.is_eq(code, 2), 1, 0),
       (lx - wx : U32), (ly - wy : U32)},
     win_act(p, Win.arg(w), code),
@@ -2332,12 +2458,12 @@ def snd_word(+p0: C.Park, +p1: C.Park, +inc0: U32, +inc1: U32, +msg0: U32, +msg1
     .|. (((tr >> 8n) .&. 1) << 24n) .|. (((var >> 16n) .&. 3) << 25n) : U32)
 
 def UI.said(u: UI, +m: U32) -> UI:
-  UI{cx, cy, keys, mx, my, md, tool, var, sp, +msg, fr, inc, last, io, fps, tl} = u
-  UI{cx, cy, keys, mx, my, md, tool, var, sp, sel(U32.is_eq(m, 0), msg, m), fr, inc, last, io, fps, tl}
+  UI{cx, cy, keys, mx, my, md, tool, var, sp, +msg, fr, inc, last, io, fps, tl, opt} = u
+  UI{cx, cy, keys, mx, my, md, tool, var, sp, sel(U32.is_eq(m, 0), msg, m), fr, inc, last, io, fps, tl, opt}
 
 def step_game.go(+p: C.Park, +ui: UI, +wm: WM, +acts: +List<C.Act>, quit: Bool,
   snd: Z.Snd, +clicked: Bool) -> Maybe<Game>:
-  UI{+cx, +cy, +keys, mx, my, md, tool, +var, +sp, +msg, +fr, +inc, last, io, fps, tl} = ui
+  UI{+cx, +cy, +keys, mx, my, md, tool, +var, +sp, +msg, +fr, +inc, last, io, fps, tl, opt} = ui
   +r1 = apply(acts, p, msg, inc)
   +r2 = ticks(U32.to_nat(sp), Res.park(r1), Res.inc(r1))
   +time = C.Park.time(Res.park(r2))
@@ -2346,14 +2472,15 @@ def step_game.go(+p: C.Park, +ui: UI, +wm: WM, +acts: +List<C.Act>, quit: Bool,
   +step = sel(U32.is_eq(View.z(var), 1), 4, sel(U32.is_eq(View.z(var), 2), 16, 8))
   +ui2 = {UI{cam(keys, cx, 4, 8, step, 260, 2000), cam(keys, cy, 1, 2, step, 170, 1500), keys, mx, my, md, tool,
     var, sp, sel(U32.is_eq(Res.msg(r1), msg), m2, Res.msg(r1)), (fr + 1 : U32),
-    sel(newmonth, 0, Res.inc(r2)), last, io, fps, tl} : UI}
+    sel(newmonth, 0, Res.inc(r2)), last, io, fps, tl, opt} : UI}
   +bk = Rides.broke(C.Park.rides(p), C.Park.rides(Res.park(r2)))
   +word = (snd_word(p, Res.park(r2), inc, Res.inc(r2), msg, Res.msg(r1), clicked, var)
+    .|. (Opt.vol(opt, 4n) << 27n) .|. (Opt.vol(opt, 6n) << 29n)
     .|. sel((bk >= 100 : U32) && (bk < 110 : U32), 8, sel((bk >= 110 : U32), 16, 0)) : U32)
   Bool.pick(Maybe<Game>, quit, None{}, Some{Game{Res.park(r2), UI.said(ui2, bk), wm, Z.Snd.cue(snd, word)}})
 
 def UI.tool(u: UI) -> U32:
-  UI{cx, cy, keys, mx, my, md, tool, var, sp, msg, fr, inc, last, io, fps, tl} = u
+  UI{cx, cy, keys, mx, my, md, tool, var, sp, msg, fr, inc, last, io, fps, tl, opt} = u
   tool
 
 def step_game(+g: Game, events: List<Event>) -> Maybe<Game>:
@@ -2399,11 +2526,12 @@ def view(g: Game) -> Game & Image:
   (g2, frame(g2))
 
 def UI.clock(u: UI, +now: Nat) -> UI:
-  UI{cx, cy, keys, mx, my, md, tool, var, sp, msg, +fr, inc, last, io, +fps, +tl} = u
+  UI{cx, cy, keys, mx, my, md, tool, var, sp, msg, +fr, inc, last, io, +fps, +tl, +opt} = u
   +due = U32.is_eq((fr .&. 31 : U32), 0)
   +dt = U32.from_nat(Nat.sub(now, tl))
+  +f = (32000 / U32.max(dt, 1) : U32)
   UI{cx, cy, keys, mx, my, md, tool, var, sp, msg, fr, inc, last, io,
-    sel(due, (32000 / U32.max(dt, 1) : U32), fps), Bool.pick(Nat, due, now, tl)}
+    sel(due, f, fps), Bool.pick(Nat, due, now, tl), sel(due, Opt.dyn(opt, f), opt)}
 
 def Game.clock(g: Game, +now: Nat) -> Game:
   Game{p, ui, wm, snd} = g
@@ -2418,7 +2546,7 @@ def Game.clock_m(m: Maybe<Game>, +now: Nat) -> Maybe<Game>:
 
 def Game.fps(g: Game) -> U32:
   Game{p, ui, wm, snd} = g
-  UI{cx, cy, keys, mx, my, md, tool, var, sp, msg, fr, inc, last, io, fps, tl} = ui
+  UI{cx, cy, keys, mx, my, md, tool, var, sp, msg, fr, inc, last, io, fps, tl, opt} = ui
   sel(U32.is_eq((fr .&. 127 : U32), 1), fps, 0)
 
 def Game.say.go(quiet: Bool, +f: U32, g: Game) -> IO(Maybe<Game>):
@@ -2448,12 +2576,12 @@ def Game.report(m: Maybe<Game>) -> IO(Maybe<Game>):
 # ----------------------------
 
 def UI.io(u: UI) -> U32:
-  UI{cx, cy, keys, mx, my, md, tool, var, sp, msg, fr, inc, last, io, fps, tl} = u
+  UI{cx, cy, keys, mx, my, md, tool, var, sp, msg, fr, inc, last, io, fps, tl, opt} = u
   io
 
 def UI.done(u: UI, +m: U32) -> UI:
-  UI{cx, cy, keys, mx, my, md, tool, var, sp, msg, fr, inc, last, io, fps, tl} = u
-  UI{cx, cy, keys, mx, my, md, tool, var, sp, m, fr, inc, last, 0, fps, tl}
+  UI{cx, cy, keys, mx, my, md, tool, var, sp, msg, fr, inc, last, io, fps, tl, opt} = u
+  UI{cx, cy, keys, mx, my, md, tool, var, sp, m, fr, inc, last, 0, fps, tl, opt}
 
 def Game.done(g: Game, +m: U32) -> Game:
   Game{p, ui, wm, snd} = g
@@ -2602,15 +2730,15 @@ def shot.write(path: String, +px: +List<U32>) -> IO(Unit):
     close_pair(r)
 
 def UI.cam(u: UI, +x: U32, +y: U32) -> UI:
-  UI{cx, cy, keys, mx, my, md, tool, var, sp, msg, fr, inc, last, io, fps, tl} = u
-  UI{x, y, keys, mx, my, md, tool, var, sp, msg, fr, inc, last, io, fps, tl}
+  UI{cx, cy, keys, mx, my, md, tool, var, sp, msg, fr, inc, last, io, fps, tl, opt} = u
+  UI{x, y, keys, mx, my, md, tool, var, sp, msg, fr, inc, last, io, fps, tl, opt}
 
 # win: a window to show (kind * 256 + arg; 0 for none)
 def UI.zoomed(u: UI, +z: U32) -> UI:
-  UI{cx, cy, keys, mx, my, md, +tool, +var, sp, msg, fr, inc, last, io, fps, tl} = u
+  UI{cx, cy, keys, mx, my, md, +tool, +var, sp, msg, fr, inc, last, io, fps, tl, opt} = u
   +c = Cat.of(tool)
   UI{cx, cy, keys, mx, my, md, tool, set_cat(((var .&. 4294180863) .|. ((z .&. 3) << 18n) : U32), sel((c < 99 : U32), c, 0)),
-    sp, msg, fr, inc, last, io, fps, tl}
+    sp, msg, fr, inc, last, io, fps, tl, opt}
 
 # win: a window to show (kind * 256 + arg; 0 for none); z: the zoom
 def shot.go(g: Game, path: String, n: Nat, +tool: U32, +cx: U32, +cy: U32, +win: U32, +z: U32) -> IO(Unit):
@@ -2756,6 +2884,42 @@ def Loop.again(m: Maybe<Game>, window: Window, au: Audio, shown: Image, events: 
     case Some{g}:
       Loop.play(Game.sound(g), window, au, img, events, shown, rest)
 
+# Win.config: a new window size or pixel mode for the native window
+def Win.config(window: Window, w: U32, h: U32, mode: U32) -> IO(Window):
+  import "./win_frame.c"
+  import "./win_config.js"
+
+def Game.opt(g: Game) -> U32:
+  Game{p, ui, wm, snd} = g
+  UI.opt(ui)
+
+def Game.configured(g: Game) -> Game:
+  Game{p, +ui, wm, snd} = g
+  Game{p, UI.with_opt(ui, (UI.opt(ui) .&. 4294950911 : U32)), wm, snd}
+
+def Loop.config.go(dirty: Bool, g: Game, window: Window, au: Audio, shown: Image, events: List<Event>,
+  img: Image, rest: Window -> Audio -> Game -> Image -> List<Event> -> Image -> IO(Unit))
+  -> IO(Unit):
+  match dirty:
+    case True{}:
+      +g2 = g
+      +o = Game.opt(g2)
+      do IO<Unit>:
+        w2 : Window <- Win.config(window, Opt.w(o), Opt.h(o), ((o >> 2n) .&. 1 : U32))
+        Loop.again(Some{Game.configured(g2)}, w2, au, shown, events, img, rest)
+    case False{}:
+      Loop.again(Some{g}, window, au, shown, events, img, rest)
+
+def Loop.config(m: Maybe<Game>, window: Window, au: Audio, shown: Image, events: List<Event>,
+  img: Image, rest: Window -> Audio -> Game -> Image -> List<Event> -> Image -> IO(Unit))
+  -> IO(Unit):
+  match m:
+    case None{}:
+      Window.close(window)
+    case Some{g}:
+      +g2 = g
+      Loop.config.go(Bool.not(U32.is_eq((Game.opt(g2) .&. 16384 : U32), 0)), g2, window, au, shown, events, img, rest)
+
 def Loop.after.go(m: Maybe<Game>, window: Window, au: Audio, shown: Image, events: List<Event>,
   img: Image, rest: Window -> Audio -> Game -> Image -> List<Event> -> Image -> IO(Unit))
   -> IO(Unit):
@@ -2766,7 +2930,7 @@ def Loop.after.go(m: Maybe<Game>, window: Window, au: Audio, shown: Image, event
       do IO<Unit>:
         now : Nat <- IO.now()
         m2 : Maybe<Game> <- Game.io_m(Game.clock_m(Some{g}, now))
-        Loop.again(m2, window, au, shown, events, img, rest)
+        Loop.config(m2, window, au, shown, events, img, rest)
 
 def Loop.after(shown: Window & Image & List<Event>, nx: Nx, au: Audio,
   rest: Window -> Audio -> Game -> Image -> List<Event> -> Image -> IO(Unit)) -> IO(Unit):
@@ -2786,12 +2950,29 @@ def Loop.go(fuel: Nat, window: Window, au: Audio, g: Game, img: Image, evs: List
         nx : Nx <- IO.join(Nx, chan)
         Loop.after(shown, nx, au, w => a => g2 => i2 => e2 => o2 => Loop.go(f, w, a, g2, i2, e2, o2))
 
-def Loop.run(g: Game) -> IO(Unit):
+# PARK_OPT=n starts with those options (see UI opt), for testing
+def env_opt(r: Result<&1, &1, U32 & String, String>) -> U32:
+  match r:
+    case Fail{e}:
+      0
+    case Done{s}:
+      (arg_u32(s) .|. 16384 : U32)
+
+def Game.with_opt(g: Game, +o: U32) -> Game:
+  Game{p, ui, wm, snd} = g
+  Game{p, UI.with_opt(ui, o), wm, snd}
+
+def Loop.start(g: Game) -> IO(Unit):
   +g2 = g
   do IO<Unit>:
     window : Window <- IO.try(Window, Window.open("Eldergrove Faire", 1024, 640))
     au : Audio <- Z.Snd.open(22050)
     Loop.go(U32.to_nat(4294967295), window, au, g2, frame(g2), [], Pix{0})
+
+def Loop.run(g: Game) -> IO(Unit):
+  do IO<Unit>:
+    env : Result<&1, &1, U32 & String, String> <- IO.get_env("PARK_OPT")
+    Loop.start(Game.with_opt(g, env_opt(env)))
 
 def is_arg(+args: +List<String>, s: String) -> Bool:
   match args:
@@ -2982,7 +3163,7 @@ def ui.click(+x: U32, +y: U32, +b: U32) -> List<Event>:
   [Mouse{(x * 2 : U32), (y * 2 : U32), b, True{}}, Mouse{(x * 2 : U32), (y * 2 : U32), b, False{}}]
 
 def UI.var(u: UI) -> U32:
-  UI{cx, cy, keys, mx, my, md, tool, var, sp, msg, fr, inc, last, io, fps, tl} = u
+  UI{cx, cy, keys, mx, my, md, tool, var, sp, msg, fr, inc, last, io, fps, tl, opt} = u
   var
 
 def ui.report(g: Game) -> String:

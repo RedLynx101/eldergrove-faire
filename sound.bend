@@ -857,7 +857,8 @@ def Amb.at(+t: U32, +lvl: U32) -> U32:
 # -----------------------
 # t: samples made so far; q: frames queued at the last write; one start
 # (+1) per effect; lvl: crowd | roar << 8 | lift << 16 | music off << 17 |
-# effects off << 18
+# effects off << 18 | music volume << 19 | effects volume << 21 (0 silent .. 3
+# full; each step down halves)
 
 type Snd is Data:
   Snd{t: U32, q: U32, coin: U32, click: U32, thud: U32, buzz: U32, bell: U32,
@@ -866,13 +867,27 @@ type Snd is Data:
 def Snd.new() -> Snd:
   Snd{0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 
+def Snd.sar(+v: U32, +n: Nat) -> U32:
+  sel(neg(v), (0 - ((0 - v) >> n) : U32), (v >> n : U32))
+
+def Snd.vol(+v: U32, +k: U32) -> U32:
+  match k:
+    case 3:
+      v
+    case 2:
+      Snd.sar(v, 1n)
+    case 1:
+      Snd.sar(v, 2n)
+    case _:
+      0
+
 def Snd.mix(+s: Snd, +t: U32) -> U32:
   Snd{t0, q, +coin, +click, +thud, +buzz, +bell, +whoosh, +chime, +lvl} = s
   +music = sel(U32.is_eq(((lvl >> 17n) .&. 1 : U32), 0), Mus.at(t), 0)
   +fx = sel(U32.is_eq(((lvl >> 18n) .&. 1 : U32), 0),
     (Fx.one(0, coin, t) + Fx.one(1, click, t) + Fx.one(2, thud, t) + Fx.one(3, buzz, t)
       + Fx.one(4, bell, t) + Fx.one(5, whoosh, t) + Fx.one(6, chime, t) + Amb.at(t, lvl) : U32), 0)
-  +v = (music + fx : U32)
+  +v = (Snd.vol(music, ((lvl >> 19n) .&. 3 : U32)) + Snd.vol(fx, ((lvl >> 21n) .&. 3 : U32)) : U32)
   sel(neg(v), sel(((v + 32000) >= 2147483648 : U32), (0 - 32000 : U32), v), U32.min(v, 32000))
 
 def Snd.f32(+v: U32) -> F32:
@@ -922,7 +937,8 @@ def Snd.cue(s: Snd, +w: U32) -> Snd:
     Snd.start(Snd.bit(w, 2n), t, thud, 2000), Snd.start(Snd.bit(w, 3n), t, buzz, 5600),
     Snd.start(Snd.bit(w, 4n), t, bell, 15000), Snd.start(Snd.bit(w, 5n), t, whoosh, 22050),
     Snd.start(Snd.bit(w, 6n), t, chime, 12000),
-    (((w >> 8n) .&. 255) .|. (((w >> 16n) .&. 255) << 8n) .|. (((w >> 24n) .&. 7) << 16n) : U32)}
+    (((w >> 8n) .&. 255) .|. (((w >> 16n) .&. 255) << 8n) .|. (((w >> 24n) .&. 7) << 16n)
+      .|. (((w >> 27n) .&. 15) << 19n) : U32)}
 
 # Playing
 # -------
@@ -938,7 +954,7 @@ def Snd.write(audio: Audio, samples: List<&2, F32>) -> IO(Audio & U32):
 # A test recording (--wav): the music, with each effect in turn a second or
 # two apart, over a crowd and a coaster on its lift hill; mono 16-bit WAV
 def Wav.demo() -> Snd:
-  Snd{0, 0, 22051, 44101, 66151, 88201, 110251, 154351, 198451, (150 .|. (200 << 8n) .|. (1 << 16n) : U32)}
+  Snd{0, 0, 22051, 44101, 66151, 88201, 110251, 154351, 198451, (150 .|. (200 << 8n) .|. (1 << 16n) .|. (15 << 19n) : U32)}
 
 def Wav.le(+n: Nat, +v: U32, +acc: +List<U32>) -> +List<U32>:
   match n:

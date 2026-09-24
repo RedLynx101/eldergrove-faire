@@ -32,7 +32,8 @@ Dev modes:
 - `./park --wav out.wav SECONDS` records the music with every effect in turn;
   `python3 tools/wavcheck.py out.wav out.png` prints its levels and draws it. `PARK_MUTE=1` plays nothing.
 - `--shot` takes an optional 6th argument, a window to show (kind * 256 + ride; 256 is the carousel's), and a 7th, the zoom (0 normal, 1 close, 2 far).
-- Environment: `PARK_PROF=1` prints frame timings, `PARK_NOPACE=1` removes the 60 Hz cap,
+- Environment: `PARK_OPT=n` starts with options n (bits: 0-1 window size, 2 whole pixels, 3 dynamic
+  resolution off), `PARK_PROF=1` prints frame timings, `PARK_NOPACE=1` removes the 60 Hz cap,
   `PARK_DUMP=out.ppm` writes the 300th shown frame. `tools/prof.sh ./park ...` profiles with perf.
 
 ## Controls
@@ -46,6 +47,7 @@ Dev modes:
 | Right-click | Open a ride's window, whatever the tool |
 | P / F / K | The park, finances and staff windows (or the PARK, FINANCES and STAFF buttons) |
 | M / N | Music on or off / sound effects on or off |
+| O | Options: window size, stretched or whole pixels, dynamic resolution, music and effects volume |
 | 1 - 5 | Open a toolbar tab: paths and furniture, land, scenery, rides, shops. Press again for its next tool |
 | X | Demolish |
 | U | Queue line (12 gold a tile) |

@@ -91,6 +91,17 @@ Small design decisions made while working, listed here so they can be revisited.
   grey hooded cloak and a staff; "Pilgrim"). Names follow the folk: halfling and gnome family names, orc
   epithets, commoners' trades. Riders on rides keep their folk and colours but not outfits or childhood
   (a rider code has 7 bits). `./park --people out.ppm` draws the whole cast for review.
+- **Options (O, or the OPTIONS button).** Window size 1024x640, 1280x800 or 1600x1000; pixels stretched to fit
+  (every size has the frame's 8:5 shape, so nothing is cropped) or whole pixels (the largest integer scale,
+  centred, black around it). The frame stays 512x320 logical pixels; the native blit (win_frame.c) scales it
+  and maps the mouse back, and a new effect, Win.config, has the frame thread resize the window between
+  frames. Music and effects volume in four steps each (each step halves). Options last for the session.
+- **Dynamic resolution** (on by default): when a second of frames runs under 52 a second, the world is
+  drawn at half resolution (one sample per 2x2 block) for about ten seconds, then full resolution is tried
+  again. Tiles with interface on them (text, panels, icons) always draw at full resolution, so the HUD and
+  windows stay sharp. Measured live: 1280x800 at 60 fps, 1600x1000 at 59 fps on the starter park.
+- **Windows** share one frame with a drop shadow; the bottom right holds STAFF / PARK / OPTIONS / FINANCES.
+  `PARK_OPT=n ./park` starts with options n (a testing aid).
 
 ## Done: M1, the vertical slice
 Isometric fantasy map, paths, terrain editing, 4 enchanted tree kinds, Dragon Carousel, Arcane Spire, Potion
@@ -203,7 +214,7 @@ machine: `PARK_PROF=1 ./park --live 700 1500`.
 - Guests may pick a ride whose queue is on the far side of the park.
 - There is no music volume control besides on/off.
 
-## M5: Controls, problems, staff and people (in progress: spikes 1-7 and the laws done)
+## Done: M5, controls, problems, staff and people
 Spikes, in order:
 
 1. (Done) **Controls and camera.** WASD (and the arrows) move the camera. Zoom in and out, in three steps (close,
@@ -231,7 +242,7 @@ Spikes, in order:
    - hats, hair, beards and cloaks;
    - children (smaller, and they prefer gentle rides).
    Staff wear their own uniforms.
-8. **The interface, revamped:**
+8. (Done) **The interface, revamped:**
    - the toolbar grouped into categories (paths, terrain, scenery, rides, shops, staff) with hover
      tooltips;
    - a consistent window style;

@@ -2,6 +2,42 @@
 // (bend2/effs/window_frame.c, Copyright HigherOrderCO, Apache License 2.0),
 // with a parallel blit that fills each quadtree square at once instead of
 // walking the tree per pixel.
+// The view: the frame is 512 x 320 logical pixels, shown stretched over the
+// window (mode 0) or at the largest whole-pixel scale that fits, centred
+// (mode 1). Win.config asks for a new window size or mode; the frame's
+// helper thread applies it before the next frame (it alone touches X).
+static volatile u32 pk_want_w, pk_want_h, pk_mode, pk_dirty;
+
+#ifdef CID_WIN_CONFIG
+Term win_config_run(Env e, Term* f, IoWork* w) {
+  pk_want_w = (u32)f[1];
+  pk_want_h = (u32)f[2];
+  pk_mode   = (u32)f[3];
+  pk_dirty  = 1;
+  return f[0];
+}
+
+static void __attribute__((constructor)) win_config_use(void) {
+  io_eff(CID_WIN_CONFIG, win_config_run, 0);
+}
+#endif
+
+static void pk_view(u32 w, u32 h, u32* ox, u32* oy, u32* sw, u32* sh) {
+  if (pk_mode == 1) {
+    u32 s = w / 512 < h / 320 ? w / 512 : h / 320;
+    if (s < 1) {
+      s = 1;
+    }
+    *sw = 512 * s;
+    *sh = 320 * s;
+  } else {
+    *sw = w;
+    *sh = h;
+  }
+  *ox = w > *sw ? (w - *sw) / 2 : 0;
+  *oy = h > *sh ? (h - *sh) / 2 : 0;
+}
+
 #if defined(__linux__)
 // Window
 // ======
@@ -102,9 +138,18 @@ static u32 pkwindow_clip(int v, u32 most) {
   return v < 0 ? 0 : (u32)v < most ? (u32)v : most - 1;
 }
 
+// a window pixel as the game sees it: the frame at twice its logical size
+static u32 pk_mx(int x, u32 ox, u32 sw) {
+  return pkwindow_clip((int)(((long)x - (long)ox) * 1024 / (long)sw), 1024);
+}
+
+static u32 pk_my(int y, u32 oy, u32 sh) {
+  return pkwindow_clip((int)(((long)y - (long)oy) * 640 / (long)sh), 640);
+}
+
 static void pkwindow_pump(BendWin* win) {
-  u32 w = win->img->width;
-  u32 h = win->img->height;
+  u32 ox, oy, sw, sh;
+  pk_view(win->img->width, win->img->height, &ox, &oy, &sw, &sh);
   while (XPending(win->dpy) > 0) {
     XEvent ev;
     XNextEvent(win->dpy, &ev);
@@ -114,17 +159,17 @@ static void pkwindow_pump(BendWin* win) {
       u32 b = ev.xbutton.button;
       // the wheel: 4 up, 5 down, reported as buttons 5 and 6 when pressed
       if ((b == 4 || b == 5) && ev.type == ButtonPress) {
-        pkwindow_push(win, 1, pkwindow_clip(ev.xbutton.x, w),
-          pkwindow_clip(ev.xbutton.y, h), b + 1, 1);
+        pkwindow_push(win, 1, pk_mx(ev.xbutton.x, ox, sw),
+          pk_my(ev.xbutton.y, oy, sh), b + 1, 1);
       }
       if (b >= 1 && b <= 3) {
-        pkwindow_push(win, 1, pkwindow_clip(ev.xbutton.x, w),
-          pkwindow_clip(ev.xbutton.y, h), b == 1 ? 0 : 4 - b,
+        pkwindow_push(win, 1, pk_mx(ev.xbutton.x, ox, sw),
+          pk_my(ev.xbutton.y, oy, sh), b == 1 ? 0 : 4 - b,
           ev.type == ButtonPress);
       }
     } else if (ev.type == MotionNotify) {
-      pkwindow_push(win, 2, pkwindow_clip(ev.xmotion.x, w),
-        pkwindow_clip(ev.xmotion.y, h), 0, 0);
+      pkwindow_push(win, 2, pk_mx(ev.xmotion.x, ox, sw),
+        pk_my(ev.xmotion.y, oy, sh), 0, 0);
     } else if (ev.type == ClientMessage
       && (Atom)ev.xclient.data.l[0] == win->del) {
       pkwindow_push(win, 3, 0, 0, 0, 0);
@@ -136,18 +181,23 @@ static void pkwindow_pump(BendWin* win) {
 // The frame's pixels: window_dev on the device while the corpus is
 // there (the tree's pages never leave it), else window_pix a pixel at
 // a time.
-static void pkfill_rec(Corpus H, Term t, u32 k, u32 x0, u32 y0, u32* pix,
-  u32 w, u32 h) {
-  if (x0 >= w || y0 >= h) {
+typedef struct {
+  u32* pix;
+  u32  w, ox, oy, sw, sh;
+} PkView;
+
+// a square of the logical frame (x0, y0, side 1 << k) onto its window pixels
+static void pkfill_rec(Corpus H, Term t, u32 k, u32 x0, u32 y0, const PkView* v) {
+  if (x0 >= 512 || y0 >= 320) {
     return;
   }
   if (term_tag(t) == TAG_CTR && k > 0) {
     Loc l = term_rfc(t) ? H[term_loc(t)] >> 24 : term_loc(t);
     u32 hs = 1u << (k - 1);
-    pkfill_rec(H, H[l + 0], k - 1, x0, y0, pix, w, h);
-    pkfill_rec(H, H[l + 1], k - 1, x0 + hs, y0, pix, w, h);
-    pkfill_rec(H, H[l + 2], k - 1, x0, y0 + hs, pix, w, h);
-    pkfill_rec(H, H[l + 3], k - 1, x0 + hs, y0 + hs, pix, w, h);
+    pkfill_rec(H, H[l + 0], k - 1, x0, y0, v);
+    pkfill_rec(H, H[l + 1], k - 1, x0 + hs, y0, v);
+    pkfill_rec(H, H[l + 2], k - 1, x0, y0 + hs, v);
+    pkfill_rec(H, H[l + 3], k - 1, x0 + hs, y0 + hs, v);
     return;
   }
   while (term_tag(t) == TAG_CTR) {
@@ -156,11 +206,13 @@ static void pkfill_rec(Corpus H, Term t, u32 k, u32 x0, u32 y0, u32* pix,
   }
   u32 c = (u32)term_loc(t) & 0xFFFFFF;
   u32 s = 1u << k;
-  u32 x1 = x0 + s < w ? x0 + s : w;
-  u32 y1 = y0 + s < h ? y0 + s : h;
-  for (u32 y = y0; y < y1; y += 1) {
-    u32* row = pix + (u64)y * w;
-    for (u32 x = x0; x < x1; x += 1) {
+  u32 lx1 = x0 + s < 512 ? x0 + s : 512;
+  u32 ly1 = y0 + s < 320 ? y0 + s : 320;
+  u32 X0 = v->ox + x0 * v->sw / 512, X1 = v->ox + lx1 * v->sw / 512;
+  u32 Y0 = v->oy + y0 * v->sh / 320, Y1 = v->oy + ly1 * v->sh / 320;
+  for (u32 y = Y0; y < Y1; y += 1) {
+    u32* row = v->pix + (u64)y * v->w;
+    for (u32 x = X0; x < X1; x += 1) {
       row[x] = c;
     }
   }
@@ -169,26 +221,26 @@ static void pkfill_rec(Corpus H, Term t, u32 k, u32 x0, u32 y0, u32* pix,
 #include <pthread.h>
 
 typedef struct {
-  Corpus H;
-  Term   t;
-  u32    k, x0, y0, w, h;
-  u32*   pix;
+  Corpus        H;
+  Term          t;
+  u32           k, x0, y0;
+  const PkView* v;
 } PkJob;
 
 static void* pkfill_job(void* arg) {
   PkJob* j = (PkJob*)arg;
-  pkfill_rec(j->H, j->t, j->k, j->x0, j->y0, j->pix, j->w, j->h);
+  pkfill_rec(j->H, j->t, j->k, j->x0, j->y0, j->v);
   return NULL;
 }
 
 // the 16 squares two levels down are filled on their own threads
-static void pkwindow_fill(Corpus H, u32* pix, u32 w, u32 h, Term image, u32 k) {
+static void pkwindow_fill(Corpus H, const PkView* v, Term image, u32 k) {
   PkJob jobs[16];
   pthread_t th[16];
   u32 n = 0;
   Term top = image;
   if (term_tag(top) != TAG_CTR || k < 2) {
-    pkfill_rec(H, image, k, 0, 0, pix, w, h);
+    pkfill_rec(H, image, k, 0, 0, v);
     return;
   }
   Loc l = term_rfc(top) ? H[term_loc(top)] >> 24 : term_loc(top);
@@ -198,7 +250,7 @@ static void pkwindow_fill(Corpus H, u32* pix, u32 w, u32 h, Term image, u32 k) {
     u32 cx = (q & 1) * hs;
     u32 cy = (q >> 1) * hs;
     if (term_tag(c) != TAG_CTR) {
-      pkfill_rec(H, c, k - 1, cx, cy, pix, w, h);
+      pkfill_rec(H, c, k - 1, cx, cy, v);
       continue;
     }
     Loc m = term_rfc(c) ? H[term_loc(c)] >> 24 : term_loc(c);
@@ -207,7 +259,7 @@ static void pkwindow_fill(Corpus H, u32* pix, u32 w, u32 h, Term image, u32 k) {
       PkJob* j = &jobs[n];
       j->H = H; j->t = H[m + r]; j->k = k - 2;
       j->x0 = cx + (r & 1) * qs; j->y0 = cy + (r >> 1) * qs;
-      j->w = w; j->h = h; j->pix = pix;
+      j->v = v;
       pthread_create(&th[n], NULL, pkfill_job, j);
       n += 1;
     }
@@ -246,16 +298,38 @@ typedef struct {
   Term   image;
 } PkArgs;
 
+// a new window size or view mode, asked for by Win.config
+static void pk_apply(BendWin* win) {
+  pk_dirty = 0;
+  u32 w = pk_want_w, h = pk_want_h;
+  if (w < 512 || h < 320 || w > 4096 || h > 4096) {
+    return;
+  }
+  if (w != (u32)win->img->width || h != (u32)win->img->height) {
+    XSizeHints hints = { .flags = PMinSize | PMaxSize, .min_width = w,
+      .min_height = h, .max_width = w, .max_height = h };
+    XSetWMNormalHints(win->dpy, win->win, &hints);
+    XResizeWindow(win->dpy, win->win, w, h);
+    int scr = DefaultScreen(win->dpy);
+    XImage* old = win->img;
+    win->img = XCreateImage(win->dpy, DefaultVisual(win->dpy, scr), DefaultDepth(win->dpy, scr),
+      ZPixmap, 0, io_mem(calloc((size_t)w * h, 4)), w, h, 32, w * 4);
+    win->img->byte_order = LSBFirst;
+    XDestroyImage(old);
+  }
+  memset(win->img->data, 0, (size_t)w * h * 4);
+}
+
 static void pkwindow_show(Corpus H, BendWin* win, Term image) {
   static u64 n, tf, tp, tx, last;
   u32 w = win->img->width;
   u32 h = win->img->height;
-  u32 k = 0;
-  while ((1u << k) < w || (1u << k) < h) {
-    k += 1;
-  }
+  PkView v;
+  v.pix = (u32*)win->img->data;
+  v.w   = w;
+  pk_view(w, h, &v.ox, &v.oy, &v.sw, &v.sh);
   u64 t0 = io_tick();
-  pkwindow_fill(H, (u32*)win->img->data, w, h, image, k);
+  pkwindow_fill(H, &v, image, 9);
   u64 t1 = io_tick();
   pkwindow_pace();
   u64 t2 = io_tick();
@@ -289,6 +363,9 @@ static void pkwindow_show(Corpus H, BendWin* win, Term image) {
 static void pkframe_call(IoWork* w) {
   BendWin* win = (BendWin*)w->hand;
   PkArgs*  a   = (PkArgs*)w->data;
+  if (pk_dirty) {
+    pk_apply(win);
+  }
   pkwindow_pump(win);
   pkwindow_show(a->H, win, a->image);
 }
