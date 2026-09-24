@@ -274,7 +274,7 @@ def load(ws: List<&2, U32>) -> Maybe<&2, C.Park>:
 # ---------------------------------------------------------
 
 def MAGIC() -> U32:
-  910313291
+  910313292
 
 def to_bytes(ws: List<&2, U32>) -> List<&2, U32>:
   match ws:

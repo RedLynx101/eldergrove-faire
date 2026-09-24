@@ -269,6 +269,20 @@ Small design decisions made while working, listed here so they can be revisited.
   a deck); benches, dirt and litter underfoot belong to the ground. Cutting coaster track clears any deck
   over the cut pieces; demolishing a deck over track takes only the deck. No proof touched the walking or
   building code, so all laws held unchanged.
+- **Cars per train: 1 to 20**, two seats a car, never more cars than the station has pieces. Settings bits
+  8-12 (0 meaning the old three). Blocks now grow to a train's length (cars stand 300 progress apart), so a
+  long train's tail never reaches the block behind it.
+- **Seats up to 64 a ride.** Each ride has two occupancy words (seats 0-31, 32-63); the seat search is a scan
+  (up to the ride's capacity) instead of eight unrolled steps; a rider's seat code is train * 64 + seat.
+  A coaster's capacity rides in its station word (open | wait << 1 | seats << 13 | train << 20), which the
+  boarding plan and the laws already took, so capacity_respected now reads `Ride.cap(ride, stn)`: a
+  mechanical change to the law's helper (board_ok and all_boards_ok gained the station argument). The
+  capacity and uniqueness proofs kept their shape: the step lemma, then induction over the scan.
+- **Fixed: the train-count setting never took effect.** Since M8 spike 3 a local `left` (pieces left) shadowed
+  the `left` parameter (trains left) in `Blocks.make`, so a train went in every third block regardless, and
+  test runs could have several trains. Renamed; the coaster test checks a one-train setting.
+- **A compiler limit:** nesting strict picks that each build a whole game (the shot's pictured parks) failed
+  with "an arity over 255"; a match dispatch builds only the one needed.
 
 ## Done: M1, the vertical slice
 Isometric fantasy map, paths, terrain editing, 4 enchanted tree kinds, Dragon Carousel, Arcane Spire, Potion
@@ -458,7 +472,7 @@ Spikes, in order:
 - Frame time and simulation cost measured against M7: within noise (about 1.4 ms a tick at 200 guests;
   16 ms a frame).
 
-## M9: Fixes, polish and the deferred items (in progress: spikes 1-6 done)
+## M9: Fixes, polish and the deferred items (done)
 Decisions from the owner (2026-09-24): bridges are my call (walkways for guests over paths and track);
 1 to 20 cars per train, never more than the track allows; steep pieces only in the two headings that face
 the camera; a coaster can be demolished, and removing track re-runs the check and closes the ride if it no

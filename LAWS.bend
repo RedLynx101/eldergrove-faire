@@ -91,16 +91,16 @@ law save_load_roundtrip:
 # 7. CAPACITY. Each tick's boarding plan is the only way anyone gets a
 # seat, and it never seats a guest past a ride's seats: every seat it hands
 # out is below the seat count of that guest's ride.
-def board_ok(+rs: +List<C.Ride>, b: C.Board) -> Bool:
+def board_ok(+rs: +List<C.Ride>, +stn: C.Stn, b: C.Board) -> Bool:
   C.Board{g, ride, seat} = b
-  U32.is_lt(seat, C.Ride.seats(C.Ride.kind(C.Rides.get(rs, ride))))
+  U32.is_lt(seat, C.Ride.cap(C.Rides.get(rs, ride), stn))
 
-def all_boards_ok(+rs: +List<C.Ride>, bs: +List<C.Board>) -> Bool:
+def all_boards_ok(+rs: +List<C.Ride>, +stn: C.Stn, bs: +List<C.Board>) -> Bool:
   match bs:
     case []:
       True{}
     case b <> rest:
-      board_ok(rs, b) && all_boards_ok(rs, rest)
+      board_ok(rs, stn, b) && all_boards_ok(rs, stn, rest)
 
 law capacity_respected:
   for +gs: List<&2, C.Guest>
@@ -108,7 +108,7 @@ law capacity_respected:
   for +q: C.Q
   for +rs: List<&2, C.Ride>
   for +stn: C.Stn
-  {all_boards_ok(rs, C.Boards.plan(gs, occ, q, rs, stn, [])) == True{} : Bool}
+  {all_boards_ok(rs, stn, C.Boards.plan(gs, occ, q, rs, stn, [])) == True{} : Bool}
 
 # 8. RIDERS. Nobody leaves the park from a ride: a guest riding at the start
 # of a tick is still in the park after it (still riding, or just got off).

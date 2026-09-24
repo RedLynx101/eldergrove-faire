@@ -66,7 +66,7 @@ Dev modes:
 | Esc | Close the front window (with none open: quit) |
 
 Guests ride visibly: carousel and spire hold 8 riders, shops serve 4 at a
-time, and each coaster train seats 6. Coaster riders board the train loading
+time, and each coaster car seats 2 (a train has 1 to 20 cars). Coaster riders board the train loading
 in the station and stay aboard for the whole circuit.
 
 Guests face the way they walk, carry what they buy (potions, tankards of
@@ -186,7 +186,8 @@ length, height, drops, air time, G-forces) and the ratings; a failure says which
 climb and marks it on the map with a red sign. Any change to the track or its settings needs a new test.
 The window also sets the coaster's type (the wooden Wyrm; the Dwarven Minecart, slower and
 gentler; the Griffin Flyer, fastest, its cars hanging below the rails), how many trains run (up to one
-in every third block) and the lift hill's speed. A park holds any number of coasters; the Wyrm Coaster comes
+in every third block), how many cars make a train (1 to 20, never more than its station has pieces;
+blocks grow so a whole train fits in one) and the lift hill's speed. A park holds any number of coasters; the Wyrm Coaster comes
 pre-built. Steep climbs only head toward the camera and steep drops away from it, so every steep piece
 faces you. The demolish tool on coaster track removes that piece and every piece after it (a red ghost
 shows which, half their price back); a coaster's ride window has DEMOLISH (click twice) to remove the
@@ -226,7 +227,7 @@ of that row (press again for the next one). Any camera key lets go.
 4. **coaster_on_circuit**: every open coaster's track closes back on its station.
 5. **no_collisions**: a block holds at most one train, and the block signals never lose or duplicate one (for any coaster's settings).
 6. **save_load_roundtrip**: loading a save gives back exactly the park that was saved.
-7. **capacity_respected**: the boarding plan (the only way anyone gets a seat) never seats a guest at or past their ride's seat count.
+7. **capacity_respected**: the boarding plan (the only way anyone gets a seat) never seats a guest at or past their ride's seat count (a coaster's comes from its station, two seats a car).
 8. **riders_conserved**: nobody leaves the park from a ride: a guest riding at the start of a tick is still in the park after it.
 9. **board_only_when_loading**: the boarding plan seats guests only on rides that are loading (a cycling ride between runs, the coaster's train standing in the station after unloading, or a shop).
 10. **ride_until_unloading**: a rider stays aboard until their ride unloads.

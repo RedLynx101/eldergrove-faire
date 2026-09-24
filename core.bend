@@ -1018,7 +1018,7 @@ def Guest.at_center(+x: U32, +y: U32) -> Bool:
 # to board, in order, into free seats -- so no two guests ever share a seat
 # and no ride is filled past its seats. The guest updates, the ticket sales
 # and the riders drawn on the rides all read that one plan. A rider keeps
-# their seat in `dir` (coaster: train id * 8 + seat).
+# their seat in `dir` (coaster: train id * 64 + seat).
 
 def bit8(+n: U32) -> U32:
   match n:
@@ -1059,25 +1059,24 @@ def Boards.taken(+bs: +List<Board>, +r: U32, +s: U32) -> Bool:
     case b <> rest:
       Board.at(b, r, s) || Boards.taken(rest, r, s)
 
-# seat k of ride r if no rider sits there (f: the seats free of riders), it
-# is below cap, and the plan (acc) hasn't handed it out yet; else `rest`
-def Seat.pick(+f: U32, +acc: +List<Board>, +r: U32, +cap: U32, +k: U32, +rest: U32) -> U32:
-  sel(Seat.has(f, bit8(k)) && (U32.is_lt(k, cap) && Bool.not(Boards.taken(acc, r, k))), k, rest)
+# whether seat k is free of riders (m0: seats 0-31 held, m1: 32-63)
+def Seat.open(+m0: U32, +m1: U32, +k: U32) -> Bool:
+  U32.is_eq(((sel((k < 32 : U32), m0, m1) >> U32.to_nat((k .&. 31 : U32))) .&. 1 : U32), 0)
 
-def Seat.first(+f: U32, +acc: +List<Board>, +r: U32, +cap: U32) -> U32:
-  Seat.pick(f, acc, r, cap, 0, Seat.pick(f, acc, r, cap, 1, Seat.pick(f, acc, r, cap, 2,
-    Seat.pick(f, acc, r, cap, 3, Seat.pick(f, acc, r, cap, 4, Seat.pick(f, acc, r, cap, 5,
-    Seat.pick(f, acc, r, cap, 6, Seat.pick(f, acc, r, cap, 7, NONE()))))))))
+# seat k of ride r if no rider sits there, it is below cap, and the plan
+# (acc) hasn't handed it out yet; else `rest`
+def Seat.pick(+m0: U32, +m1: U32, +acc: +List<Board>, +r: U32, +cap: U32, +k: U32, +rest: U32) -> U32:
+  sel(Seat.open(m0, m1, k) && (U32.is_lt(k, cap) && Bool.not(Boards.taken(acc, r, k))), k, rest)
 
-# the lowest free seat of ride r below cap (m: the seats riders hold), or NONE
-def Seat.free(+m: U32, +acc: +List<Board>, +r: U32, +cap: U32) -> U32:
-  Seat.first((m .^. 255 : U32), acc, r, cap)
+# the seats from k on, lowest first
+def Seat.scan(+n: Nat, +m0: U32, +m1: U32, +acc: +List<Board>, +r: U32, +cap: U32, +k: U32) -> U32:
+  match n:
+    case 0n:
+      NONE()
+    case 1n+p:
+      Seat.pick(m0, m1, acc, r, cap, k, Seat.scan(p, m0, m1, acc, r, cap, (k + 1 : U32)))
 
-# the coasters' stations, one word each: open | wait << 1 | the id of the
-# train standing there << 16 (65535: none)
-type Stn is Data:
-  Stn{info: List<&2, U32>}
-
+# the lowest free seat of ride r below cap, or NONE
 def Tab.at(+xs: +List<U32>, +i: U32) -> U32:
   match xs:
     case []:
@@ -1086,10 +1085,23 @@ def Tab.at(+xs: +List<U32>, +i: U32) -> U32:
       sel(U32.is_eq(i, 0), x, Tab.at(rest, (i - 1 : U32)))
 
 # the seats taken on each ride (the coaster: on the train loading now)
+def Seat.free(+occ: +List<U32>, +acc: +List<Board>, +r: U32, +cap: U32) -> U32:
+  Seat.scan(U32.to_nat(U32.min(cap, 64)), Tab.at(occ, (r * 2 : U32)), Tab.at(occ, (r * 2 + 1 : U32)), acc, r, cap, 0)
+
+# a ride's seats: a coaster's train, from its station word; else by kind
+type Stn is Data:
+  Stn{info: List<&2, U32>}
+
 def Stn.at(s: Stn, +k: U32) -> U32:
   Stn{info} = s
   Tab.at(info, k)
 
+def Ride.cap(r: Ride, +stn: Stn) -> U32:
+  +r2 = r
+  sel(U32.is_eq(Ride.kind(r2), 5), ((Stn.at(stn, Ride.ht(r2)) >> 13n) .&. 63 : U32), Ride.seats(Ride.kind(r2)))
+
+# the coasters' stations, one word each: open | wait << 1 | the id of the
+# train standing there << 16 (65535: none)
 type Train is Data:
   Train{id: U32, prog: U32, speed: U32, wait: U32}
 
@@ -1105,7 +1117,7 @@ def Stn.of(s: Slot, +acc: U32) -> U32:
       acc
     case Held{a, n, +st, t}:
       Train{+id, prog, speed, +wait} = t
-      sel(U32.is_eq(st, 1), ((acc .&. 1) .|. ((wait .&. 32767) << 1n) .|. ((id .&. 65535) << 16n) : U32), acc)
+      sel(U32.is_eq(st, 1), ((acc .&. 516097) .|. ((wait .&. 4095) << 1n) .|. ((id .&. 4095) << 20n) : U32), acc)
 
 def Stn.find(+ss: +List<Slot>, +acc: U32) -> U32:
   match ss:
@@ -1127,9 +1139,64 @@ type Track is Data:
 def Test.passed(+st: U32) -> Bool:
   U32.is_eq((st .&. 3 : U32), 2)
 
-def Track.stn(t: Track) -> U32:
+# a coaster's station word: open (tested) | the train standing there's wait
+# << 1 | seats a train << 13 | that train's id << 20 (4095: none)
+def Cfg.cars(+c: U32) -> U32:
+  +v = ((c >> 8n) .&. 31 : U32)
+  sel(U32.is_eq(v, 0), 3, v)
+
+# the station platform: the leading station pieces
+def Piece.kind(p: Piece) -> U32:
+  Piece{x, y, z, kind, dir} = p
+  kind
+
+# A coaster's settings (its track's cfg): bits 0-1 its type (0 the Wyrm, a
+# wooden coaster; 1 a Dwarven Minecart; 2 a Griffin Flyer, hanging below its
+# rails), 2-4 how many trains (0: as many as fit), 5-7 the lift hill's speed
+# step (speed 12 + 4 * step)
+def Pieces.stations(+ps: +List<Piece>) -> U32:
+  match ps:
+    case []:
+      0
+    case p <> rest:
+      +p2 = p
+      sel(U32.is_eq(Piece.kind(p2), 5), (1 + Pieces.stations(rest) : U32), 0)
+
+# cars a train: as set, but one a station piece at most, and 1 to 20
+def Track.pieces(t: Track) -> +List<Piece>:
   Track{pieces, open, blocks, start, end, cfg, stats} = t
-  Stn.find(blocks, (sel(open && Test.passed(stats), 1, 0) .|. (65535 << 16n) : U32))
+  pieces
+
+def Track.cfg(t: Track) -> U32:
+  Track{pieces, open, blocks, start, end, cfg, stats} = t
+  cfg
+
+def Track.cars(+t: Track) -> U32:
+  U32.max(U32.min(U32.min(Cfg.cars(Track.cfg(t)), Pieces.stations(Track.pieces(t))), 20), 1)
+
+# a block is long enough for a whole train (cars stand 300 apart, a piece
+# is 256), and at least 4 pieces
+def Track.stats(t: Track) -> U32:
+  Track{pieces, open, blocks, start, end, cfg, stats} = t
+  stats
+
+def Track.blocks(t: Track) -> +List<Slot>:
+  Track{pieces, open, blocks, start, end, cfg, stats} = t
+  blocks
+
+# Staff at work
+# -------------
+# Wages a month: Brownies 20, Tinkers 35, Watch Knights 30, Bards 25. Hired
+# staff start at the gate; each has a post (a ride's tile, taken in turn)
+# that they patrol around when they have nothing better to do.
+def Track.open(t: Track) -> Bool:
+  Track{pieces, open, blocks, start, end, cfg, stats} = t
+  open
+
+# a coaster only runs on a closed circuit
+def Track.stn(+t: Track) -> U32:
+  Stn.find(Track.blocks(t), (sel(Track.open(t) && Test.passed(Track.stats(t)), 1, 0)
+    .|. ((Track.cars(t) * 2) << 13n) .|. (4095 << 20n) : U32))
 
 def Tracks.stn(+ts: +List<Track>) -> +List<U32>:
   match ts:
@@ -1166,19 +1233,14 @@ def Pieces.get(+ps: +List<Piece>, +i: U32) -> Piece:
     case p <> rest:
       Bool.pick(Piece, U32.is_eq(i, 0), p, Pieces.get(rest, (i - 1 : U32)))
 
-def Piece.kind(p: Piece) -> U32:
-  Piece{x, y, z, kind, dir} = p
-  kind
-
-# A coaster's settings (its track's cfg): bits 0-1 its type (0 the Wyrm, a
-# wooden coaster; 1 a Dwarven Minecart; 2 a Griffin Flyer, hanging below its
-# rails), 2-4 how many trains (0: as many as fit), 5-7 the lift hill's speed
-# step (speed 12 + 4 * step)
 def Cfg.type(+c: U32) -> U32:
   (c .&. 3 : U32)
 
 def Cfg.trains(+c: U32) -> U32:
   ((c >> 2n) .&. 7 : U32)
+
+def Track.blen(+cars: U32) -> U32:
+  U32.max(4, (cars * 300 / 256 + 2 : U32))
 
 def Cfg.lift(+c: U32) -> U32:
   (12 + ((c >> 5n) .&. 7) * 4 : U32)
@@ -1193,15 +1255,15 @@ def Cfg.new() -> U32:
 
 # how many blocks a track of n pieces makes (see Blocks.make), and how many
 # trains fit (one in every third block)
-def Blocks.count(+n: U32) -> U32:
-  sel((n < 8 : U32), 1, ((n - 8) / 4 + 2 : U32))
+def Blocks.count(+n: U32, +bl: U32) -> U32:
+  sel((n < bl * 2 : U32), 1, ((n - bl * 2) / bl + 2 : U32))
 
-def Track.most(+n: U32) -> U32:
-  ((Blocks.count(n) + 2) / 3 : U32)
+def Track.most(+n: U32, +bl: U32) -> U32:
+  ((Blocks.count(n, bl) + 2) / 3 : U32)
 
 # a settings op: 16-18 the type, 20/21 one train fewer/more, 22/23 the lift
-# slower/faster
-def Cfg.set(+c: U32, +op: U32, +most: U32) -> U32:
+# slower/faster, 28/29 one car fewer/more (up to maxc)
+def Cfg.set(+c: U32, +op: U32, +most: U32, +maxc: U32) -> U32:
   +w0 = Cfg.trains(c)
   +w = sel(U32.is_eq(w0, 0), most, U32.min(w0, most))
   +lv = ((c >> 5n) .&. 7 : U32)
@@ -1209,7 +1271,10 @@ def Cfg.set(+c: U32, +op: U32, +most: U32) -> U32:
   +w2 = sel(U32.is_eq(op, 20), U32.max(sub0(w, 1), 1),
     sel(U32.is_eq(op, 21), U32.min((w + 1 : U32), U32.min(most, 7)), w0))
   +lv2 = sel(U32.is_eq(op, 22), sub0(lv, 1), sel(U32.is_eq(op, 23), U32.min((lv + 1 : U32), 6), lv))
-  (ty .|. (w2 << 2n) .|. (lv2 << 5n) : U32)
+  +cs = U32.min(Cfg.cars(c), maxc)
+  +cv = ((c >> 8n) .&. 31 : U32)
+  +cv2 = sel(U32.is_eq(op, 28), U32.max(sub0(cs, 1), 1), sel(U32.is_eq(op, 29), U32.min((cs + 1 : U32), maxc), cv))
+  (ty .|. (w2 << 2n) .|. (lv2 << 5n) .|. (cv2 << 8n) : U32)
 
 # physics inside a block: lift hills pull at the coaster's lift speed, slopes
 # accelerate, the station holds the train while it loads
@@ -1414,8 +1479,8 @@ def Occ.add.go(riding: Bool, +dir: U32, +tgt: U32, +rs: +List<Ride>, +stn: Stn,
     case True{}:
       +rd = Rides.get(rs, tgt)
       +k = Ride.kind(rd)
-      +on = Bool.not(U32.is_eq(k, 5)) || U32.is_eq((dir >> 3n : U32), (Stn.at(stn, Ride.ht(rd)) >> 16n : U32))
-      Occ.put(on, tab, tgt, bit8((dir .&. 7 : U32)))
+      +on = Bool.not(U32.is_eq(k, 5)) || U32.is_eq((dir >> 6n : U32), (Stn.at(stn, Ride.ht(rd)) >> 20n : U32))
+      Occ.put(on, tab, (tgt * 2 + ((dir .&. 63) >> 5n) : U32), (1 << U32.to_nat((dir .&. 31 : U32)) : U32))
     case False{}:
       tab
 
@@ -1432,7 +1497,7 @@ def Occ.fill(+gs: +List<Guest>, +rs: +List<Ride>, +stn: Stn, +tab: +List<U32>)
       Occ.fill(rest, rs, stn, Occ.add(g, rs, stn, tab))
 
 def Occ.table(+gs: +List<Guest>, +rs: +List<Ride>, +stn: Stn) -> +List<U32>:
-  Occ.fill(gs, rs, stn, Tab.zero(len32(Ride, rs), []))
+  Occ.fill(gs, rs, stn, Tab.zero((len32(Ride, rs) * 2 : U32), []))
 
 def Board.bit(b: Board, +r: U32) -> U32:
   Board{g, ride, +seat} = b
@@ -1644,14 +1709,14 @@ def Ride.loading.go(+k: U32, +ph: U32, +sid: U32, +sw: U32) -> Bool:
     case 2:
       U32.is_eq(ph, 0)
     case 5:
-      Bool.not(U32.is_eq(sid, 65535)) && (sw > 20 : U32) && (sw <= 100 : U32)
+      Bool.not(U32.is_eq(sid, 4095)) && (sw > 20 : U32) && (sw <= 100 : U32)
     case _:
       True{}
 
 def Ride.loading(r: Ride, stn: Stn) -> Bool:
   Ride{+kind, x, y, w, +h, price, open, +ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate, +wear} = r
   +info = Stn.at(stn, h)
-  Bool.not(Wear.broken(wear)) && Ride.loading.go(kind, ph, (info >> 16n : U32), ((info >> 1n) .&. 32767 : U32))
+  Bool.not(Wear.broken(wear)) && Ride.loading.go(kind, ph, (info >> 20n : U32), ((info >> 1n) .&. 4095 : U32))
 
 # whether a rider gets off now: a cycling ride while unloading; a coaster
 # rider when their own train is back in the station (and has stood long
@@ -1667,14 +1732,14 @@ def Ride.unloading.go(+k: U32, +ph: U32, +so: U32, +sid: U32, +sw: U32, +dir: U3
     case 2:
       U32.is_eq(ph, 2)
     case 5:
-      U32.is_eq(so, 0) || U32.is_eq((dir >> 3n : U32), sid) && (sw > 110 : U32) && (tmr < 2800 : U32)
+      U32.is_eq(so, 0) || U32.is_eq((dir >> 6n : U32), sid) && (sw > 110 : U32) && (tmr < 2800 : U32)
     case _:
       (tmr <= 1 : U32)
 
 def Ride.unloading(r: Ride, stn: Stn, +dir: U32, +tmr: U32) -> Bool:
   Ride{+kind, x, y, w, +h, price, open, +ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate, +wear} = r
   +info = Stn.at(stn, h)
-  Bool.not(Wear.broken(wear)) && Ride.unloading.go(kind, ph, (info .&. 1 : U32), (info >> 16n : U32), ((info >> 1n) .&. 32767 : U32), dir, tmr)
+  Bool.not(Wear.broken(wear)) && Ride.unloading.go(kind, ph, (info .&. 1 : U32), (info >> 20n : U32), ((info >> 1n) .&. 4095 : U32), dir, tmr)
 
 # standing where the ride is boarded: at its entrance (a shop: beside it)
 def Ride.at_door(r: Ride, +i: U32, +j: U32) -> Bool:
@@ -1709,8 +1774,7 @@ def Boards.try(want: Bool, +g: Guest, +occ: +List<U32>, +rs: +List<Ride>,
   match want:
     case True{}:
       +r = Guest.tgt(g)
-      +k = Ride.kind(Rides.get(rs, r))
-      Boards.put(Seat.free(Tab.at(occ, r), acc, r, Ride.seats(k)), Guest.id(g), r, acc)
+      Boards.put(Seat.free(occ, acc, r, Ride.cap(Rides.get(rs, r), stn)), Guest.id(g), r, acc)
     case False{}:
       acc
 
@@ -1747,7 +1811,7 @@ def Guest.board(g: Guest, +rs: +List<Ride>, +seat: U32, +stn: Stn) -> Guest:
   +coaster = U32.is_eq(k, 5)
   +item = sel(U32.is_eq(k, 3), 65536, sel(U32.is_eq(k, 4), 131072, sel(U32.is_eq(k, 8), 196608,
     sel(U32.is_eq(k, 9), 262144, 0))))
-  Guest{id, x, y, sel(coaster, ((Stn.at(stn, Ride.ht(rd)) >> 16n) * 8 + seat : U32), seat), 1, tgt,
+  Guest{id, x, y, sel(coaster, ((Stn.at(stn, Ride.ht(rd)) >> 20n) * 64 + seat : U32), seat), 1, tgt,
     sel(coaster, 3000, Ride.duration(k)), Guest.pay(cash, Ride.price(rd)),
     sel(U32.is_eq(k, 4), sub0(hu, 160), sel(U32.is_eq(k, 9), sub0(hu, 60), hu)),
     sel(U32.is_eq(k, 3), sub0(th, 160), sel(U32.is_eq(k, 9), sub0(th, 80), th)), en,
@@ -2084,10 +2148,6 @@ def Ride.next_tm(+ph: U32, +ph2: U32, +tm: U32, +n: U32) -> U32:
     sel(U32.is_eq(ph, 0), sel((n > 0 : U32), U32.min((tm + 1 : U32), 60000), 0), (tm + 1 : U32)))
 
 # a coaster's ratings come from its dry run, once it has passed a test
-def Track.stats(t: Track) -> U32:
-  Track{pieces, open, blocks, start, end, cfg, stats} = t
-  stats
-
 type Dry is Data:
   Dry{e: U32, i: U32, prev: U32, top: U32, drops: U32, run: U32, big: U32, gv: U32,
     gl: U32, neg: U32, air: U32, turns: U32, hi: U32, lo: U32, fail: U32}
@@ -2174,14 +2234,6 @@ def Dry.rate(d: Dry, +cfg: U32) -> U32:
   sel(U32.is_eq(n, 0), 0, Rate.pack(exc, int, nau))
 
 # where the (single) test train is: the absolute piece it's on, or 999
-def Track.pieces(t: Track) -> +List<Piece>:
-  Track{pieces, open, blocks, start, end, cfg, stats} = t
-  pieces
-
-def Track.cfg(t: Track) -> U32:
-  Track{pieces, open, blocks, start, end, cfg, stats} = t
-  cfg
-
 def Ride.rating(+k: U32, +t: Track) -> U32:
   match k:
     case 5:
@@ -2218,18 +2270,19 @@ def Dry.fail(d: Dry) -> U32:
 # thrill; G-forces make it intense; turning and floating make it queasy; a
 # ride too intense to enjoy loses half its excitement. Minecarts are tamer,
 # flyers wilder.
-def Blocks.make(+n: Nat, +start: U32, +total: U32, +k: U32, +left: U32) -> +List<Slot>:
+# (trains: how many more trains to place)
+def Blocks.make(+n: Nat, +start: U32, +total: U32, +k: U32, +trains: U32, +bl: U32) -> +List<Slot>:
   match n:
     case 0n:
       []
     case 1n+p:
       +left = (total - start : U32)
-      +len = sel((left < 8 : U32), left, 4)
+      +len = sel((left < bl * 2 : U32), left, bl)
       +st = sel(U32.is_eq(start, 0), 1, 0)
       +more = (start + len < total : U32)
-      +train = U32.is_eq((k % 3 : U32), 0) && (left > 0 : U32)
+      +train = U32.is_eq((k % 3 : U32), 0) && (trains > 0 : U32)
       +rest = Bool.pick(+List<Slot>, more,
-        Blocks.make(p, (start + len : U32), total, (k + 1 : U32), sel(train, (left - 1 : U32), left)), [])
+        Blocks.make(p, (start + len : U32), total, (k + 1 : U32), sel(train, (trains - 1 : U32), trains), bl), [])
       Bool.pick(Slot, train, Held{start, len, st, Train{k, 0, 0, 60}},
         Free{start, len, st}) <> rest
 
@@ -2239,7 +2292,8 @@ def Track.test(t: Track) -> Track:
   +shut = {Track{ps, False{}, [], s, e, cfg, 0} : Track}
   +st = (1 .|. (Dry.fail(Dry.run(ps, cfg)) << 2n) : U32)
   +on = (True{} && Track.closed(shut)) && Test.live(st)
-  Track{ps, on, Bool.pick(+List<Slot>, on, Blocks.make(U32.to_nat(n), 0, n, 0, 1), []), s, e, cfg, st}
+  +bl = Track.blen(U32.max(U32.min(U32.min(Cfg.cars(cfg), Pieces.stations(ps)), 20), 1))
+  Track{ps, on, Bool.pick(+List<Slot>, on, Blocks.make(U32.to_nat(n), 0, n, 0, 1, bl), []), s, e, cfg, st}
 
 # a pre-built coaster comes tested (if its dry run passes)
 def Track.pretest(t: Track) -> Track:
@@ -2439,22 +2493,13 @@ def Fix.has(+xs: +List<U32>, +i: U32) -> Bool:
 
 # a Brownie at a tile centre empties the bins on and beside it and mends
 # smashed furniture there
-def Track.blocks(t: Track) -> +List<Slot>:
-  Track{pieces, open, blocks, start, end, cfg, stats} = t
-  blocks
-
-# Staff at work
-# -------------
-# Wages a month: Brownies 20, Tinkers 35, Watch Knights 30, Bards 25. Hired
-# staff start at the gate; each has a post (a ride's tile, taken in turn)
-# that they patrol around when they have nothing better to do.
 def Ride.tick(r: Ride, +idx: U32, +q: Q, +ts: +List<Track>, +occ: +List<U32>,
   +plan: +List<Board>, +qt: +List<U32>, +fresh: Bool, +t: U32, +fx: +List<U32>) -> Ride:
   Ride{+kind, +x, +y, +w, +h, +price, +open, +ph, +tm, ent, ex, +qlen, +wmin, +wmax, +total, +earned, +born, rate, +wear} = r
   +tk = Tracks.get(ts, h)
   +ps = Track.pieces(tk)
   +brk = Wear.broken(wear)
-  +n = Seat.count((Tab.at(occ, idx) .|. Boards.mask(plan, idx, 0) : U32))
+  +n = Seat.count((Tab.at(occ, (idx * 2 : U32)) .|. Boards.mask(plan, idx, 0) : U32))
   +nb = Boards.count(plan, idx, 0)
   +go = (n > 0 : U32) && (tm >= wmin : U32) && ((n >= Ride.seats(kind) : U32) || (tm >= wmax : U32))
   +ph2 = sel(Ride.cycles(kind), Ride.next_ph(ph, tm, go, Ride.duration(kind)), 0)
@@ -2777,11 +2822,6 @@ def Blocks.trains(+ss: +List<Slot>) -> Nat:
       Nat.add(Slot.count(s), Blocks.trains(rest))
 
 # blocks of 4 pieces; a train waits in every third block
-def Track.open(t: Track) -> Bool:
-  Track{pieces, open, blocks, start, end, cfg, stats} = t
-  open
-
-# a coaster only runs on a closed circuit
 def Track.safe(+t: Track) -> Bool:
   imp(Track.open(t), Track.closed(t))
 
@@ -3380,7 +3420,7 @@ def TrackOp.ok(+q: Q, +trk: Track, +cash: U32, +op: U32) -> Bool:
   +add = Piece.adds(op) && shut && (n > 0 : U32) && (n < 250 : U32) && Bool.not(Track.closed(trk)) && plat
     && Piece.faces(op, Pose.d(Track.end(trk))) && Track.room(q, Track.end(trk), op) && Build.can_pay(cash, Piece.cost(op))
   +del = U32.is_eq(op, 7) && shut && (n > 1 : U32)
-  +set = (op >= 16 : U32) && (op < 24 : U32) && shut
+  +set = ((op >= 16 : U32) && (op < 24 : U32) || U32.is_eq(op, 28) || U32.is_eq(op, 29)) && shut
   +tst = (U32.is_eq(op, 24) || U32.is_eq(op, 25)) && shut && Track.closed(trk)
   +cut = U32.is_eq(op, 26) && (n > 1 : U32) || U32.is_eq(op, 27) && (n > 0 : U32)
   add || del || set || tst || cut || U32.is_eq(op, 8)
@@ -3477,7 +3517,8 @@ def Track.toggle.go(open: Bool, +ps: +List<Piece>, bs: +List<Slot>, +s: Pose,
       +shut = {Track{ps, False{}, [], s, e, cfg, stats} : Track}
       +ok = (True{} && Track.closed(shut)) && Test.live(stats)
       +want = Cfg.trains(cfg)
-      Track{ps, ok, Bool.pick(+List<Slot>, ok, Blocks.make(U32.to_nat(n), 0, n, 0, sel(U32.is_eq(want, 0), 99, want)), []), s, e, cfg, stats}
+      +bl = Track.blen(U32.max(U32.min(U32.min(Cfg.cars(cfg), Pieces.stations(ps)), 20), 1))
+      Track{ps, ok, Bool.pick(+List<Slot>, ok, Blocks.make(U32.to_nat(n), 0, n, 0, sel(U32.is_eq(want, 0), 99, want), bl), []), s, e, cfg, stats}
 
 def Track.toggle(t: Track) -> Track:
   Track{+ps, open, bs, +s, +e, +cfg, +stats} = t
@@ -3486,7 +3527,9 @@ def Track.toggle(t: Track) -> Track:
 # changing a setting closes the coaster (it is closed already: see TrackOp.ok)
 def Track.setcfg(t: Track, +op: U32) -> Track:
   Track{+ps, open, bs, +s, +e, +cfg, +stats} = t
-  Track{ps, False{}, [], s, e, Cfg.set(cfg, op, Track.most(len32(Piece, ps))), 0}
+  +maxc = U32.max(U32.min(Pieces.stations(ps), 20), 1)
+  +bl = Track.blen(U32.max(U32.min(Cfg.cars(cfg), maxc), 1))
+  Track{ps, False{}, [], s, e, Cfg.set(cfg, op, Track.most(len32(Piece, ps), bl), maxc), 0}
 
 # every coaster's type, two bits each (coaster k at bits 2k), for drawing
 # every coaster's type, in order, for drawing
