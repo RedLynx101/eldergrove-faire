@@ -69,8 +69,8 @@ def Dr.hits.go(d: Dr, +bx0: U32, +by0: U32, +s0: U32, +bx: U32, +by: U32, +s: U3
       ov((x - 30 : U32), (y - 92 : U32), (x + 31 : U32), (y + 16 : U32), bx, by, s)
     case DGate{+x, +y}:
       ov((x - 20 : U32), (y - 48 : U32), (x + 20 : U32), (y + 6 : U32), bx, by, s)
-    case DTrack{+x, +y, code, +zr}:
-      ov((x - 16 : U32), (y - zr * 8 - 12 : U32), (x + 17 : U32), (y + 17 : U32), bx, by, s)
+    case DTrack{+x, +y, +code, +zr}:
+      ov((x - 16 : U32), (y - zr * 8 - sel(U32.is_eq((code >> 16n : U32), 0), 12, 46) : U32), (x + 17 : U32), (y + 17 : U32), bx, by, s)
     case DGuest{+x, +y, +look, ph}:
       +top = sel(U32.is_eq(((look >> 20n) .&. 15 : U32), 0), 15, 29)
       ov((x - 7 : U32), (y - top : U32), (x + 8 : U32), (y + 1 : U32), bx, by, s)
@@ -469,10 +469,25 @@ def ride_st(r: C.Ride) -> U32:
   +k = C.Ride.kind(r2)
   +broken = Bool.not(C.Ride.shop(k)) && Bool.not(U32.is_eq(k, 0))
     && (U32.is_eq(C.Ride.ent(r2), C.NONE()) || U32.is_eq(C.Ride.ex(r2), C.NONE()))
-  ((C.Ride.ph(r2) << 16n) .|. U32.min(C.Ride.tm(r2), 65535) .|. sel(broken, 1073741824, 0) : U32)
+  ((C.Ride.ph(r2) << 16n) .|. U32.min(C.Ride.tm(r2), 65535) .|. sel(broken, 1073741824, 0)
+    .|. sel(C.Wear.broken(C.Ride.wear(r2)), 536870912, 0) : U32)
+
+# the coaster's first station tile, while the coaster is broken down
+def Rides.kind_at(+rs: +List<C.Ride>, +k: U32, +i: U32) -> U32:
+  match rs:
+    case []:
+      C.NONE()
+    case r <> rest:
+      sel(U32.is_eq(C.Ride.kind(r), k), i, Rides.kind_at(rest, k, (i + 1 : U32)))
+
+# a ride's window: open or closed, price, riders and queue, the loading
+# waits (cycling rides), and its record so far
+def Coaster.down(+rs: +List<C.Ride>, +i: U32, +j: U32) -> Bool:
+  +c = C.Rides.get(rs, Rides.kind_at(rs, 5, 0))
+  C.Wear.broken(C.Ride.wear(c)) && U32.is_eq(C.Ride.cx(c), i) && U32.is_eq(C.Ride.cy(c), j)
 
 def obj_dr.go(+obj: U32, +a: U32, +b: U32, +h: U32, +i: U32, +j: U32,
-  +sx: U32, +sy: U32, +k: U32, +st: U32, +rt: RT) -> +List<Dr>:
+  +sx: U32, +sy: U32, +k: U32, +st: U32, +rt: RT, +rs: +List<C.Ride>) -> +List<Dr>:
   match obj:
     case 2:
       [DTree{sx, (sy + 8 : U32), a, A.hash(i, j)}]
@@ -483,7 +498,7 @@ def obj_dr.go(+obj: U32, +a: U32, +b: U32, +h: U32, +i: U32, +j: U32,
         [DRide{sx, sel(U32.is_eq(C.Ride.size(k), 2), sy, (sy + 8 : U32)), k,
           C.Tab.at(RT.ra(rt), a), C.Tab.at(RT.rb(rt), a), st}], [])
     case 6:
-      [DTrack{sx, sy, a, (b - h : U32)}]
+      [DTrack{sx, sy, (a .|. sel(Coaster.down(rs, i, j), 65536, 0) : U32), (b - h : U32)}]
     case _:
       []
 
@@ -491,7 +506,7 @@ def obj_dr(+t: C.Tile, +i: U32, +j: U32, +sx: U32, +sy: U32,
   +rs: +List<C.Ride>, +rt: RT) -> +List<Dr>:
   C.Tile{+h, ter, +obj, +a, +b} = t
   +rd = C.Rides.get(rs, a)
-  obj_dr.go(obj, a, b, h, i, j, sx, sy, C.Ride.kind(rd), ride_st(rd), rt)
+  obj_dr.go(obj, a, b, h, i, j, sx, sy, C.Ride.kind(rd), ride_st(rd), rt, rs)
 
 # which neighbours a path or queue joins (paths, queues, the gate, rides),
 # or which neighbours of water are water: bit 1 i-1, 2 i+1, 4 j-1, 8 j+1
@@ -690,7 +705,7 @@ def guest_dyn(+g: C.Guest, +q: C.Q, +rs: +List<C.Ride>, +camx: U32, +camy: U32,
   # a fresh thought (the last three seconds) shows in the bubble first
   +code = C.Mind.code(mind)
   +fresh = Bool.not(U32.is_eq(code, 0)) && ((((t >> 4n) - C.Mind.when(mind)) .&. 65535) < 12 : U32)
-  +evicon = sel(U32.is_eq(code, 1), 7, sel(U32.is_eq(code, 2), 8, sel(U32.is_eq(code, 3), 6, sel(U32.is_eq(code, 9), 9, 3))))
+  +evicon = sel(U32.is_eq(code, 1), 7, sel(U32.is_eq(code, 2), 8, sel(U32.is_eq(code, 3), 6, sel(U32.is_eq(code, 9), 9, sel(U32.is_eq(code, 6), 5, 3)))))
   +keep = sel(U32.is_eq(st, 1), 197631, 16974847)
   +look = ((lk .&. keep) .|. (sel(sit, 0, (dir .&. 3 : U32)) << 12n) .|. (sel(fresh, evicon, sel(think, mood, 0)) << 20n)
     .|. sel(sit, 33554432, 0) : U32)
@@ -840,6 +855,23 @@ def tool_name(+t: U32) -> String:
     case _:
       "INSPECT (I): CLICK A RIDE OR A GUEST"
 
+def ride_name(+k: U32) -> String:
+  match k:
+    case 1:
+      "DRAGON CAROUSEL"
+    case 2:
+      "ARCANE SPIRE"
+    case 3:
+      "POTION STALL"
+    case 4:
+      "TROLL TAVERN"
+    case 5:
+      "WYRM COASTER"
+    case 6:
+      "PRIVY"
+    case _:
+      "RUINS"
+
 def msg_text(+m: U32) -> String:
   match m:
     case 1:
@@ -871,7 +903,8 @@ def msg_text(+m: U32) -> String:
     case 14:
       "SOUNDS OFF  (N)"
     case _:
-      ""
+      Bool.pick(String, (m >= 100 : U32) && (m < 110 : U32), "THE " ++ ride_name((m - 100 : U32)) ++ " BROKE DOWN!",
+        Bool.pick(String, (m >= 110 : U32) && (m < 120 : U32), "THE " ++ ride_name((m - 110 : U32)) ++ " IS FIXED", ""))
 
 def Cat.tool.go(+code: U32) -> U32:
   match code:
@@ -1037,23 +1070,6 @@ def happy_avg(+gs: +List<C.Guest>, +sum: U32, +n: U32) -> U32:
       C.Guest{id, x, y, dir, st, tgt, tmr, cash, hu, th, en, na, ha, lk, mind, bl} = g
       happy_avg(rest, (sum + ha : U32), (n + 1 : U32))
 
-def ride_name(+k: U32) -> String:
-  match k:
-    case 1:
-      "DRAGON CAROUSEL"
-    case 2:
-      "ARCANE SPIRE"
-    case 3:
-      "POTION STALL"
-    case 4:
-      "TROLL TAVERN"
-    case 5:
-      "WYRM COASTER"
-    case 6:
-      "PRIVY"
-    case _:
-      "RUINS"
-
 def riders(+gs: +List<C.Guest>, +idx: U32) -> U32:
   match gs:
     case []:
@@ -1066,12 +1082,13 @@ def ride_state(r: C.Ride) -> String:
   +r2 = r
   +k = C.Ride.kind(r2)
   +ph = C.Ride.ph(r2)
+  Bool.pick(String, C.Wear.broken(C.Ride.wear(r2)), "  BROKEN DOWN!",
   Bool.pick(String, C.Ride.shop(k), "",
     Bool.pick(String, U32.is_eq(C.Ride.ent(r2), C.NONE()), "  NEEDS AN ENTRANCE (QUEUE)",
     Bool.pick(String, U32.is_eq(C.Ride.ex(r2), C.NONE()), "  NEEDS AN EXIT (PATH)",
     Bool.pick(String, Bool.not(C.Ride.cycles(k)), "",
     Bool.pick(String, U32.is_eq(ph, 0), "  LOADING",
-    Bool.pick(String, U32.is_eq(ph, 1), "  RUNNING", "  UNLOADING"))))))
+    Bool.pick(String, U32.is_eq(ph, 1), "  RUNNING", "  UNLOADING")))))))
 
 def hover_info(+p: C.Park, +hov: U32, +acc: +List<Dr>) -> +List<Dr>:
   C.Park{+map, +guests, +rides, track, cash, time, nid, fin, mess, staff} = p
@@ -1279,15 +1296,6 @@ def ride_rates(+k: U32, +r: U32, +x: U32, +y: U32, +acc: +List<Dr>) -> +List<Dr>
       rate_line("INTENSITY", C.Rate.i(r), x, (y + 128 : U32), 16750480,
       rate_line("NAUSEA", C.Rate.n(r), x, (y + 140 : U32), 9498256, acc)))))
 
-def Rides.kind_at(+rs: +List<C.Ride>, +k: U32, +i: U32) -> U32:
-  match rs:
-    case []:
-      C.NONE()
-    case r <> rest:
-      sel(U32.is_eq(C.Ride.kind(r), k), i, Rides.kind_at(rest, k, (i + 1 : U32)))
-
-# a ride's window: open or closed, price, riders and queue, the loading
-# waits (cycling rides), and its record so far
 def ride_win(+p: C.Park, +x: U32, +y: U32, +idx: U32, +acc: +List<Dr>) -> +List<Dr>:
   C.Park{map, +guests, +rides, track, cash, +time, nid, fin, mess, staff} = p
   +rd = C.Rides.get(rides, idx)
@@ -1307,7 +1315,9 @@ def ride_win(+p: C.Park, +x: U32, +y: U32, +idx: U32, +acc: +List<Dr>) -> +List<
   T("CUSTOMERS " ++ U32.show(C.Ride.total(rd)), (x + 6 : U32), (y + 78 : U32), 15261888,
   T("INCOME *" ++ U32.show(C.Ride.earned(rd)), (x + 6 : U32), (y + 90 : U32), 11468718,
   T("AGE " ++ U32.show(age) ++ Bool.pick(String, U32.is_eq(age, 1), " MONTH", " MONTHS"),
-    (x + 6 : U32), (y + 102 : U32), 15261888, waits))))))))
+    (x + 6 : U32), (y + 102 : U32), 15261888,
+  T(Bool.pick(String, C.Ride.shop(k), "", "RELIABILITY " ++ U32.show((C.Wear.rel(C.Ride.wear(rd)) * 100 / 255 : U32)) ++ "%"),
+    (x + 96 : U32), (y + 102 : U32), sel((C.Wear.rel(C.Ride.wear(rd)) < 150 : U32), 16748688, 15261888), waits)))))))))
 
 # Guests' names: from their id and class, always the same
 def name_first(+n: U32) -> String:
@@ -1479,6 +1489,8 @@ def event_text(+code: U32, nm: String) -> String:
       nm ++ " WAS GREAT!"
     case 9:
       "THIS PATH IS FILTHY"
+    case 6:
+      "STUCK ON " ++ nm ++ "!"
     case _:
       nm ++ " WAS TOO INTENSE"
 
@@ -2110,6 +2122,19 @@ def Rides.started(+a: +List<C.Ride>, +b: +List<C.Ride>) -> U32:
     case _ _:
       0
 
+# a ride that broke down (100 + its kind) or was repaired (110 + kind)
+# between two ticks, or 0
+def Rides.broke(+a: +List<C.Ride>, +b: +List<C.Ride>) -> U32:
+  match a b:
+    case Con{r0, ra} Con{r1, rb}:
+      +k = C.Ride.kind(r1)
+      +w0 = C.Wear.broken(C.Ride.wear(r0))
+      +w1 = C.Wear.broken(C.Ride.wear(r1))
+      +code = sel(Bool.not(w0) && w1, (100 + k : U32), sel(w0 && Bool.not(w1), (110 + k : U32), 0))
+      sel(U32.is_eq(code, 0), Rides.broke(ra, rb), code)
+    case _ _:
+      0
+
 # the coaster: its fastest train (0..255) | a train climbing a lift hill << 8
 def Snd.slot(sl: C.Slot, +ps: +List<C.Piece>, +acc: U32) -> U32:
   match sl:
@@ -2148,6 +2173,10 @@ def snd_word(+p0: C.Park, +p1: C.Park, +inc0: U32, +inc1: U32, +msg0: U32, +msg1
     .|. sel(whoosh, 32, 0) .|. sel(chime, 64, 0) .|. (crowd << 8n) .|. ((tr .&. 255) << 16n)
     .|. (((tr >> 8n) .&. 1) << 24n) .|. (((var >> 16n) .&. 3) << 25n) : U32)
 
+def UI.said(u: UI, +m: U32) -> UI:
+  UI{cx, cy, keys, mx, my, md, tool, var, sp, +msg, fr, inc, last, io, fps, tl} = u
+  UI{cx, cy, keys, mx, my, md, tool, var, sp, sel(U32.is_eq(m, 0), msg, m), fr, inc, last, io, fps, tl}
+
 def step_game.go(+p: C.Park, +ui: UI, +wm: WM, +acts: +List<C.Act>, quit: Bool,
   snd: Z.Snd, +clicked: Bool) -> Maybe<Game>:
   UI{+cx, +cy, +keys, mx, my, md, tool, +var, +sp, +msg, +fr, +inc, last, io, fps, tl} = ui
@@ -2160,8 +2189,10 @@ def step_game.go(+p: C.Park, +ui: UI, +wm: WM, +acts: +List<C.Act>, quit: Bool,
   +ui2 = {UI{cam(keys, cx, 4, 8, step, 260, 2000), cam(keys, cy, 1, 2, step, 170, 1500), keys, mx, my, md, tool,
     var, sp, sel(U32.is_eq(Res.msg(r1), msg), m2, Res.msg(r1)), (fr + 1 : U32),
     sel(newmonth, 0, Res.inc(r2)), last, io, fps, tl} : UI}
-  +word = snd_word(p, Res.park(r2), inc, Res.inc(r2), msg, Res.msg(r1), clicked, var)
-  Bool.pick(Maybe<Game>, quit, None{}, Some{Game{Res.park(r2), ui2, wm, Z.Snd.cue(snd, word)}})
+  +bk = Rides.broke(C.Park.rides(p), C.Park.rides(Res.park(r2)))
+  +word = (snd_word(p, Res.park(r2), inc, Res.inc(r2), msg, Res.msg(r1), clicked, var)
+    .|. sel((bk >= 100 : U32) && (bk < 110 : U32), 8, sel((bk >= 110 : U32), 16, 0)) : U32)
+  Bool.pick(Maybe<Game>, quit, None{}, Some{Game{Res.park(r2), UI.said(ui2, bk), wm, Z.Snd.cue(snd, word)}})
 
 def UI.tool(u: UI) -> U32:
   UI{cx, cy, keys, mx, my, md, tool, var, sp, msg, fr, inc, last, io, fps, tl} = u
@@ -2664,7 +2695,7 @@ def ride_report(+rs: +List<C.Ride>, +gs: +List<C.Guest>, +i: U32) -> String:
     case r <> rest:
       " [" ++ U32.show(i) ++ " k" ++ U32.show(C.Ride.kind(r)) ++ " open" ++ Bool.show(C.Ride.is_open(r))
         ++ " riding " ++ U32.show(riders(gs, i)) ++ " heading " ++ U32.show(heading(gs, i))
-        ++ " ph" ++ U32.show(C.Ride.ph(r)) ++ " q" ++ U32.show(C.Ride.qlen(r)) ++ " total " ++ U32.show(C.Ride.total(r))
+        ++ " ph" ++ U32.show(C.Ride.ph(r)) ++ " q" ++ U32.show(C.Ride.qlen(r)) ++ " total " ++ U32.show(C.Ride.total(r)) ++ " rel " ++ U32.show(C.Wear.rel(C.Ride.wear(r)))
         ++ ride_state(r) ++ "]"
         ++ ride_report(rest, gs, (i + 1 : U32))
 

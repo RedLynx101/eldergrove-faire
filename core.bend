@@ -369,7 +369,7 @@ def Q.build(+d: Nat, +x0: U32, +y0: U32) -> Q:
 type Ride is Data:
   Ride{kind: U32, x: U32, y: U32, w: U32, h: U32, price: U32, open: U32,
     ph: U32, tm: U32, ent: U32, ex: U32, qlen: U32, wmin: U32, wmax: U32,
-    total: U32, earned: U32, born: U32, rate: U32}
+    total: U32, earned: U32, born: U32, rate: U32, wear: U32}
 
 def Ride.size(+k: U32) -> U32:
   sel(U32.is_eq(k, 1), 2, 1)
@@ -495,7 +495,7 @@ def Fee.cap(+v: U32) -> U32:
   sel(U32.is_le(v, 40), v, 40)
 
 def Ride.new(+k: U32, +x: U32, +y: U32, +s: U32, +open: U32, +t: U32) -> Ride:
-  Ride{k, x, y, s, s, Price.cap(Ride.fee(k)), open, 0, 0, NONE(), NONE(), 0, 60, 420, 0, 0, t, Ride.rate0(k)}
+  Ride{k, x, y, s, s, Price.cap(Ride.fee(k)), open, 0, 0, NONE(), NONE(), 0, 60, 420, 0, 0, t, Ride.rate0(k), 255}
 
 def Ride.fun(+k: U32) -> U32:
   match k:
@@ -520,82 +520,82 @@ def Ride.thrill(+k: U32) -> U32:
       0
 
 def Ride.kind(r: Ride) -> U32:
-  Ride{kind, x, y, w, h, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate} = r
+  Ride{kind, x, y, w, h, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate, wear} = r
   kind
 
 # open, standing, and (shops aside) with both an entrance and an exit
 def Ride.is_open(r: Ride) -> Bool:
-  Ride{+kind, x, y, w, h, price, open, ph, tm, +ent, +ex, qlen, wmin, wmax, total, earned, born, rate} = r
+  Ride{+kind, x, y, w, h, price, open, ph, tm, +ent, +ex, qlen, wmin, wmax, total, earned, born, rate, wear} = r
   U32.is_eq(open, 1) && Bool.not(U32.is_eq(kind, 0))
     && (Ride.shop(kind) || Bool.not(U32.is_eq(ent, NONE())) && Bool.not(U32.is_eq(ex, NONE())))
 
 def Ride.price(r: Ride) -> U32:
-  Ride{kind, x, y, w, h, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate} = r
+  Ride{kind, x, y, w, h, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate, wear} = r
   price
 
 def Ride.cx(r: Ride) -> U32:
-  Ride{kind, x, y, w, h, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate} = r
+  Ride{kind, x, y, w, h, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate, wear} = r
   x
 
 def Ride.cy(r: Ride) -> U32:
-  Ride{kind, x, y, w, h, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate} = r
+  Ride{kind, x, y, w, h, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate, wear} = r
   y
 
 def Ride.wd(r: Ride) -> U32:
-  Ride{kind, x, y, w, h, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate} = r
+  Ride{kind, x, y, w, h, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate, wear} = r
   w
 
 def Ride.ph(r: Ride) -> U32:
-  Ride{kind, x, y, w, h, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate} = r
+  Ride{kind, x, y, w, h, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate, wear} = r
   ph
 
 def Ride.tm(r: Ride) -> U32:
-  Ride{kind, x, y, w, h, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate} = r
+  Ride{kind, x, y, w, h, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate, wear} = r
   tm
 
 def Ride.ent(r: Ride) -> U32:
-  Ride{kind, x, y, w, h, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate} = r
+  Ride{kind, x, y, w, h, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate, wear} = r
   ent
 
 def Ride.ex(r: Ride) -> U32:
-  Ride{kind, x, y, w, h, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate} = r
+  Ride{kind, x, y, w, h, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate, wear} = r
   ex
 
 def Ride.qlen(r: Ride) -> U32:
-  Ride{kind, x, y, w, h, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate} = r
+  Ride{kind, x, y, w, h, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate, wear} = r
   qlen
 
 def Ride.wmin(r: Ride) -> U32:
-  Ride{kind, x, y, w, h, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate} = r
+  Ride{kind, x, y, w, h, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate, wear} = r
   wmin
 
 def Ride.wmax(r: Ride) -> U32:
-  Ride{kind, x, y, w, h, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate} = r
+  Ride{kind, x, y, w, h, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate, wear} = r
   wmax
 
 def Ride.total(r: Ride) -> U32:
-  Ride{kind, x, y, w, h, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate} = r
+  Ride{kind, x, y, w, h, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate, wear} = r
   total
 
 def Ride.earned(r: Ride) -> U32:
-  Ride{kind, x, y, w, h, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate} = r
+  Ride{kind, x, y, w, h, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate, wear} = r
   earned
 
 def Ride.born(r: Ride) -> U32:
-  Ride{kind, x, y, w, h, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate} = r
+  Ride{kind, x, y, w, h, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate, wear} = r
   born
 
 def Ride.rate(r: Ride) -> U32:
-  Ride{kind, x, y, w, h, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate} = r
+  Ride{kind, x, y, w, h, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate, wear} = r
   rate
 
 def Ride.open_flag(r: Ride) -> U32:
-  Ride{kind, x, y, w, h, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate} = r
+  Ride{kind, x, y, w, h, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate, wear} = r
   open
 
 # distance from a tile to the nearest tile of the ride's footprint
 def Ride.dist(r: Ride, +i: U32, +j: U32) -> U32:
-  Ride{kind, +x, +y, +w, +h, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate} = r
+  Ride{kind, +x, +y, +w, +h, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate, wear} = r
   +ci = U32.min(U32.max(i, x), (x + w - 1 : U32))
   +cj = U32.min(U32.max(j, y), (y + h - 1 : U32))
   (absd(i, ci) + absd(j, cj) : U32)
@@ -604,7 +604,7 @@ def Ride.dist(r: Ride, +i: U32, +j: U32) -> U32:
 def Rides.get(+rs: +List<Ride>, +i: U32) -> Ride:
   match rs i:
     case Nil{} _:
-      Ride{0, 0, 0, 1, 1, 0, 0, 0, 0, NONE(), NONE(), 0, 0, 0, 0, 0, 0, 0}
+      Ride{0, 0, 0, 1, 1, 0, 0, 0, 0, NONE(), NONE(), 0, 0, 0, 0, 0, 0, 0, 255}
     case Con{r, rest} 0:
       r
     case Con{r, rest} _:
@@ -1187,6 +1187,41 @@ def Queue.wait(check: Bool, +qs: +List<U32>, +x: U32, +y: U32, +d: U32) -> Bool:
 
 # whether a ride takes riders now: a cycling ride while loading; the coaster
 # while a train stands in the station after its riders got off; shops always
+# Wear: a ride's reliability (bits 0-7; 255 when new), whether it is broken
+# down (bit 8), and how long it has stood broken (bits 16-31). A running
+# ride wears a little now and then and may break down, the likelier the
+# more worn; a breakdown lasts until repaired (REPAIR ticks of work), which
+# restores some reliability, never past what the ride's age allows.
+def Wear.rel(+w: U32) -> U32:
+  (w .&. 255 : U32)
+
+def Wear.broken(+w: U32) -> Bool:
+  Bool.not(U32.is_eq((w .&. 256 : U32), 0))
+
+def Wear.fix(+w: U32) -> U32:
+  (w >> 16n : U32)
+
+def REPAIR() -> U32:
+  1800
+
+def Wear.tick(+w: U32, +k: U32, +open: U32, +idx: U32, +t: U32, +born: U32) -> U32:
+  +rel = Wear.rel(w)
+  +brk = Wear.broken(w)
+  +runs = U32.is_eq(open, 1) && (Ride.cycles(k) || U32.is_eq(k, 5))
+  +due = runs && Bool.not(brk) && U32.is_eq(((t + idx * 13) .&. 63 : U32), 0)
+  +roll = (hash((idx + 977 : U32), t) .&. 1023 : U32)
+  +snap = due && (roll < ((255 - rel) >> 3n) : U32)
+  +rel2 = sel(due && (roll >= 512 : U32), U32.max(sub0(rel, 1), 40), rel)
+  +fixed = brk && (Wear.fix(w) >= REPAIR() : U32)
+  +cap = U32.max(sub0(255, ((t - born) / 1200 : U32)), 120)
+  +rel3 = sel(fixed, U32.min((rel + 60 : U32), cap), rel2)
+  +brk2 = Bool.not(fixed) && (brk || snap)
+  (rel3 .|. sel(brk2, 256, 0) .|. (sel(brk2 && brk, (Wear.fix(w) + 1 : U32), 0) << 16n) : U32)
+
+def Ride.wear(r: Ride) -> U32:
+  Ride{kind, x, y, w, h, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate, wear} = r
+  wear
+
 def Ride.loading.go(+k: U32, +ph: U32, +sid: U32, +sw: U32) -> Bool:
   match k:
     case 1:
@@ -1199,9 +1234,9 @@ def Ride.loading.go(+k: U32, +ph: U32, +sid: U32, +sw: U32) -> Bool:
       True{}
 
 def Ride.loading(r: Ride, stn: Stn) -> Bool:
-  Ride{+kind, x, y, w, h, price, open, +ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate} = r
+  Ride{+kind, x, y, w, h, price, open, +ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate, +wear} = r
   Stn{so, +sid, +sw} = stn
-  Ride.loading.go(kind, ph, sid, sw)
+  Bool.not(Wear.broken(wear)) && Ride.loading.go(kind, ph, sid, sw)
 
 # whether a rider gets off now: a cycling ride while unloading; a coaster
 # rider when their own train is back in the station (and has stood long
@@ -1222,13 +1257,13 @@ def Ride.unloading.go(+k: U32, +ph: U32, +so: U32, +sid: U32, +sw: U32, +dir: U3
       (tmr <= 1 : U32)
 
 def Ride.unloading(r: Ride, stn: Stn, +dir: U32, +tmr: U32) -> Bool:
-  Ride{+kind, x, y, w, h, price, open, +ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate} = r
+  Ride{+kind, x, y, w, h, price, open, +ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate, +wear} = r
   Stn{+so, +sid, +sw} = stn
-  Ride.unloading.go(kind, ph, so, sid, sw, dir, tmr)
+  Bool.not(Wear.broken(wear)) && Ride.unloading.go(kind, ph, so, sid, sw, dir, tmr)
 
 # standing where the ride is boarded: at its entrance (a shop: beside it)
 def Ride.at_door(r: Ride, +i: U32, +j: U32) -> Bool:
-  Ride{+kind, +x, +y, +w, +h, price, open, ph, tm, +ent, ex, qlen, wmin, wmax, total, earned, born, rate} = r
+  Ride{+kind, +x, +y, +w, +h, price, open, ph, tm, +ent, ex, qlen, wmin, wmax, total, earned, born, rate, wear} = r
   +ci = U32.min(U32.max(i, x), (x + w - 1 : U32))
   +cj = U32.min(U32.max(j, y), (y + h - 1 : U32))
   Ride.shop(kind) && U32.is_eq((absd(i, ci) + absd(j, cj) : U32), 1)
@@ -1342,7 +1377,10 @@ def Guest.off(done: Bool, +id: U32, +x: U32, +y: U32, +dir: U32, +tgt: U32, +tmr
         sel(out, (a .&. 3 : U32), 0), 0, NONE(), 0, cash, hu, th, en, (na + (Rate.n(Ride.rate(rd)) * 3) / 4 : U32), ha, lk,
         Guest.verdict(rd, tgt, lk, mind, t), bl}
     case False{}:
-      Guest{id, x, y, dir, 1, tgt, (tmr - 1 : U32), cash, hu, th, en, na, ha, lk, mind, bl}
+      +stuck = Wear.broken(Ride.wear(Rides.get(rs, tgt)))
+      Guest{id, x, y, dir, 1, tgt, sub0(tmr, 1), cash, hu, th, en, na,
+        sel(stuck && U32.is_eq(((t + id) .&. 31 : U32), 0), sub0(ha, 1), ha), lk,
+        sel(stuck && U32.is_eq(((t + id) .&. 511 : U32), 0), Mind.make(6, tgt, t), mind), bl}
 
 def Guest.riding(g: Guest, +q: Q, +rs: +List<Ride>, +t: U32, +stn: Stn) -> Guest:
   Guest{+id, +x, +y, +dir, st, +tgt, +tmr, +cash, +hu, +th, +en, +na, +ha, +lk, +mind, bl} = g
@@ -1797,23 +1835,25 @@ def Bin.fill(+es: +List<U32>, +q: Q) -> Q:
 # 7 entry fees, 8 loans taken, 9 loans repaid, 10 loan interest
 
 def Ride.tick(r: Ride, +idx: U32, +q: Q, +ps: +List<Piece>, +occ: +List<U32>,
-  +plan: +List<Board>, +qt: +List<U32>, +fresh: Bool) -> Ride:
-  Ride{+kind, +x, +y, +w, h, +price, open, +ph, +tm, ent, ex, +qlen, +wmin, +wmax, +total, +earned, born, rate} = r
+  +plan: +List<Board>, +qt: +List<U32>, +fresh: Bool, +t: U32) -> Ride:
+  Ride{+kind, +x, +y, +w, h, +price, +open, +ph, +tm, ent, ex, +qlen, +wmin, +wmax, +total, +earned, +born, rate, +wear} = r
+  +brk = Wear.broken(wear)
   +n = Seat.count((Tab.at(occ, idx) .|. Boards.mask(plan, idx, 0) : U32))
   +nb = Boards.count(plan, idx, 0)
   +go = (n > 0 : U32) && (tm >= wmin : U32) && ((n >= Ride.seats(kind) : U32) || (tm >= wmax : U32))
   +ph2 = sel(Ride.cycles(kind), Ride.next_ph(ph, tm, go, Ride.duration(kind)), 0)
-  Ride{kind, x, y, w, h, price, open, ph2, sel(Ride.cycles(kind), Ride.next_tm(ph, ph2, tm, n), 0),
+  Ride{kind, x, y, w, h, price, open, sel(brk, ph, ph2), sel(brk, tm, sel(Ride.cycles(kind), Ride.next_tm(ph, ph2, tm, n), 0)),
     Ride.door(kind, q, ps, x, y, w, 7), Ride.door(kind, q, ps, x, y, w, 1), sel(fresh, Tab.at(qt, idx), qlen),
-    wmin, wmax, (total + nb : U32), (earned + nb * price : U32), born, Ride.rating(kind, ps)}
+    wmin, wmax, (total + nb : U32), (earned + nb * price : U32), born, Ride.rating(kind, ps),
+    Wear.tick(wear, kind, open, idx, t, born)}
 
 def Rides.tick(+rs: +List<Ride>, +idx: U32, +q: Q, +ps: +List<Piece>, +occ: +List<U32>,
-  +plan: +List<Board>, +qt: +List<U32>, +fresh: Bool) -> +List<Ride>:
+  +plan: +List<Board>, +qt: +List<U32>, +fresh: Bool, +t: U32) -> +List<Ride>:
   match rs:
     case []:
       []
     case r <> rest:
-      Ride.tick(r, idx, q, ps, occ, plan, qt, fresh) <> Rides.tick(rest, (idx + 1 : U32), q, ps, occ, plan, qt, fresh)
+      Ride.tick(r, idx, q, ps, occ, plan, qt, fresh, t) <> Rides.tick(rest, (idx + 1 : U32), q, ps, occ, plan, qt, fresh, t)
 
 # The coaster's ratings from its track: turns and drops thrill, height
 # thrills most, length adds a little; a track that isn't a circuit yet has
@@ -2217,7 +2257,7 @@ def Park.tick(p: Park) -> Out:
   +map2 = Mess.mark(swept, False{}, Mess.mark(drops, True{}, Bin.fill(Mess.only(evs, False{}), map)))
   Out{Park{map2, List.append(&2, Guest, arr, Guests.stay(moved)),
     Rides.tick(rides, 0, map, Track.pieces(track), occ, plan,
-      Qlen.fill_if(U32.is_eq((time .&. 15 : U32), 0), guests, map, len32(Ride, rides)), U32.is_eq((time .&. 15 : U32), 0)),
+      Qlen.fill_if(U32.is_eq((time .&. 15 : U32), 0), guests, map, len32(Ride, rides)), U32.is_eq((time .&. 15 : U32), 0), time),
     Track.tick(track), Ledger.apply(led, cash), (time + 1 : U32),
     (nid + len32(Guest, arr) : U32), Fin.tick(fin, time, guests, rides, len32(U32, mess)),
     List.append(&2, U32, drops, Mess.kept(mess, staff)), staff}, led, arr, Guests.left(moved), drops, swept}
@@ -2337,7 +2377,7 @@ def Land.ride(+q: Q, +k: U32, +x: U32, +y: U32, +idx: U32) -> Q:
       x, y1, 3, idx, 0), x1, y1, 3, idx, 1))
 
 def Land.clear_ride(+q: Q, r: Ride) -> Q:
-  Ride{kind, +x, +y, +w, h, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate} = r
+  Ride{kind, +x, +y, +w, h, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate, wear} = r
   +x1 = (x + 1 : U32)
   +y1 = (y + 1 : U32)
   +one = Land.put(q, x, y, 0, 0, 0)
@@ -2393,8 +2433,8 @@ def Build.map(ok: Bool, +q: Q, +rs: +List<Ride>, +tool: U32, +x: U32, +y: U32,
       q
 
 def Ride.killed(r: Ride) -> Ride:
-  Ride{kind, x, y, w, h, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate} = r
-  Ride{0, x, y, w, h, price, 0, 0, 0, NONE(), NONE(), 0, wmin, wmax, total, earned, born, 0}
+  Ride{kind, x, y, w, h, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate, wear} = r
+  Ride{0, x, y, w, h, price, 0, 0, 0, NONE(), NONE(), 0, wmin, wmax, total, earned, born, 0, 255}
 
 def Rides.kill(+rs: +List<Ride>, +i: U32) -> +List<Ride>:
   match rs:
@@ -2560,8 +2600,8 @@ def Rides.coaster(+rs: +List<Ride>, +open: U32) -> +List<Ride>:
     case []:
       []
     case r <> rest:
-      Ride{+kind, x, y, w, h, price, op, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate} = r
-      Ride{kind, x, y, w, h, price, sel(U32.is_eq(kind, 5), open, op), ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate}
+      Ride{+kind, x, y, w, h, price, op, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate, wear} = r
+      Ride{kind, x, y, w, h, price, sel(U32.is_eq(kind, 5), open, op), ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate, wear}
         <> Rides.coaster(rest, open)
 
 def Park.track_op(p: Park, +op: U32) -> Out:
@@ -2582,14 +2622,14 @@ def MAX_PRICE() -> U32:
   20
 
 def Ride.set(r: Ride, +op: U32) -> Ride:
-  Ride{+kind, x, y, w, h, +price, +open, ph, tm, ent, ex, qlen, +wmin, +wmax, total, earned, born, rate} = r
+  Ride{+kind, x, y, w, h, +price, +open, ph, tm, ent, ex, qlen, +wmin, +wmax, total, earned, born, rate, wear} = r
   +flip = U32.is_eq(op, 0) && Bool.not(U32.is_eq(kind, 5))
   +price2 = Price.cap(sel(U32.is_eq(op, 1), (price + 1 : U32), sel(U32.is_eq(op, 2), sub0(price, 1), price)))
   +wmin2 = sel(U32.is_eq(op, 3), U32.min((wmin + 30 : U32), wmax),
     sel(U32.is_eq(op, 4), sub0(wmin, 30), wmin))
   +wmax2 = sel(U32.is_eq(op, 5), U32.min((wmax + 60 : U32), 3600),
     sel(U32.is_eq(op, 6), U32.max(sub0(wmax, 60), wmin), wmax))
-  Ride{kind, x, y, w, h, price2, sel(flip, sel(U32.is_eq(open, 1), 0, 1), open), ph, tm, ent, ex, qlen, wmin2, wmax2, total, earned, born, rate}
+  Ride{kind, x, y, w, h, price2, sel(flip, sel(U32.is_eq(open, 1), 0, 1), open), ph, tm, ent, ex, qlen, wmin2, wmax2, total, earned, born, rate, wear}
 
 def Rides.set(+rs: +List<Ride>, +i: U32, +op: U32) -> +List<Ride>:
   match rs:

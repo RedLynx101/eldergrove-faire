@@ -58,6 +58,12 @@ Small design decisions made while working, listed here so they can be revisited.
   peak nausea across the park was about 50 and nobody ever felt queasy. Now a rider gains three quarters of
   the ride's nausea rating on getting off, it wears off at 1 point per 16 ticks (was 3), and a guest above 95
   is sick with a 1-in-512 chance each tick: 32 sick puddles in 8000 ticks on the starter park.
+- **Breakdowns.** A ride's reliability starts at 100% and, while it runs, drops about one point (of 255) every
+  128 ticks; every 64 ticks it may break down with a chance of (255 - reliability)/8 in 1024. A broken ride
+  freezes mid-cycle: no one boards, riders stay aboard (coaster riders keep circling), lose happiness and
+  think "stuck on the ...". Until Tinkers arrive (spike 6) a breakdown clears itself after 1800 ticks, and a
+  repair adds 60 points, capped by age (the cap falls 3 points a month, to no lower than 47%). On the starter
+  park, reliability settles between 60% and 80% over the first year. Shops and privies never break.
 
 ## Done: M1, the vertical slice
 Isometric fantasy map, paths, terrain editing, 4 enchanted tree kinds, Dragon Carousel, Arcane Spire, Potion
@@ -170,7 +176,7 @@ machine: `PARK_PROF=1 ./park --live 700 1500`.
 - Guests may pick a ride whose queue is on the far side of the park.
 - There is no music volume control besides on/off.
 
-## M5: Controls, problems, staff and people (in progress: spikes 1-4 done)
+## M5: Controls, problems, staff and people (in progress: spikes 1-5 done)
 Spikes, in order:
 
 1. (Done) **Controls and camera.** WASD (and the arrows) move the camera. Zoom in and out, in three steps (close,
@@ -185,7 +191,7 @@ Spikes, in order:
    happiness and the park rating. Path furniture: bins, benches (they restore energy) and lamps. Also done
    here: the toolbar tabs (see the calls above) and the law litter_accounted.
 4. (Done) **The Privy.** Toilets, and a bathroom need.
-5. **Breakdowns.** Rides lose reliability with age and break down; riders get stuck and unhappy until a
+5. (Done) **Breakdowns.** Rides lose reliability with age and break down; riders get stuck and unhappy until a
    repair.
 6. **Staff**, hired from a staff window, with wages (through the ledger) and patrol areas:
    - Brownies (handymen) sweep litter, empty bins and water flowers.

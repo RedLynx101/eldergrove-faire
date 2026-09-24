@@ -128,6 +128,11 @@ bubble, and grows miserable if there is none. Rides leave riders queasy by
 their nausea rating; the feeling builds up over several rides and wears off
 slowly, and a very queasy guest may be sick on the path.
 
+Rides wear out. The ride window shows reliability; a worn ride breaks down
+more often. A broken ride stops where it is, with its riders stuck aboard
+(growing cross) until it is repaired; a wrench sign and smoke mark it, and
+the message bar says so.
+
 Coaster tool (key 4, third tool): `Enter` opens or closes the coaster; while closed, `T`
 ahead, `G`/`H` turn, `Y` up, `B` down, `L` lift hill, `Backspace` removes the
 last piece (WASD always moves the camera). It opens only once the track closes back on its station. One

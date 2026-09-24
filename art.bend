@@ -1222,9 +1222,28 @@ def Art.tint(+c: U32, +ok: Bool) -> U32:
   +g = sel(ok, 6154320, 14163020)
   (((c .&. 16711422) >> 1n) + ((g .&. 16711422) >> 1n) : U32)
 
+# a broken-down ride: a blinking wrench sign above it and smoke rising
+def Art.broke(on: Bool, +dx: U32, +dy: U32, +t: U32) -> U32:
+  match on:
+    case True{}:
+      +cy = (dy + 84 : U32)
+      +disc = ell(dx, cy, 6, 6)
+      +rim = disc && Bool.not(ell(dx, cy, 5, 5))
+      +bar = (sabs((dx + cy : U32)) <= 0 : U32) && (sabs(dx) <= 3 : U32)
+      +jaw = ell((dx - 3 : U32), (cy + 3 : U32), 2, 2) && Bool.not(U32.is_eq(dx, 4) && U32.is_eq(cy, (0 - 4 : U32)))
+        && Bool.not(U32.is_eq(dx, 3) && U32.is_eq(cy, (0 - 3 : U32)))
+      +vis = Bool.not(U32.is_eq(((t >> 4n) .&. 3 : U32), 0))
+      +sm = (t .&. 63 : U32)
+      +puff1 = ell((dx - 4 : U32), (dy + 36 + (sm >> 1n) : U32), 3, 2)
+      +puff2 = ell((dx + 3 : U32), (dy + 50 + (((sm + 32) .&. 63) >> 1n) : U32), 2, 2)
+      sel(vis && disc, sel(rim || bar || jaw, 3158064, 15237168), sel(puff1 || puff2, 10526880, TR()))
+    case False{}:
+      TR()
+
 def Art.ride(+k: U32, +dx: U32, +dy: U32, +t: U32, +ra: U32, +rb: U32, +st: U32) -> U32:
-  over(Art.warn(Bool.not(U32.is_eq((st .&. 1073741824 : U32), 0)), dx, dy, t),
-    Art.ride.go(k, dx, dy, t, ra, rb, st))
+  over(Art.broke(Bool.not(U32.is_eq((st .&. 536870912 : U32), 0)), dx, dy, t),
+    over(Art.warn(Bool.not(U32.is_eq((st .&. 1073741824 : U32), 0)), dx, dy, t),
+    Art.ride.go(k, dx, dy, t, ra, rb, st)))
 
 # Coaster track
 # -------------
@@ -1317,9 +1336,10 @@ def Art.track_top(+kind: U32, +d: U32, +X: U32, +Y0: U32, +t: U32) -> U32:
 def Art.track(+x: U32, +y: U32, +code: U32, +zr: U32, +t: U32, +px: U32,
   +py: U32) -> U32:
   +kind = (code .&. 7 : U32)
-  +d = (code >> 3n : U32)
+  +d = ((code >> 3n) .&. 7 : U32)
   +X = (px - x : U32)
   +Y0 = (((py - y) * 2) + zr * 16 : U32)
+  +sign = Art.broke(Bool.not(U32.is_eq((code >> 16n : U32), 0)), X, (py - y + zr * 8 - 54 : U32), t)
   +surf = Art.track_top(kind, d, X, Y0, t)
   +slope = sel(U32.is_eq(kind, 1) || U32.is_eq(kind, 6), 4,
     sel(U32.is_eq(kind, 2), (0 - 4 : U32), 0))
@@ -1328,7 +1348,7 @@ def Art.track(+x: U32, +y: U32, +code: U32, +zr: U32, +t: U32, +px: U32,
     && (zr > 0 : U32)
   +brace = U32.is_eq(((py + 256 - y) .&. 7 : U32), 0) && (sabs(X) <= 3 : U32)
     && sle(stop, py) && sle(py, (y + 8 : U32)) && (zr > 0 : U32)
-  over(surf, sel(post, sel(U32.is_eq(X, 1), 5913890, 8017200), sel(brace, 6964776, TR())))
+  over(sign, over(surf, sel(post, sel(U32.is_eq(X, 1), 5913890, 8017200), sel(brace, 6964776, TR()))))
 
 # a coaster car centred at (0, 0) on the track, heading d
 def Art.car_in(+X: U32, +Y: U32, +along_u: Bool) -> Bool:

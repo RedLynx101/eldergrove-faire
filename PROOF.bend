@@ -508,7 +508,7 @@ def rt_guest(+g: C.Guest, +rest: List<&2, U32>, +more: List<&2, C.Guest>, +st: L
 def rt_ride(+r: C.Ride, +rest: List<&2, U32>, +more: List<&2, C.Ride>, +st: List<&2, S.Item>)
   -> {S.dec(S.Enc.ride(r, rest), S.IR{more} <> st) == S.dec(rest, S.IR{r <> more} <> st) : List<&2, S.Item>}:
   match r:
-    case C.Ride{kind, x, y, w, h, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate}:
+    case C.Ride{kind, x, y, w, h, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate, wear}:
       {==}
 
 def rt_piece(+p: C.Piece, +rest: List<&2, U32>, +more: List<&2, C.Piece>, +st: List<&2, S.Item>)
@@ -902,17 +902,17 @@ def fee_cap_ok(+v: U32) -> {U32.is_le(C.Fee.cap(v), 40) == True{} : Bool}:
     e => Equal.sym(Bool, True{}, U32.is_le(v, 40), e), e => {==})
 
 def tick_ok(+rs: +List<C.Ride>, +idx: U32, +q: C.Q, +ps: +List<C.Piece>, +occ: +List<U32>,
-  +plan: +List<C.Board>, +qt: +List<U32>, +fr: Bool, +h: {Laws.prices_ok(rs) == True{} : Bool})
-  -> {Laws.prices_ok(C.Rides.tick(rs, idx, q, ps, occ, plan, qt, fr)) == True{} : Bool}:
+  +plan: +List<C.Board>, +qt: +List<U32>, +fr: Bool, +t: U32, +h: {Laws.prices_ok(rs) == True{} : Bool})
+  -> {Laws.prices_ok(C.Rides.tick(rs, idx, q, ps, occ, plan, qt, fr, t)) == True{} : Bool}:
   match rs:
     case []:
       {==}
     case r <> rest:
       match r:
-        case C.Ride{kind, x, y, w, hh, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate}:
-          and_i(U32.is_le(price, 20), Laws.prices_ok(C.Rides.tick(rest, (idx + 1 : U32), q, ps, occ, plan, qt, fr)),
+        case C.Ride{kind, x, y, w, hh, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate, wear}:
+          and_i(U32.is_le(price, 20), Laws.prices_ok(C.Rides.tick(rest, (idx + 1 : U32), q, ps, occ, plan, qt, fr, t)),
             and_l(U32.is_le(price, 20), Laws.prices_ok(rest), h),
-            tick_ok(rest, (idx + 1 : U32), q, ps, occ, plan, qt, fr, and_r(U32.is_le(price, 20), Laws.prices_ok(rest), h)))
+            tick_ok(rest, (idx + 1 : U32), q, ps, occ, plan, qt, fr, t, and_r(U32.is_le(price, 20), Laws.prices_ok(rest), h)))
 
 def coaster_ok(+rs: +List<C.Ride>, +op: U32, +h: {Laws.prices_ok(rs) == True{} : Bool})
   -> {Laws.prices_ok(C.Rides.coaster(rs, op)) == True{} : Bool}:
@@ -921,7 +921,7 @@ def coaster_ok(+rs: +List<C.Ride>, +op: U32, +h: {Laws.prices_ok(rs) == True{} :
       {==}
     case r <> rest:
       match r:
-        case C.Ride{kind, x, y, w, hh, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate}:
+        case C.Ride{kind, x, y, w, hh, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate, wear}:
           and_i(U32.is_le(price, 20), Laws.prices_ok(C.Rides.coaster(rest, op)),
             and_l(U32.is_le(price, 20), Laws.prices_ok(rest), h),
             coaster_ok(rest, op, and_r(U32.is_le(price, 20), Laws.prices_ok(rest), h)))
@@ -933,8 +933,8 @@ def set_ok(+rs: +List<C.Ride>, +i: U32, +op: U32, +h: {Laws.prices_ok(rs) == Tru
       {==}
     case r <> rest:
       match r:
-        case C.Ride{kind, x, y, w, hh, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate}:
-          +rr = {C.Ride{kind, x, y, w, hh, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate} : C.Ride}
+        case C.Ride{kind, x, y, w, hh, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate, wear}:
+          +rr = {C.Ride{kind, x, y, w, hh, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate, wear} : C.Ride}
           +tail = set_ok(rest, (i - 1 : U32), op, and_r(U32.is_le(price, 20), Laws.prices_ok(rest), h))
           bcase(U32.is_eq(i, 0),
             c => {Laws.prices_ok(Bool.pick(C.Ride, c, C.Ride.set(rr, op), rr) <> C.Rides.set(rest, (i - 1 : U32), op)) == True{} : Bool},
@@ -950,8 +950,8 @@ def kill_ok(+rs: +List<C.Ride>, +i: U32, +h: {Laws.prices_ok(rs) == True{} : Boo
       {==}
     case r <> rest:
       match r:
-        case C.Ride{kind, x, y, w, hh, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate}:
-          +rr = {C.Ride{kind, x, y, w, hh, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate} : C.Ride}
+        case C.Ride{kind, x, y, w, hh, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate, wear}:
+          +rr = {C.Ride{kind, x, y, w, hh, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate, wear} : C.Ride}
           +hp = and_l(U32.is_le(price, 20), Laws.prices_ok(rest), h)
           +tail = kill_ok(rest, (i - 1 : U32), and_r(U32.is_le(price, 20), Laws.prices_ok(rest), h))
           bcase(U32.is_eq(i, 0),
@@ -1011,8 +1011,8 @@ def pb_go(+a: C.Act, +map: C.Q, +guests: +List<C.Guest>, +rides: +List<C.Ride>, 
       +pl = C.Boards.plan(guests, occ, map, rides, sn, [])
       +fr = U32.is_eq((time .&. 15 : U32), 0)
       +qt = C.Qlen.fill_if(fr, guests, map, C.len32(C.Ride, rides))
-      and_i(Laws.prices_ok(C.Rides.tick(rides, 0, map, C.Track.pieces(track), occ, pl, qt, fr)), U32.is_le(fee, 40),
-        tick_ok(rides, 0, map, C.Track.pieces(track), occ, pl, qt, fr, and_l(Laws.prices_ok(rides), U32.is_le(fee, 40), h)), and_r(Laws.prices_ok(rides), U32.is_le(fee, 40), h))
+      and_i(Laws.prices_ok(C.Rides.tick(rides, 0, map, C.Track.pieces(track), occ, pl, qt, fr, time)), U32.is_le(fee, 40),
+        tick_ok(rides, 0, map, C.Track.pieces(track), occ, pl, qt, fr, time, and_l(Laws.prices_ok(rides), U32.is_le(fee, 40), h)), and_r(Laws.prices_ok(rides), U32.is_le(fee, 40), h))
     case C.Build{tool, x, y, v}:
       and_i(Laws.prices_ok(C.Build.rides(C.Build.ok(map, track, cash, tool, x, y), map, rides, tool, x, y, time)),
         U32.is_le(fee, 40), build_ok(C.Build.ok(map, track, cash, tool, x, y), map, rides, tool, x, y, time, and_l(Laws.prices_ok(rides), U32.is_le(fee, 40), h)), and_r(Laws.prices_ok(rides), U32.is_le(fee, 40), h))

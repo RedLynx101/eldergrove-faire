@@ -57,8 +57,8 @@ def Enc.gs(gs: List<&2, C.Guest>, rest: List<&2, U32>) -> List<&2, U32>:
       Enc.gs(more, Enc.guest(g, rest))
 
 def Enc.ride(r: C.Ride, rest: List<&2, U32>) -> List<&2, U32>:
-  C.Ride{kind, x, y, w, h, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate} = r
-  6 <> kind <> x <> y <> w <> h <> price <> open <> ph <> tm <> ent <> ex <> qlen <> wmin <> wmax <> total <> earned <> born <> rate <> rest
+  C.Ride{kind, x, y, w, h, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate, wear} = r
+  6 <> kind <> x <> y <> w <> h <> price <> open <> ph <> tm <> ent <> ex <> qlen <> wmin <> wmax <> total <> earned <> born <> rate <> wear <> rest
 
 def Enc.rs(rs: List<&2, C.Ride>, rest: List<&2, U32>) -> List<&2, U32>:
   match rs:
@@ -221,8 +221,8 @@ def dec(ws: List<&2, U32>, st: List<&2, Item>) -> List<&2, Item>:
         ha, lk, mind, bl}, st))
     case 5 <> rest:
       dec(rest, IR{[]} <> st)
-    case 6 <> kind <> x <> y <> w <> h <> price <> open <> ph <> tm <> ent <> ex <> qlen <> wmin <> wmax <> total <> earned <> born <> rate <> rest:
-      dec(rest, Pop.r(C.Ride{kind, x, y, w, h, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate}, st))
+    case 6 <> kind <> x <> y <> w <> h <> price <> open <> ph <> tm <> ent <> ex <> qlen <> wmin <> wmax <> total <> earned <> born <> rate <> wear <> rest:
+      dec(rest, Pop.r(C.Ride{kind, x, y, w, h, price, open, ph, tm, ent, ex, qlen, wmin, wmax, total, earned, born, rate, wear}, st))
     case 7 <> rest:
       dec(rest, IP{[]} <> st)
     case 8 <> x <> y <> z <> kind <> dir <> rest:
@@ -265,7 +265,7 @@ def load(ws: List<&2, U32>) -> Maybe<&2, C.Park>:
 # ---------------------------------------------------------
 
 def MAGIC() -> U32:
-  910313286
+  910313287
 
 def to_bytes(ws: List<&2, U32>) -> List<&2, U32>:
   match ws:
