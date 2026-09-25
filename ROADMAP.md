@@ -1,6 +1,6 @@
 # Eldergrove Faire: Roadmap
 
-Last updated: 2026-09-24 · M1-M9 done; v1.0.0 released for Linux. Next: a native Windows build (M10).
+Last updated: 2026-09-24 · M1-M10 done; v1.1.0 released for Windows (native .exe) and Linux.
 
 ## Decisions
 
@@ -299,6 +299,23 @@ Small design decisions made while working, listed here so they can be revisited.
   `play.sh` (starts from its own folder, so saves land beside it), `Play on Windows (WSL).cmd` (runs the same
   binary through WSL until the native build exists), a quick start and the licenses. It needs glibc 2.34+.
   Before upload it was tested unpacked in a fresh folder, and the Windows launcher was run from Windows.
+- **M10: GCC, not clang, for Windows.** MSYS2's UCRT64 GCC 15 was already installed; clang wasn't. Two
+  calling-convention problems came up. The work loop's segments `musttail` each other while passing the
+  16-byte `Env` struct, which the Windows x64 convention passes by reference. So the segments get
+  `sysv_abi` (the one edit to the generated C, inserted by `win/build.sh`, which refuses to build if
+  Bend's output changes shape). GCC 15 then crashed (`choose_baseaddr`) on Windows-convention functions
+  calling System V ones defined in the same file. `-mincoming-stack-boundary=4`, which only states the
+  ABI's own 16-byte alignment, avoids that. Speed matches the clang-built Linux binary.
+- **M10: waveOut over WASAPI.** It is far less code, and Windows routes it through WASAPI anyway.
+  Latency is about 90 ms of blocks, similar to pacat's 80 ms. A process whose waveOut device still
+  has queued blocks never finishes exiting, so the device is reset and closed at exit.
+- **M10: a GUI program that attaches to a console.** Double-clicking opens no console window.
+  Started from a console, it prints there. `win/build.sh --console` makes a console build for the
+  developer modes.
+- **v1.1.0 packaging:** both platforms from one clean `git archive` build. The Windows zip holds the
+  exe, a quick start, the licenses, and the MinGW-w64 runtime licenses (the exe links them statically;
+  it needs only DLLs that ship with Windows). The Linux tarball drops the WSL launcher, because the
+  native exe replaces it.
 
 ## Done: M1, the vertical slice
 Isometric fantasy map, paths, terrain editing, 4 enchanted tree kinds, Dragon Carousel, Arcane Spire, Potion
@@ -532,20 +549,27 @@ longer passes; saved track designs; coaster sounds by type; no coaster limit.
   count as a parameter (a mechanical law update, stated in LAWS.bend). The riskiest step, so it goes last.
 - **Close:** docs, roadmap page, memory, a report.
 
-## Next: M10, a native Windows build (planned)
-v1.0.0 ships as a Linux x86-64 binary that also runs on Windows 11 through WSL2. M10 makes a native
-Windows `.exe`, so Windows players need nothing else installed.
+## Done: M10, a native Windows build (v1.1.0)
+v1.0.0 shipped as a Linux binary that Windows 11 could run through WSL2. M10 made a native Windows `.exe`
+(details in [win/README.md](win/README.md)).
 
-- **The window effect (`win_frame.c`):** a Win32 version beside the X11 one. It would open a window, blit
-  the frame with GDI (`StretchDIBits`), turn Win32 key and mouse messages into the game's events, and
-  honour the window-size and whole-pixel options.
-- **The sound effect (`snd.c`):** play the same float sample ring through a Windows audio API (WASAPI or
-  waveOut) instead of `pacat`.
-- **The build:** compile Bend's C output for Windows (MinGW-w64 or clang, with a pthreads shim for the
-  runtime's threads), then check speed against the Linux build.
-- **The release:** a zip with `EldergroveFaire.exe`, the quick start and the licenses, built by a script and
-  attached to a GitHub release, then smoke-tested on a Windows machine without WSL.
-- **Unchanged:** the game itself. Only the two effect files and the build differ.
+- **Own window effects.** Base's `Window.open` and `Window.close` have no Windows version, so the game now
+  has `Win.open` and `Win.close` beside `Win.frame` and `Win.config`, all in `win_frame.c`. There, the fill,
+  pacing and event plumbing are shared, and only open, close, pixels, resize, pump and present differ
+  between X11 and Win32.
+- **The Win32 window.** It runs on its own thread, which pumps its messages. Frames are blitted with GDI
+  (`SetDIBitsToDevice`; the game already scales into the buffer). Keys and mouse events map to the same
+  codes as X11: the wheel as buttons 5 and 6, and Alt without opening the window menu. The window is
+  DPI-aware, so pixels stay crisp, and it has an icon drawn by `tools/genicon.py`.
+- **Sound (`snd.c`).** The same ring, pumped to waveOut in eight blocks of 256 frames.
+- **Bend's runtime on Windows (`win/winplat.c`, `win/compat/`).** A force-included header renames the POSIX
+  calls to Win32 versions. `mmap` reservations become `VirtualAlloc(MEM_RESERVE)`, with pages committed
+  on first touch by a vectored exception handler. The loop's wake pipe and `select` become a CRT pipe plus
+  an event. Timers are high-resolution, and files open in binary mode.
+- **Checked.** Headless: the Windows console build's `--scen`, `--uitest`, `--coastertest`, `--bridgetest`
+  and `--savetest` output, a `--shot` frame and a `--wav` recording are byte-identical to Linux's. `--bench`:
+  full frames in about 10 ms on both. Live: 60 fps with 300 extra guests (fill 2.7 ms of each 16.7 ms
+  frame). Noah confirmed the sound, and saving, loading and closing work from the unpacked zip.
 
 ## Laws
 Proven: money_conserved, headcount_conserved, needs_bounded, coaster_on_circuit, no_collisions,

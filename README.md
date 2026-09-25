@@ -21,15 +21,16 @@ design call along the way.
 
 ## Download
 
-**[Eldergrove Faire v1.0.0 for Linux](https://github.com/RedLynx101/eldergrove-faire/releases/latest)**:
-download `eldergrove-faire-v1.0.0-linux-x86_64.tar.gz`, unpack it, and run `./play.sh`. It needs x86-64
-Linux with glibc 2.34 or newer (Ubuntu 22.04+, Debian 12+, Fedora 35+), plus `libx11-6` (and
-`pulseaudio-utils` for sound). On **Windows 11**, the same download runs through WSL2: double-click
-`Play on Windows (WSL).cmd`.
+**[Eldergrove Faire v1.1.0](https://github.com/RedLynx101/eldergrove-faire/releases/latest)**, for Windows and Linux:
 
-> **A native Windows `.exe` is planned** as the next release, so Windows players won't need WSL. See
-> [ROADMAP.md](ROADMAP.md#next-m10-a-native-windows-build-planned) for the plan. To build from source
-> instead, see [Build and run](#build-and-run).
+- **Windows 10 or 11 (64-bit):** download `eldergrove-faire-v1.1.0-windows-x64.zip`, unpack it to a folder
+  you can write to, and double-click `EldergroveFaire.exe`. It's a native program: no WSL, nothing to install.
+  It isn't code-signed, so SmartScreen may ask first ("More info", then "Run anyway").
+- **Linux (x86-64):** download `eldergrove-faire-v1.1.0-linux-x86_64.tar.gz`, unpack it, and run `./play.sh`.
+  It needs glibc 2.34 or newer (Ubuntu 22.04+, Debian 12+, Fedora 35+), plus `libx11-6` (and
+  `pulseaudio-utils` for sound).
+
+To build from source instead, see [Build and run](#build-and-run).
 
 ## Contents
 
@@ -164,8 +165,7 @@ describe.
 
 ## Build and run
 
-The game runs on **Linux (x86-64, X11)** and on **Windows 11 through WSL2**, whose built-in graphics
-(WSLg) show the window and play the sound. Prebuilt binaries are on the
+The game runs natively on **Linux (x86-64, X11)** and **Windows 10/11 (x64)**. Prebuilt binaries are on the
 [releases page](https://github.com/RedLynx101/eldergrove-faire/releases); these steps build from source.
 
 1. Install Bend (Linux, or Ubuntu under WSL):
@@ -195,8 +195,10 @@ The game runs on **Linux (x86-64, X11)** and on **Windows 11 through WSL2**, who
    bend PROOF.bend                 # prints "All terms check."
    ```
 
-On Windows, run the same commands in the Ubuntu (WSL) terminal. To start the game from PowerShell:
-`wsl -d Ubuntu -- bash -lc "cd ~/eldergrove-faire && ./park"`.
+**The Windows `.exe`:** Bend emits the C on Linux or WSL (`bend main.bend -o park.c`), and MSYS2's
+UCRT64 GCC compiles it on Windows (`win/build.sh`, from Git Bash). [win/README.md](win/README.md)
+explains the port: a small POSIX layer for Bend's runtime, and Win32 window and waveOut sound backends.
+The Linux binary also runs under WSL2 if you'd rather build there.
 
 Saves go to `eldergrove.sav` (F5 saves, F9 loads) and track designs to `designs.sav`, both in the folder
 you start the game from.
@@ -299,8 +301,9 @@ Bend requires.
 | `font.bend` | An original 3×5 pixel font. |
 | `save.bend` | The save format: an encoder and a stack-machine decoder, proven to round-trip. |
 | `LAWS.bend` / `PROOF.bend` | The laws and their proofs. |
-| `win_frame.c`, `win_config.js`, `win_frame.js` | The window effect: a parallel blit of the frame and window sizing (C; JS stubs for the JS target). |
-| `snd.c`, `snd_open.js`, `snd_write.js` | The sound effect: a sample ring played through `pacat` (JS: a silent stand-in). |
+| `win_frame.c`, `win_*.js` | The window effects: open and close, a parallel blit of the frame, window sizing; X11 or Win32 (C; JS stubs for the JS target). |
+| `snd.c`, `snd_open.js`, `snd_write.js` | The sound effect: a sample ring played through `pacat` on Linux or waveOut on Windows (JS: a silent stand-in). |
+| `win/` | The Windows build: a POSIX layer for Bend's runtime, the Win32 window and sound, the icon, `build.sh`. |
 | `b.sh` | Check, build and run helper. |
 | `tools/` | Generators for the font, tunes and thought icons; screenshot and WAV converters; profiling, A/B timing, definition reordering. |
 | `spike/` | The first performance experiments with Bend's parallelism. |
