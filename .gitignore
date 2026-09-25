@@ -19,3 +19,4 @@ shots/_*.png
 /park_*
 /main_*.bend
 shots/
+/build/

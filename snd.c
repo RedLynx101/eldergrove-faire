@@ -2,18 +2,25 @@
 // sound.bend) and this effect plays them. Adapted from Bend's audio effect
 // (bend2/effs/audio.c, Copyright HigherOrderCO, Apache License 2.0): the same
 // ring of float32 stereo frames, but the pump feeds PulseAudio through
-// `pacat` (WSLg provides a PulseAudio server; there is no ALSA device), and
-// when there is no pacat the ring simply drains at the sample clock.
-#if defined(__linux__)
+// `pacat` (WSLg provides a PulseAudio server; there is no ALSA device), or
+// on Windows the waveOut device (win/winplat.c), and when there is no
+// output the ring simply drains at the sample clock.
+#if defined(__linux__) || defined(_WIN32)
 #ifndef SND_RING
 #define SND_RING 4096u
 #include <signal.h>
+
+#if defined(_WIN32)
+typedef WinSnd SndOut;
+#else
+typedef FILE SndOut;
+#endif
 
 typedef struct {
   _Atomic(u64) read, written;
   float        pcm[SND_RING * 2];
   u32          rate;
-  FILE*        out;
+  SndOut*      out;
   pthread_t    pump;
 } SndRing;
 
@@ -44,8 +51,8 @@ static void snd_ring_pull(SndRing* p, float* out, u32 frames) {
 }
 
 // 256 frames at a time: to pacat as 16-bit stereo (its pipe blocks while
-// the server's buffer is full, which paces the ring), or, with no output,
-// by the clock
+// the server's buffer is full, which paces the ring) or to waveOut (which
+// blocks until a block is free), or, with no output, by the clock
 static void* snd_pump(void* ctx) {
   SndRing* p = ctx;
   float    buf[256 * 2];
@@ -57,12 +64,18 @@ static void* snd_pump(void* ctx) {
         float v = buf[i] < -1.0f ? -1.0f : buf[i] > 1.0f ? 1.0f : buf[i];
         s16[i] = (int16_t)(v * 32767.0f);
       }
+#if defined(_WIN32)
+      if (wins_play(p->out, s16, 256) != 0) {
+        p->out = NULL;
+      }
+#else
       if (fwrite(s16, sizeof s16, 1, p->out) != 1) {
         pclose(p->out);
         p->out = NULL;
       } else {
         fflush(p->out);
       }
+#endif
     } else {
       struct timespec ts = { 0, (long)(256.0 * 1e9 / p->rate) };
       nanosleep(&ts, NULL);
@@ -71,7 +84,12 @@ static void* snd_pump(void* ctx) {
   return NULL;
 }
 
-static FILE* snd_pacat(u32 rate) {
+#if defined(_WIN32)
+static SndOut* snd_device(u32 rate) {
+  return wins_open(rate);
+}
+#else
+static SndOut* snd_device(u32 rate) {
   if (getenv("PARK_MUTE") != NULL) {
     return NULL;
   }
@@ -93,6 +111,7 @@ static FILE* snd_pacat(u32 rate) {
   return NULL;
 }
 #endif
+#endif
 
 #ifdef CID_SND_OPEN
 Term snd_open_run(Env e, Term* f, IoWork* w) {
@@ -100,7 +119,7 @@ Term snd_open_run(Env e, Term* f, IoWork* w) {
   SndRing* p    = io_mem(calloc(1, sizeof *p));
   p->rate = rate < 8000 || rate > 96000 ? 22050 : rate;
   signal(SIGPIPE, SIG_IGN);
-  p->out = snd_pacat(p->rate);
+  p->out = snd_device(p->rate);
   pthread_create(&p->pump, NULL, snd_pump, p);
   return io_hand((intptr_t)p);
 }

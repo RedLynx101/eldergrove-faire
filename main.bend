@@ -4654,7 +4654,17 @@ def is_bench(+args: +List<String>) -> Bool:
     case a <> rest:
       String.eq(a, "--bench")
 
-# The window effect: Base's Linux window with a parallel blit (win_frame.c)
+# The window effects (win_frame.c): Base's Linux window with a parallel
+# blit, and a native Windows window (win/winplat.c)
+def Win.open(title: String, width: U32, height: U32) ->
+  IO(Result<&1, &1, U32 & String, Window>):
+  import "./win_frame.c"
+  import "./win_open.js"
+
+def Win.close(window: Window) -> IO(Unit):
+  import "./win_frame.c"
+  import "./win_close.js"
+
 def Win.frame(window: Window, image: Image) ->
   IO(Window & Image & List<Event>):
   import "./win_frame.c"
@@ -4718,7 +4728,7 @@ def Loop.again(m: Maybe<Game>, window: Window, au: Audio, shown: Image, events: 
   -> IO(Unit):
   match m:
     case None{}:
-      Window.close(window)
+      Win.close(window)
     case Some{g}:
       Loop.play(Game.sound(g), window, au, img, events, shown, rest)
 
@@ -4753,7 +4763,7 @@ def Loop.config(m: Maybe<Game>, window: Window, au: Audio, shown: Image, events:
   -> IO(Unit):
   match m:
     case None{}:
-      Window.close(window)
+      Win.close(window)
     case Some{g}:
       +g2 = g
       Loop.config.go(Bool.not(U32.is_eq((Game.opt(g2) .&. 16384 : U32), 0)), g2, window, au, shown, events, img, rest)
@@ -4763,7 +4773,7 @@ def Loop.after.go(m: Maybe<Game>, window: Window, au: Audio, shown: Image, event
   -> IO(Unit):
   match m:
     case None{}:
-      Window.close(window)
+      Win.close(window)
     case Some{g}:
       do IO<Unit>:
         now : Nat <- IO.now()
@@ -4780,7 +4790,7 @@ def Loop.go(fuel: Nat, window: Window, au: Audio, g: Game, img: Image, evs: List
   old: Image) -> IO(Unit):
   match fuel:
     case 0n:
-      Window.close(window)
+      Win.close(window)
     case 1n+f:
       do IO<Unit>:
         chan : Chan(Nx) <- IO.fork(Nx, Loop.compute(old, g, evs))
@@ -4803,7 +4813,7 @@ def Game.with_opt(g: Game, +o: U32) -> Game:
 def Loop.start(g: Game) -> IO(Unit):
   +g2 = g
   do IO<Unit>:
-    window : Window <- IO.try(Window, Window.open("Eldergrove Faire", 1024, 640))
+    window : Window <- IO.try(Window, Win.open("Eldergrove Faire", 1024, 640))
     au : Audio <- Z.Snd.open(22050)
     Loop.go(U32.to_nat(4294967295), window, au, g2, frame(g2), [], Pix{0})
 

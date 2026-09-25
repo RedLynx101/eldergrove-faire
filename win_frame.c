@@ -1,11 +1,13 @@
-// Eldergrove's frame effect: adapted from Bend's Linux window effect
-// (bend2/effs/window_frame.c, Copyright HigherOrderCO, Apache License 2.0),
-// with a parallel blit that fills each quadtree square at once instead of
-// walking the tree per pixel.
+// Eldergrove's window effects: adapted from Bend's Linux window effects
+// (bend2/effs/window_open.c, window_frame.c and window_close.c, Copyright
+// HigherOrderCO, Apache License 2.0), with a parallel blit that fills each
+// quadtree square at once instead of walking the tree per pixel, and a
+// native Windows window (win/winplat.c) beside the X11 one.
 // The view: the frame is 512 x 320 logical pixels, shown stretched over the
 // window (mode 0) or at the largest whole-pixel scale that fits, centred
 // (mode 1). Win.config asks for a new window size or mode; the frame's
-// helper thread applies it before the next frame (it alone touches X).
+// helper thread applies it before the next frame (it alone touches the
+// window's pixels).
 static volatile u32 pk_want_w, pk_want_h, pk_mode, pk_dirty;
 
 #ifdef CID_WIN_CONFIG
@@ -38,13 +40,12 @@ static void pk_view(u32 w, u32 h, u32* ox, u32* oy, u32* sw, u32* sh) {
   *oy = h > *sh ? (h - *sh) / 2 : 0;
 }
 
-#if defined(__linux__)
+#if defined(__linux__) || defined(_WIN32)
 // Window
 // ======
 
 // An event is five words: kind (0 key, 1 mouse, 2 move, 3 close) and
 // its fields; a frame answers the events pumped since the last one.
-
 
 static Term pkwindow_node(Env e, const u32* ev) {
   static const u32 cids[3] = { CID_KEY, CID_MOUSE, CID_MOVE };
@@ -71,8 +72,24 @@ static Term pkwindow_list(Env e, const u32* p, u64 n) {
   return list;
 }
 
+static u32 pkwindow_clip(int v, u32 most) {
+  return v < 0 ? 0 : (u32)v < most ? (u32)v : most - 1;
+}
 
+// a window pixel as the game sees it: the frame at twice its logical size
+static u32 pk_mx(int x, u32 ox, u32 sw) {
+  return pkwindow_clip((int)(((long)x - (long)ox) * 1024 / (long)sw), 1024);
+}
 
+static u32 pk_my(int y, u32 oy, u32 sh) {
+  return pkwindow_clip((int)(((long)y - (long)oy) * 640 / (long)sh), 640);
+}
+
+// The platform's window: pk_make and pk_close open and close it, pk_pixels
+// gives its pixel buffer (0xRRGGBB words, rows top-down), pk_resize gives
+// it a new size and a cleared buffer, pk_pump queues its events with
+// pkwindow_push, and pk_put shows the buffer.
+#if defined(__linux__)
 
 #ifndef BendWin
 #define BendWin BendWin
@@ -90,6 +107,95 @@ typedef struct {
   u32*     evs;
 } BendWin;
 #endif
+
+#elif defined(_WIN32)
+
+typedef struct {
+  WinWin* ww;
+  u32     n;
+  u32     cap;
+  u32*    evs;
+} BendWin;
+
+#endif
+
+static void pkwindow_push(BendWin* win, u32 kind, u32 a, u32 b, u32 c, u32 d) {
+  if (win->n == win->cap) {
+    win->cap = win->cap == 0 ? 64 : win->cap * 2;
+    win->evs = io_mem(realloc(win->evs, win->cap * 20));
+  }
+  u32 ev[5] = { kind, a, b, c, d };
+  memcpy(win->evs + win->n * 5, ev, sizeof ev);
+  win->n += 1;
+}
+
+#if defined(__linux__)
+
+static u32 pk_make(const char* title, u32 w, u32 h, intptr_t* out,
+  const char** why) {
+  if (w < 1 || h < 1 || w > 16384 || h > 16384) {
+    return EINVAL;
+  }
+  Display* dpy = XOpenDisplay(NULL);
+  if (dpy == NULL) {
+    *why = "Window.open: no display (build a native binary with bend <file> -o <out> and run it from a desktop session)";
+    return ENOTSUP;
+  }
+  int scr = DefaultScreen(dpy);
+  if (DefaultDepth(dpy, scr) < 24) {
+    XCloseDisplay(dpy);
+    *why = "Window.open: the display has no 24-bit visual";
+    return ENOTSUP;
+  }
+  BendWin* win = io_mem(calloc(1, sizeof *win));
+  win->dpy = dpy;
+  win->win = XCreateSimpleWindow(dpy, RootWindow(dpy, scr), 0, 0, w, h, 0, 0,
+    BlackPixel(dpy, scr));
+  win->del = XInternAtom(dpy, "WM_DELETE_WINDOW", False);
+  win->img = XCreateImage(dpy, DefaultVisual(dpy, scr), DefaultDepth(dpy, scr),
+    ZPixmap, 0, io_mem(calloc(w * h, 4)), w, h, 32, w * 4);
+  win->img->byte_order = LSBFirst;
+  XSizeHints hints = { .flags = PMinSize | PMaxSize, .min_width = w,
+    .min_height = h, .max_width = w, .max_height = h };
+  XSetWMNormalHints(dpy, win->win, &hints);
+  XSetWMProtocols(dpy, win->win, &win->del, 1);
+  XStoreName(dpy, win->win, title);
+  XSelectInput(dpy, win->win, KeyPressMask | KeyReleaseMask | ButtonPressMask
+    | ButtonReleaseMask | PointerMotionMask);
+  XMapRaised(dpy, win->win);
+  XFlush(dpy);
+  *out = (intptr_t)win;
+  return 0;
+}
+
+static void pk_close(BendWin* win) {
+  XDestroyImage(win->img);
+  XCloseDisplay(win->dpy);
+  free(win->evs);
+  free(win);
+}
+
+static u32* pk_pixels(BendWin* win, u32* w, u32* h) {
+  *w = win->img->width;
+  *h = win->img->height;
+  return (u32*)win->img->data;
+}
+
+static void pk_resize(BendWin* win, u32 w, u32 h) {
+  if (w != (u32)win->img->width || h != (u32)win->img->height) {
+    XSizeHints hints = { .flags = PMinSize | PMaxSize, .min_width = w,
+      .min_height = h, .max_width = w, .max_height = h };
+    XSetWMNormalHints(win->dpy, win->win, &hints);
+    XResizeWindow(win->dpy, win->win, w, h);
+    int scr = DefaultScreen(win->dpy);
+    XImage* old = win->img;
+    win->img = XCreateImage(win->dpy, DefaultVisual(win->dpy, scr), DefaultDepth(win->dpy, scr),
+      ZPixmap, 0, io_mem(calloc((size_t)w * h, 4)), w, h, 32, w * 4);
+    win->img->byte_order = LSBFirst;
+    XDestroyImage(old);
+  }
+  memset(win->img->data, 0, (size_t)w * h * 4);
+}
 
 // The Mac's key codes: a key's character in lower case, the function
 // keys' private-use characters (the arrows at 63232), a modifier's
@@ -124,30 +230,7 @@ static u32 pkwindow_key(XKeyEvent* ev) {
   return 65536 + ev->keycode;
 }
 
-static void pkwindow_push(BendWin* win, u32 kind, u32 a, u32 b, u32 c, u32 d) {
-  if (win->n == win->cap) {
-    win->cap = win->cap == 0 ? 64 : win->cap * 2;
-    win->evs = io_mem(realloc(win->evs, win->cap * 20));
-  }
-  u32 ev[5] = { kind, a, b, c, d };
-  memcpy(win->evs + win->n * 5, ev, sizeof ev);
-  win->n += 1;
-}
-
-static u32 pkwindow_clip(int v, u32 most) {
-  return v < 0 ? 0 : (u32)v < most ? (u32)v : most - 1;
-}
-
-// a window pixel as the game sees it: the frame at twice its logical size
-static u32 pk_mx(int x, u32 ox, u32 sw) {
-  return pkwindow_clip((int)(((long)x - (long)ox) * 1024 / (long)sw), 1024);
-}
-
-static u32 pk_my(int y, u32 oy, u32 sh) {
-  return pkwindow_clip((int)(((long)y - (long)oy) * 640 / (long)sh), 640);
-}
-
-static void pkwindow_pump(BendWin* win) {
+static void pk_pump(BendWin* win) {
   u32 ox, oy, sw, sh;
   pk_view(win->img->width, win->img->height, &ox, &oy, &sw, &sh);
   while (XPending(win->dpy) > 0) {
@@ -177,10 +260,70 @@ static void pkwindow_pump(BendWin* win) {
   }
 }
 
+static void pk_put(BendWin* win) {
+  XPutImage(win->dpy, win->win, DefaultGC(win->dpy, DefaultScreen(win->dpy)),
+    win->img, 0, 0, 0, 0, win->img->width, win->img->height);
+  XFlush(win->dpy);
+}
 
-// The frame's pixels: window_dev on the device while the corpus is
-// there (the tree's pages never leave it), else window_pix a pixel at
-// a time.
+#elif defined(_WIN32)
+
+static u32 pk_make(const char* title, u32 w, u32 h, intptr_t* out,
+  const char** why) {
+  if (w < 1 || h < 1 || w > 16384 || h > 16384) {
+    return EINVAL;
+  }
+  WinWin* ww = winw_open(title, w, h, why);
+  if (ww == NULL) {
+    return ENOTSUP;
+  }
+  BendWin* win = io_mem(calloc(1, sizeof *win));
+  win->ww = ww;
+  *out = (intptr_t)win;
+  return 0;
+}
+
+static void pk_close(BendWin* win) {
+  winw_close(win->ww);
+  free(win->evs);
+  free(win);
+}
+
+static u32* pk_pixels(BendWin* win, u32* w, u32* h) {
+  return winw_pixels(win->ww, w, h);
+}
+
+static void pk_resize(BendWin* win, u32 w, u32 h) {
+  winw_resize(win->ww, w, h);
+}
+
+// winplat.c queues the events in window pixels; here they become the
+// game's coordinates
+static void pk_pump(BendWin* win) {
+  u32 w, h, ox, oy, sw, sh;
+  winw_pixels(win->ww, &w, &h);
+  pk_view(w, h, &ox, &oy, &sw, &sh);
+  u32 evs[5 * 64];
+  u32 n;
+  while ((n = winw_pump(win->ww, evs, 64)) > 0) {
+    for (u32 i = 0; i < n; i += 1) {
+      u32* ev = evs + 5 * i;
+      if (ev[0] == 1 || ev[0] == 2) {
+        ev[1] = pk_mx((int)ev[1], ox, sw);
+        ev[2] = pk_my((int)ev[2], oy, sh);
+      }
+      pkwindow_push(win, ev[0], ev[1], ev[2], ev[3], ev[4]);
+    }
+  }
+}
+
+static void pk_put(BendWin* win) {
+  winw_present(win->ww);
+}
+
+#endif
+
+// The frame's pixels, filled from the image's quadtree
 typedef struct {
   u32* pix;
   u32  w, ox, oy, sw, sh;
@@ -292,7 +435,7 @@ static void pkwindow_pace(void) {
 // The frame runs on a helper thread (io_work), so the event loop, and the
 // worker pool, carry on with other computations -- the game computes its
 // next frame while this one is filled, paced and shown. Only the helper
-// touches X between the effect's start and its pack.
+// touches the window between the effect's start and its pack.
 typedef struct {
   Corpus H;
   Term   image;
@@ -305,27 +448,14 @@ static void pk_apply(BendWin* win) {
   if (w < 512 || h < 320 || w > 4096 || h > 4096) {
     return;
   }
-  if (w != (u32)win->img->width || h != (u32)win->img->height) {
-    XSizeHints hints = { .flags = PMinSize | PMaxSize, .min_width = w,
-      .min_height = h, .max_width = w, .max_height = h };
-    XSetWMNormalHints(win->dpy, win->win, &hints);
-    XResizeWindow(win->dpy, win->win, w, h);
-    int scr = DefaultScreen(win->dpy);
-    XImage* old = win->img;
-    win->img = XCreateImage(win->dpy, DefaultVisual(win->dpy, scr), DefaultDepth(win->dpy, scr),
-      ZPixmap, 0, io_mem(calloc((size_t)w * h, 4)), w, h, 32, w * 4);
-    win->img->byte_order = LSBFirst;
-    XDestroyImage(old);
-  }
-  memset(win->img->data, 0, (size_t)w * h * 4);
+  pk_resize(win, w, h);
 }
 
 static void pkwindow_show(Corpus H, BendWin* win, Term image) {
   static u64 n, tf, tp, tx, last;
-  u32 w = win->img->width;
-  u32 h = win->img->height;
+  u32 w, h;
   PkView v;
-  v.pix = (u32*)win->img->data;
+  v.pix = pk_pixels(win, &w, &h);
   v.w   = w;
   pk_view(w, h, &v.ox, &v.oy, &v.sw, &v.sh);
   u64 t0 = io_tick();
@@ -333,9 +463,7 @@ static void pkwindow_show(Corpus H, BendWin* win, Term image) {
   u64 t1 = io_tick();
   pkwindow_pace();
   u64 t2 = io_tick();
-  XPutImage(win->dpy, win->win, DefaultGC(win->dpy, DefaultScreen(win->dpy)),
-    win->img, 0, 0, 0, 0, w, h);
-  XFlush(win->dpy);
+  pk_put(win);
   u64 t3 = io_tick();
   tf += t1 - t0; tp += t2 - t1; tx += t3 - t2;
   // PARK_DUMP=path: write the 300th frame's pixels as it was shown (PPM)
@@ -345,9 +473,8 @@ static void pkwindow_show(Corpus H, BendWin* win, Term image) {
     FILE* fp = fopen(dump, "wb");
     if (fp) {
       fprintf(fp, "P6\n%u %u\n255\n", w, h);
-      u32* px = (u32*)win->img->data;
       for (u64 i = 0; i < (u64)w * h; i += 1) {
-        unsigned char rgb[3] = { (px[i] >> 16) & 255, (px[i] >> 8) & 255, px[i] & 255 };
+        unsigned char rgb[3] = { (v.pix[i] >> 16) & 255, (v.pix[i] >> 8) & 255, v.pix[i] & 255 };
         fwrite(rgb, 1, 3, fp);
       }
       fclose(fp);
@@ -366,7 +493,7 @@ static void pkframe_call(IoWork* w) {
   if (pk_dirty) {
     pk_apply(win);
   }
-  pkwindow_pump(win);
+  pk_pump(win);
   pkwindow_show(a->H, win, a->image);
 }
 
@@ -381,7 +508,55 @@ static Term pkframe_pack(Env e, IoWork* w) {
   return io_tup(e, io_hand(w->hand), io_tup(e, image, list));
 }
 
+#else
+
+typedef struct {
+  u32 n;
+} BendWin;
+
+static u32 pk_make(const char* title, u32 w, u32 h, intptr_t* out,
+  const char** why) {
+  *why = "Window.open: no display (build a native binary with bend <file> -o <out> and run it from a desktop session)";
+  return ENOTSUP;
+}
+
+static void pk_close(BendWin* win) {
+}
+
 #endif
+
+#ifdef CID_WIN_OPEN
+Term win_open_run(Env e, Term* f, IoWork* w) {
+  uint64_t n = 0;
+  char* title = io_cstr(e, f[0], &n);
+  intptr_t out;
+  const char* why = NULL;
+  u32 q = io_nul(title, n) ? EILSEQ
+    : pk_make(title, (u32)f[1], (u32)f[2], &out, &why);
+  free(title);
+  if (q != 0) {
+    return io_fail(e, q, why);
+  }
+  return io_done(e, io_hand(out));
+}
+
+static void __attribute__((constructor)) win_open_use(void) {
+  io_eff(CID_WIN_OPEN, win_open_run, 0);
+}
+#endif
+
+#ifdef CID_WIN_CLOSE
+Term win_close_run(Env e, Term* f, IoWork* w) {
+  pk_close((BendWin*)(intptr_t)io_hand_v(f[0]));
+  return term_pak(CID_UNIT, 0);
+}
+
+static void __attribute__((constructor)) win_close_use(void) {
+  io_eff(CID_WIN_CLOSE, win_close_run, 0);
+}
+#endif
+
+#if defined(__linux__) || defined(_WIN32)
 Term win_frame_run(Env e, Term* f, IoWork* w) {
   io_sync();
   PkArgs* a = io_mem(malloc(sizeof *a));
@@ -395,3 +570,4 @@ Term win_frame_run(Env e, Term* f, IoWork* w) {
 static void __attribute__((constructor)) win_frame_use(void) {
   io_eff(CID_WIN_FRAME, win_frame_run, 0);
 }
+#endif
